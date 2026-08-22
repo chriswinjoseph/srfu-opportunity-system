@@ -1,8 +1,8 @@
+import requests
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.views import LoginView
-from django.core.mail import send_mail
 from django.conf import settings
 from django.shortcuts import render, redirect
 from django.template.loader import render_to_string
@@ -89,10 +89,19 @@ def _send_password_reset_email(request, user):
         {"user": user, "reset_url": reset_url},
     )
 
-    send_mail(
-        subject,
-        message,
-        settings.DEFAULT_FROM_EMAIL,
-        [user.email],
-        fail_silently=False,
+    response = requests.post(
+        "https://api.brevo.com/v3/smtp/email",
+        headers={
+            "accept": "application/json",
+            "api-key": settings.BREVO_API_KEY,
+            "content-type": "application/json",
+        },
+        json={
+            "sender": {"email": settings.DEFAULT_FROM_EMAIL},
+            "to": [{"email": user.email}],
+            "subject": subject,
+            "textContent": message,
+        },
+        timeout=10,
     )
+    response.raise_for_status()

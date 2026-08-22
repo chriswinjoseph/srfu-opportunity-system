@@ -164,3 +164,6 @@ if os.environ.get("EMAIL_HOST_USER") and os.environ.get("EMAIL_HOST_PASSWORD"):
 else:
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
     DEFAULT_FROM_EMAIL = 'noreply@saferoadsforus.local'
+# Brevo API (used instead of SMTP — Railway blocks outbound SMTP ports)
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "noreply@saferoadsforus.local")
