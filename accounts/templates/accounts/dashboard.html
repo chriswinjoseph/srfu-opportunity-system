@@ -1,0 +1,12 @@
+{% extends "accounts/base.html" %}
+{% block title %}Dashboard | Safe Roads For Us{% endblock %}
+{% block content %}
+    <div class="dashboard-page">
+        <h1 class="auth-title">Welcome, {{ user.get_short_name }}</h1>
+        <p class="auth-subtitle">You are logged in to Safe Roads For Us.</p>
+        <form method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button type="submit" class="logout-btn">Log out</button>
+        </form>
+    </div>
+{% endblock %}
