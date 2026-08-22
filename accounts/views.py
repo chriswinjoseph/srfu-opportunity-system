@@ -102,6 +102,7 @@ def _send_password_reset_email(request, user):
             "subject": subject,
             "textContent": message,
         },
-        timeout=10,
+                timeout=10,
     )
-    response.raise_for_status()
+    if response.status_code >= 400:
+        raise Exception(f"Brevo error {response.status_code}: {response.text}")
