@@ -32,11 +32,20 @@
             </div>
         </div>
 
-        <div class="field-group">
+                <div class="field-group">
             <label for="{{ form.email.id_for_label }}">Email address</label>
             {{ form.email }}
             {% if form.email.errors %}
-                <ul class="field-errors">{% for e in form.email.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+                <ul class="field-errors">
+                    {% for e in form.email.errors %}
+                        <li>
+                            {{ e }}
+                            {% if "already exists" in e %}
+                                <a href="{% url 'login' %}">Log in instead</a>
+                            {% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
             {% endif %}
         </div>
 
