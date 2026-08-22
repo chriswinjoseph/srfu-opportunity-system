@@ -157,7 +157,7 @@ input:focus {
     margin-bottom: 18px;
 }
 
-.form-errors ul { margin: 0; padding-left: 18px; }
+.form-errors ul { margin: 0; padding-left: 0; list-style: none; }
 
 .btn-primary {
     width: 100%;

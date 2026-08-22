@@ -60,7 +60,7 @@ class EmailAuthenticationForm(AuthenticationForm):
     )
 
     error_messages = {
-        "invalid_login": "Please enter a correct email and password.",
+        "invalid_login": "Please enter a correct email or password.",
         "inactive": "This account is inactive.",
     }
 
