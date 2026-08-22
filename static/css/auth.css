@@ -45,6 +45,17 @@ body {
     margin-bottom: 4px;
 }
 
+.auth-logo {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.auth-logo img {
+    max-width: 100%;
+    height: auto;
+    max-height: 60px;
+}
+
 .auth-title {
     font-size: 1.5rem;
     font-weight: 700;
