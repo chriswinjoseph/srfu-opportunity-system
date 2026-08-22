@@ -90,19 +90,15 @@ def _send_password_reset_email(request, user):
     )
 
     response = requests.post(
-        "https://api.brevo.com/v3/smtp/email",
-        headers={
-            "accept": "application/json",
-            "api-key": settings.BREVO_API_KEY,
-            "content-type": "application/json",
-        },
-        json={
-            "sender": {"email": settings.DEFAULT_FROM_EMAIL},
-            "to": [{"email": user.email}],
+        "https://api.elasticemail.com/v2/email/send",
+        data={
+            "apikey": settings.ELASTIC_EMAIL_API_KEY,
+            "from": settings.DEFAULT_FROM_EMAIL,
+            "to": user.email,
             "subject": subject,
-            "textContent": message,
+            "bodyText": message,
         },
-                timeout=10,
+        timeout=10,
     )
-    if response.status_code >= 400:
-        raise Exception(f"Brevo error {response.status_code}: {response.text}")
+    if response.status_code >= 400 or '"success":false' in response.text:
+        raise Exception(f"Elastic Email error {response.status_code}: {response.text}")
