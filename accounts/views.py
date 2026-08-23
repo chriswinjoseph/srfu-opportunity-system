@@ -87,9 +87,9 @@ def _send_password_reset_email(request, user):
     message = render_to_string(
         "accounts/email/password_reset_email.txt",
         {"user": user, "reset_url": reset_url},
-    )
+       )
 
-        response = requests.post(
+    response = requests.post(
         "https://api.elasticemail.com/v2/email/send",
         data={
             "apikey": settings.ELASTIC_EMAIL_API_KEY,
