@@ -87,18 +87,8 @@ def _send_password_reset_email(request, user):
     message = render_to_string(
         "accounts/email/password_reset_email.txt",
         {"user": user, "reset_url": reset_url},
-       )
-
-    response = requests.post(
-        "https://api.elasticemail.com/v2/email/send",
-        data={
-            "apikey": settings.ELASTIC_EMAIL_API_KEY,
-            "from": settings.DEFAULT_FROM_EMAIL,
-            "to": user.email,
-            "subject": subject,
-            "bodyText": message,
-        },
-        timeout=10,
     )
-    if response.status_code >= 400 or '"success":false' in response.text:
-        raise Exception(f"Elastic Email error {response.status_code}: {response.text}")
+
+    # Email sending temporarily disabled — see notes.
+    # TODO: re-enable once delivery is fixed.
+    print(f"[password reset] Would send to {user.email}: {reset_url}")
