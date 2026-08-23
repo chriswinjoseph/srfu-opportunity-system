@@ -149,21 +149,10 @@ STORAGES = {
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 #
-# Real SMTP sending, controlled via .env (see .env.example). If no SMTP
-# credentials are set, falls back to printing emails to the console so
-# you can still develop/test without a mail account configured.
+# Sending is done via a direct HTTPS call to the Elastic Email API in
+# accounts/views.py (Railway blocks outbound SMTP ports, but not 443).
+# DEFAULT_FROM_EMAIL must be an address verified in Elastic Email, or
+# sends will fail/bounce.
 
-if os.environ.get("EMAIL_HOST_USER") and os.environ.get("EMAIL_HOST_PASSWORD"):
-    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-    EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
-    EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
-    EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True") == "True"
-    EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER")
-    EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD")
-    DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER)
-else:
-    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-    DEFAULT_FROM_EMAIL = 'noreply@saferoadsforus.local'
-# Elastic Email API (Brevo required manual account activation; switched providers)
 ELASTIC_EMAIL_API_KEY = os.environ.get("ELASTIC_EMAIL_API_KEY")
-DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "noreply@saferoadsforus.local")
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "chriswinjoseph04@gmail.com")

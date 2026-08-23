@@ -76,7 +76,6 @@ def forgot_password_view(request):
         {"form": form, "submitted": submitted},
     )
 
-
 def _send_password_reset_email(request, user):
     uid = urlsafe_base64_encode(force_bytes(user.pk))
     token = default_token_generator.make_token(user)
@@ -89,6 +88,32 @@ def _send_password_reset_email(request, user):
         {"user": user, "reset_url": reset_url},
     )
 
-    # Email sending temporarily disabled — see notes.
-    # TODO: re-enable once delivery is fixed.
-    print(f"[password reset] Would send to {user.email}: {reset_url}")
+    try:
+        response = requests.post(
+            "https://api.elasticemail.com/v2/email/send",
+            data={
+                "apikey": settings.ELASTIC_EMAIL_API_KEY,
+                "from": settings.DEFAULT_FROM_EMAIL,
+                "to": user.email,
+                "subject": subject,
+                "bodyText": message,
+            },
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        print(f"[password reset] Request to Elastic Email failed for {user.email}: {exc}")
+        return
+
+    # Elastic Email's v2 API returns HTTP 200 even on failure — the real
+    # success/error is in the JSON body's "success" field. Checking only
+    # response.status_code here would hide every failure.
+    try:
+        result = response.json()
+    except ValueError:
+        print(f"[password reset] Non-JSON response for {user.email}: {response.status_code} {response.text[:200]}")
+        return
+
+    if result.get("success"):
+        print(f"[password reset] Sent to {user.email}, messageid={result.get('data', {}).get('messageid')}")
+    else:
+        print(f"[password reset] Elastic Email rejected send to {user.email}: {result.get('error')}")
