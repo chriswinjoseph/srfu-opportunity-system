@@ -1,6 +1,5 @@
 """
 URL configuration for srfu project.
-
 The `urlpatterns` list routes URLs to views. For more information please see:
     https://docs.djangoproject.com/en/6.1/topics/http/urls/
 Examples:
@@ -21,5 +20,6 @@ from django.views.generic import RedirectView
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('accounts/', include('accounts.urls')),
+    path('outreach/', include('outreach.urls')),
     path('', RedirectView.as_view(pattern_name='login', permanent=False)),
 ]

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Banks</title>
+</head>
+<body>
+    <h1>Banks</h1>
+    <p>{{ banks|length }} bank(s) in the database.</p>
+
+    <table border="1" cellpadding="6">
+        <tr>
+            <th>Bank Name</th>
+            <th>Region</th>
+            <th>Contact Status</th>
+            <th>Public Email</th>
+        </tr>
+        {% for bank in banks %}
+        <tr>
+            <td>{{ bank.bank_name }}</td>
+            <td>{{ bank.region }}</td>
+            <td>{{ bank.get_contact_status_display }}</td>
+            <td>{{ bank.public_email|default:"-" }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
