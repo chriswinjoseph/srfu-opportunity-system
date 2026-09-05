@@ -1,0 +1,4 @@
+bank_name,region,website_url,public_email,public_phone,status
+Bendigo Bank - Riverside,Victoria,https://example.com,info@example.com,0312345678,Contacted
+Regional Community Bank,New South Wales,https://example2.com,contact@example2.com,0298765432,
+Heritage Bank Branch,Queensland,,heritage@example.com,,Yes
