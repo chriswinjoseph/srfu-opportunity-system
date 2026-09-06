@@ -73,9 +73,9 @@ def scrape_public_banks(target_url=None):
             skipped_count += 1
             continue
 
-        public_email = email_el.get_text(strip=True) if email_el else None
-        public_phone = phone_el.get_text(strip=True) if phone_el else None
-        website_url = link_el.get('href') if link_el else None
+        public_email = email_el.get_text(strip=True) if email_el else ""
+        public_phone = phone_el.get_text(strip=True) if phone_el else ""
+        website_url = link_el.get('href') if link_el else ""
 
         _, created = Bank.objects.get_or_create(
             bank_name=bank_name,

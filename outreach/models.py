@@ -1,4 +1,4 @@
-from django.db import models
+﻿from django.db import models
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
 
@@ -131,4 +131,4 @@ class Opportunity(models.Model):
         verbose_name_plural = "opportunities"
 
     def __str__(self):
-        return f"Opportunity for {self.organisation} — {self.status}"
+        return f"Opportunity for {self.organisation} - {self.status}"
