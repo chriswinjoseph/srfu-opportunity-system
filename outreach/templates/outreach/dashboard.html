@@ -20,6 +20,28 @@
 </head>
 <body>
 
+<form
+    method="post"
+    action="{% url 'logout' %}"
+    style="position: fixed; top: 20px; right: 20px; z-index: 1000;"
+>
+    {% csrf_token %}
+
+    <button
+        type="submit"
+        style="
+            background: #173363;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 9px 16px;
+            cursor: pointer;
+        "
+    >
+        Log out
+    </button>
+</form>
+
 <div class="sidebar">
     <div class="stat">
         <div>Contact Progress</div>
