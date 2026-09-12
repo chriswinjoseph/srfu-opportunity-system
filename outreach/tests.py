@@ -44,8 +44,14 @@ class PositiveResponseTests(TestCase):
         self.opportunity.refresh_from_db()
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(self.bank.contact_status, "interested")
-        self.assertEqual(self.opportunity.status, "interested")
+        self.assertEqual(
+            self.bank.contact_status,
+            "interested",
+        )
+        self.assertEqual(
+            self.opportunity.status,
+            "interested",
+        )
 
     def test_returns_direct_and_branch_clubs_without_changing_them(self):
         direct_club = Club.objects.create(
@@ -73,7 +79,10 @@ class PositiveResponseTests(TestCase):
 
         self.assertEqual(
             club_names,
-            {"Northside Youth FC", "Northside Netball Club"},
+            {
+                "Northside Youth FC",
+                "Northside Netball Club",
+            },
         )
 
         direct_club.refresh_from_db()
@@ -102,4 +111,139 @@ class PositiveResponseTests(TestCase):
         self.assertEqual(response.status_code, 302)
 
         self.bank.refresh_from_db()
-        self.assertEqual(self.bank.contact_status, "contacted")
+
+        self.assertEqual(
+            self.bank.contact_status,
+            "contacted",
+        )
+
+
+class AddOrganisationTests(TestCase):
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            email="fr10@example.com",
+            first_name="FR10",
+            last_name="Tester",
+            password="Testing123!",
+        )
+
+        self.url = reverse("add_organisation")
+
+        self.bank = Bank.objects.create(
+            bank_name="Existing Test Bank",
+            region="Victoria",
+        )
+
+    def test_logged_out_user_is_redirected_to_login(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+        self.assertIn("next=", response.url)
+
+    def test_logged_in_user_can_open_add_page(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(
+            response,
+            "outreach/add_organisation.html",
+        )
+        self.assertContains(response, "Add Organisation")
+
+    def test_logged_in_user_can_add_bank(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            self.url,
+            {
+                "organisation_type": "bank",
+                "bank_name": "FR10 Test Bank",
+                "region": "Victoria",
+                "website_url": "https://example.com",
+                "public_email": "bank@example.com",
+                "public_phone": "0312345678",
+                "source_url": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        bank = Bank.objects.get(
+            bank_name="FR10 Test Bank"
+        )
+
+        self.assertEqual(
+            bank.contact_status,
+            "not_yet_contacted",
+        )
+
+    def test_logged_in_user_can_add_branch(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            self.url,
+            {
+                "organisation_type": "branch",
+                "bank": self.bank.id,
+                "branch_name": "Melbourne Test Branch",
+                "address": "",
+                "suburb": "Melbourne",
+                "state": "Victoria",
+                "postcode": "3000",
+                "region": "Victoria",
+                "public_email": "",
+                "public_phone": "",
+                "website_url": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        branch = Branch.objects.get(
+            branch_name="Melbourne Test Branch"
+        )
+
+        self.assertEqual(branch.bank, self.bank)
+        self.assertEqual(
+            branch.contact_status,
+            "not_yet_contacted",
+        )
+
+    def test_logged_in_user_can_add_club(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            self.url,
+            {
+                "organisation_type": "club",
+                "club_name": "FR10 Youth Club",
+                "club_type": "Football",
+                "suburb": "Melbourne",
+                "state": "Victoria",
+                "region": "Victoria",
+                "website_url": "",
+                "public_email": "",
+                "public_phone": "",
+                "supported_by_bank": self.bank.id,
+                "supported_by_branch": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        club = Club.objects.get(
+            club_name="FR10 Youth Club"
+        )
+
+        self.assertEqual(
+            club.supported_by_bank,
+            self.bank,
+        )
+        self.assertEqual(
+            club.contact_status,
+            "not_yet_contacted",
+        )

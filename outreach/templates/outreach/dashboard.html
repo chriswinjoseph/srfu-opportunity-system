@@ -1,43 +1,100 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
     <title>Dashboard</title>
+
     <style>
-        /* Plain, minimal styling only - real design comes from UX later */
-        body { font-family: sans-serif; display: flex; margin: 0; }
-        .sidebar { width: 200px; padding: 16px; border-right: 1px solid #ccc; }
-        .main { flex: 1; padding: 16px; }
-        .stat { margin-bottom: 16px; }
-        .stat .big { font-size: 28px; font-weight: bold; }
-        .columns { display: flex; gap: 24px; margin-top: 16px; }
-        .column { flex: 1; }
-        .card { border: 1px solid #ccc; border-radius: 6px; padding: 10px; margin-bottom: 8px; }
-        .card .name { font-weight: bold; }
-        .card .meta { color: #555; font-size: 13px; }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
-        .filters input, .filters select { margin-right: 8px; }
+        body {
+            display: flex;
+            margin: 0;
+            font-family: sans-serif;
+        }
+
+        .sidebar {
+            width: 200px;
+            min-height: 100vh;
+            padding: 16px;
+            border-right: 1px solid #ccc;
+        }
+
+        .main {
+            flex: 1;
+            padding: 16px;
+        }
+
+        .stat {
+            margin-bottom: 16px;
+        }
+
+        .stat .big {
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        .columns {
+            display: flex;
+            gap: 24px;
+            margin-top: 16px;
+        }
+
+        .column {
+            flex: 1;
+        }
+
+        .card {
+            padding: 10px;
+            margin-bottom: 8px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+        }
+
+        .card .name {
+            font-weight: bold;
+        }
+
+        .card .meta {
+            color: #555;
+            font-size: 13px;
+        }
+
+        button:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        .filters input,
+        .filters select {
+            margin-right: 8px;
+        }
+
+        .logout-form {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        .logout-button {
+            padding: 9px 16px;
+            color: white;
+            background: #173363;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
     </style>
 </head>
-<body>
 
+<body>
 <form
+    class="logout-form"
     method="post"
     action="{% url 'logout' %}"
-    style="position: fixed; top: 20px; right: 20px; z-index: 1000;"
 >
     {% csrf_token %}
 
-    <button
-        type="submit"
-        style="
-            background: #173363;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            padding: 9px 16px;
-            cursor: pointer;
-        "
-    >
+    <button class="logout-button" type="submit">
         Log out
     </button>
 </form>
@@ -47,24 +104,29 @@
         <div>Contact Progress</div>
         <div class="big">{{ percent_contacted }}%</div>
     </div>
+
     <div class="stat">
         <div>Not Yet Contacted</div>
         <div class="big">{{ not_yet_count }}</div>
     </div>
+
     <div class="stat">
         <div>Contacted</div>
         <div class="big">{{ contacted_count }}</div>
     </div>
+
     <div class="stat">
         <div>Organisation Status</div>
+
         {% for label, count in status_breakdown.items %}
             <div>{{ label }}: {{ count }}</div>
         {% endfor %}
     </div>
-    <p><a href="/admin/outreach/bank/add/">+ Add Organisation</a></p>
-    <p style="font-size:12px;color:#888">
-        (Temporary link to Django admin's "add bank" form, until the
-        real Add Organisation page - FR-10 - is built.)
+
+    <p>
+        <a href="{% url 'add_organisation' %}">
+            + Add Organisation
+        </a>
     </p>
 </div>
 
@@ -72,39 +134,104 @@
     <h1>Dashboard</h1>
 
     <form class="filters" method="get">
-        <input type="text" name="q" placeholder="Search by name" value="{{ search }}">
+        <input
+            type="text"
+            name="q"
+            placeholder="Search by name"
+            value="{{ search }}"
+        >
+
         <select name="type">
-            <option value="" {% if org_type == "" %}selected{% endif %}>All types</option>
-            <option value="bank" {% if org_type == "bank" %}selected{% endif %}>Bank</option>
-            <option value="branch" {% if org_type == "branch" %}selected{% endif %}>Branch</option>
-            <option value="club" {% if org_type == "club" %}selected{% endif %}>Club</option>
+            <option
+                value=""
+                {% if org_type == "" %}selected{% endif %}
+            >
+                All types
+            </option>
+
+            <option
+                value="bank"
+                {% if org_type == "bank" %}selected{% endif %}
+            >
+                Bank
+            </option>
+
+            <option
+                value="branch"
+                {% if org_type == "branch" %}selected{% endif %}
+            >
+                Branch
+            </option>
+
+            <option
+                value="club"
+                {% if org_type == "club" %}selected{% endif %}
+            >
+                Club
+            </option>
         </select>
-        <input type="text" name="region" placeholder="Region" value="{{ region }}">
-        <button type="submit">Search / Filter</button>
+
+        <input
+            type="text"
+            name="region"
+            placeholder="Region"
+            value="{{ region }}"
+        >
+
+        <button type="submit">
+            Search / Filter
+        </button>
     </form>
 
     <div class="columns">
         <div class="column">
             <h2>Not Yet Contacted</h2>
+
             {% for row in not_yet_page %}
                 <div class="card">
-                    <div class="name">{{ row.name }}</div>
-                    <div class="meta">{{ row.type }} - {{ row.region }}</div>
-                    <div class="meta">{{ row.email|default:"-" }} - {{ row.phone|default:"-" }}</div>
-                    <a href="/outreach/organisation/{{ row.content_type_id }}/{{ row.id }}/">View Details</a>
-                    <button disabled title="Draft email generation is still in progress">Email (coming soon)</button>
+                    <div class="name">
+                        {{ row.name }}
+                    </div>
+
+                    <div class="meta">
+                        {{ row.type }} - {{ row.region|default:"-" }}
+                    </div>
+
+                    <div class="meta">
+                        {{ row.email|default:"-" }} -
+                        {{ row.phone|default:"-" }}
+                    </div>
+
+                    <a href="{% url 'organisation_detail' row.content_type_id row.id %}">
+                        View Details
+                    </a>
+
+                    <button
+                        disabled
+                        title="Draft email generation is still in progress"
+                    >
+                        Email (coming soon)
+                    </button>
                 </div>
             {% empty %}
                 <p>No organisations found.</p>
             {% endfor %}
+
             {% if not_yet_page.has_other_pages %}
                 <p>
                     {% if not_yet_page.has_previous %}
-                        <a href="?not_yet_page={{ not_yet_page.previous_page_number }}">Previous</a>
+                        <a href="?q={{ search|urlencode }}&type={{ org_type|urlencode }}&region={{ region|urlencode }}&not_yet_page={{ not_yet_page.previous_page_number }}">
+                            Previous
+                        </a>
                     {% endif %}
-                    Page {{ not_yet_page.number }} of {{ not_yet_page.paginator.num_pages }}
+
+                    Page {{ not_yet_page.number }}
+                    of {{ not_yet_page.paginator.num_pages }}
+
                     {% if not_yet_page.has_next %}
-                        <a href="?not_yet_page={{ not_yet_page.next_page_number }}">Next</a>
+                        <a href="?q={{ search|urlencode }}&type={{ org_type|urlencode }}&region={{ region|urlencode }}&not_yet_page={{ not_yet_page.next_page_number }}">
+                            Next
+                        </a>
                     {% endif %}
                 </p>
             {% endif %}
@@ -112,31 +239,61 @@
 
         <div class="column">
             <h2>Contacted</h2>
+
             {% for row in contacted_page %}
                 <div class="card">
-                    <div class="name">{{ row.name }} <span style="font-weight:normal">- {{ row.status_label }}</span></div>
-                    <div class="meta">{{ row.type }} - {{ row.region }}</div>
-                    <div class="meta">{{ row.email|default:"-" }} - {{ row.phone|default:"-" }}</div>
-                    <a href="/outreach/organisation/{{ row.content_type_id }}/{{ row.id }}/">View Details</a>
-                    <button disabled title="Draft email generation is still in progress">Email (coming soon)</button>
+                    <div class="name">
+                        {{ row.name }}
+
+                        <span style="font-weight: normal;">
+                            - {{ row.status_label }}
+                        </span>
+                    </div>
+
+                    <div class="meta">
+                        {{ row.type }} - {{ row.region|default:"-" }}
+                    </div>
+
+                    <div class="meta">
+                        {{ row.email|default:"-" }} -
+                        {{ row.phone|default:"-" }}
+                    </div>
+
+                    <a href="{% url 'organisation_detail' row.content_type_id row.id %}">
+                        View Details
+                    </a>
+
+                    <button
+                        disabled
+                        title="Draft email generation is still in progress"
+                    >
+                        Email (coming soon)
+                    </button>
                 </div>
             {% empty %}
                 <p>No organisations found.</p>
             {% endfor %}
+
             {% if contacted_page.has_other_pages %}
                 <p>
                     {% if contacted_page.has_previous %}
-                        <a href="?contacted_page={{ contacted_page.previous_page_number }}">Previous</a>
+                        <a href="?q={{ search|urlencode }}&type={{ org_type|urlencode }}&region={{ region|urlencode }}&contacted_page={{ contacted_page.previous_page_number }}">
+                            Previous
+                        </a>
                     {% endif %}
-                    Page {{ contacted_page.number }} of {{ contacted_page.paginator.num_pages }}
+
+                    Page {{ contacted_page.number }}
+                    of {{ contacted_page.paginator.num_pages }}
+
                     {% if contacted_page.has_next %}
-                        <a href="?contacted_page={{ contacted_page.next_page_number }}">Next</a>
+                        <a href="?q={{ search|urlencode }}&type={{ org_type|urlencode }}&region={{ region|urlencode }}&contacted_page={{ contacted_page.next_page_number }}">
+                            Next
+                        </a>
                     {% endif %}
                 </p>
             {% endif %}
         </div>
     </div>
 </div>
-
 </body>
 </html>

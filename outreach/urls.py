@@ -15,6 +15,11 @@ urlpatterns = [
         name="outreach_dashboard",
     ),
     path(
+        "organisations/add/",
+        views.add_organisation,
+        name="add_organisation",
+    ),
+    path(
         "organisation/<int:content_type_id>/<int:object_id>/",
         views.organisation_detail,
         name="organisation_detail",

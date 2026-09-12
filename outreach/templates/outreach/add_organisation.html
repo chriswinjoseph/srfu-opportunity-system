@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Add Organisation</title>
+
+    <style>
+        body {
+            margin: 0;
+            padding: 30px;
+            background: #f4f6f8;
+            font-family: Arial, sans-serif;
+        }
+
+        .container {
+            max-width: 700px;
+            margin: auto;
+            padding: 30px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input,
+        select {
+            box-sizing: border-box;
+            width: 100%;
+            padding: 9px;
+            margin-bottom: 8px;
+        }
+
+        .button {
+            padding: 10px 18px;
+            color: white;
+            background: #173363;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .errorlist {
+            color: #b00020;
+        }
+    </style>
+</head>
+
+<body>
+<div class="container">
+    <p>
+        <a href="{% url 'outreach_dashboard' %}">
+            &larr; Back to dashboard
+        </a>
+    </p>
+
+    <h1>Add Organisation</h1>
+
+    <form method="get">
+        <label for="organisation-type">
+            Organisation type
+        </label>
+
+        <select
+            id="organisation-type"
+            name="type"
+            onchange="this.form.submit()"
+        >
+            <option
+                value="bank"
+                {% if organisation_type == "bank" %}selected{% endif %}
+            >
+                Bank
+            </option>
+
+            <option
+                value="branch"
+                {% if organisation_type == "branch" %}selected{% endif %}
+            >
+                Branch
+            </option>
+
+            <option
+                value="club"
+                {% if organisation_type == "club" %}selected{% endif %}
+            >
+                Club
+            </option>
+        </select>
+
+        <noscript>
+            <button type="submit">Change form</button>
+        </noscript>
+    </form>
+
+    <h2>Add {{ organisation_type|title }}</h2>
+
+    <p>
+        The new organisation will start as
+        <strong>Not Yet Contacted</strong>.
+    </p>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <input
+            type="hidden"
+            name="organisation_type"
+            value="{{ organisation_type }}"
+        >
+
+        {{ form.as_p }}
+
+        <button class="button" type="submit">
+            Add {{ organisation_type|title }}
+        </button>
+    </form>
+</div>
+</body>
+</html>
