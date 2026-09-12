@@ -2,7 +2,9 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.contenttypes.models import ContentType
 from django.core.paginator import Paginator
 from django.db import models
-from django.shortcuts import render, get_object_or_404
+from django.http import Http404, JsonResponse
+from django.shortcuts import get_object_or_404, render
+from django.views.decorators.http import require_POST
 
 from .models import Bank, Branch, Club, Opportunity
 
@@ -15,51 +17,99 @@ def bank_list(request):
 
 def get_supported_clubs(bank):
     """
-    Given a Bank, return every Club it supports - either directly,
-    or through one of its branches.
+    Return every club supported by a bank, either directly or through
+    one of the bank's branches.
     """
     return Club.objects.filter(
-        models.Q(supported_by_bank=bank) | models.Q(supported_by_branch__bank=bank)
+        models.Q(supported_by_bank=bank)
+        | models.Q(supported_by_branch__bank=bank)
     ).distinct().order_by("club_name")
 
 
 def record_positive_response(opportunity):
     """
-    THE TRIGGER + STATUS UPDATE for "bank responds positively -> surface
-    supported clubs". See outreach/admin.py's mark_as_interested action
-    for how this currently gets called (a stand-in for the real
-    dashboard button, until UX delivers that design).
+    Record a positive response, update the responding organisation to
+    Interested, and return the clubs supported by its bank.
     """
-    opportunity.status = "interested"
-    opportunity.save()
-
     org = opportunity.organisation
 
-    if isinstance(org, Bank):
-        bank = org
-    elif isinstance(org, Branch):
-        bank = org.bank
-    else:
-        return Club.objects.none()
+    if not isinstance(org, (Bank, Branch)):
+        raise ValueError(
+            "Only a bank or branch opportunity can trigger supported-club lookup."
+        )
 
+    if org.contact_status not in ("contacted", "interested"):
+        raise ValueError(
+            "A positive response can only be recorded after the organisation "
+            "has been contacted."
+        )
+
+    opportunity.status = "interested"
+    opportunity.save(update_fields=["status"])
+
+    org.contact_status = "interested"
+    org.save()
+
+    bank = org if isinstance(org, Bank) else org.bank
     return get_supported_clubs(bank)
 
 
-STATUS_LABELS = dict(
-    not_yet_contacted="Not Yet Contacted",
-    contacted="Contacted",
-    interested="Interested",
-    not_interested="Not Interested",
-    do_not_contact="Do Not Contact",
-)
+@login_required
+@require_POST
+def record_positive_response_api(request, opportunity_id):
+    """
+    Protected endpoint used to record a positive response and return
+    the clubs supported by the responding bank.
+    """
+    opportunity = get_object_or_404(Opportunity, pk=opportunity_id)
+
+    try:
+        supported_clubs = record_positive_response(opportunity)
+    except ValueError as error:
+        return JsonResponse({"error": str(error)}, status=409)
+
+    clubs = [
+        {
+            "id": club.id,
+            "name": club.club_name,
+            "type": club.club_type,
+            "region": club.region,
+            "contact_status": club.contact_status,
+        }
+        for club in supported_clubs
+    ]
+
+    return JsonResponse(
+        {
+            "opportunity_id": opportunity.id,
+            "organisation_status": opportunity.organisation.contact_status,
+            "clubs": clubs,
+        }
+    )
+
+
+STATUS_LABELS = {
+    "not_yet_contacted": "Not Yet Contacted",
+    "contacted": "Contacted",
+    "interested": "Interested",
+    "not_interested": "Not Interested",
+    "do_not_contact": "Do Not Contact",
+}
 
 
 def _org_to_row(org, org_type):
-    """Turn a Bank/Branch/Club model instance into a plain dict the
-    dashboard template can display the same way regardless of type."""
+    """
+    Convert a Bank, Branch or Club into a common dictionary format
+    for the dashboard.
+    """
     content_type = ContentType.objects.get_for_model(org)
-    name = getattr(org, "bank_name", None) or getattr(org, "branch_name", None) \
+
+    name = (
+        getattr(org, "bank_name", None)
+        or getattr(org, "branch_name", None)
         or getattr(org, "club_name", None)
+    )
+
     return {
         "id": org.pk,
         "content_type_id": content_type.pk,
@@ -69,13 +119,18 @@ def _org_to_row(org, org_type):
         "email": getattr(org, "public_email", "") or "",
         "phone": getattr(org, "public_phone", "") or "",
         "status": org.contact_status,
-        "status_label": STATUS_LABELS.get(org.contact_status, org.contact_status),
+        "status_label": STATUS_LABELS.get(
+            org.contact_status,
+            org.contact_status,
+        ),
     }
 
 
 def _get_all_organisations(search="", org_type="", region=""):
-    """Fetch Banks, Branches, and Clubs, apply the same filters to each,
-    then combine them into one list of rows."""
+    """
+    Fetch Banks, Branches and Clubs, apply the selected filters,
+    and combine them into one list.
+    """
     banks = Bank.objects.all()
     branches = Branch.objects.all()
     clubs = Club.objects.all()
@@ -91,13 +146,17 @@ def _get_all_organisations(search="", org_type="", region=""):
         clubs = clubs.filter(region__icontains=region)
 
     rows = []
-    if org_type in ("", "bank"):
-        rows += [_org_to_row(b, "Bank") for b in banks]
-    if org_type in ("", "branch"):
-        rows += [_org_to_row(b, "Branch") for b in branches]
-    if org_type in ("", "club"):
-        rows += [_org_to_row(c, "Club") for c in clubs]
 
+    if org_type in ("", "bank"):
+        rows.extend(_org_to_row(bank, "Bank") for bank in banks)
+
+    if org_type in ("", "branch"):
+        rows.extend(_org_to_row(branch, "Branch") for branch in branches)
+
+    if org_type in ("", "club"):
+        rows.extend(_org_to_row(club, "Club") for club in clubs)
+
+    rows.sort(key=lambda row: row["name"].lower())
     return rows
 
 
@@ -107,22 +166,51 @@ def dashboard_view(request):
     org_type = request.GET.get("type", "")
     region = request.GET.get("region", "")
 
-    all_rows = _get_all_organisations(search=search, org_type=org_type, region=region)
+    all_rows = _get_all_organisations(
+        search=search,
+        org_type=org_type,
+        region=region,
+    )
 
-    not_yet = [r for r in all_rows if r["status"] == "not_yet_contacted"]
-    contacted = [r for r in all_rows if r["status"] != "not_yet_contacted"]
+    not_yet = [
+        row
+        for row in all_rows
+        if row["status"] == "not_yet_contacted"
+    ]
 
-    not_yet_page = Paginator(not_yet, 5).get_page(request.GET.get("not_yet_page"))
-    contacted_page = Paginator(contacted, 5).get_page(request.GET.get("contacted_page"))
+    contacted = [
+        row
+        for row in all_rows
+        if row["status"] != "not_yet_contacted"
+    ]
+
+    not_yet_page = Paginator(not_yet, 5).get_page(
+        request.GET.get("not_yet_page")
+    )
+
+    contacted_page = Paginator(contacted, 5).get_page(
+        request.GET.get("contacted_page")
+    )
 
     total = len(all_rows)
     contacted_count = len(contacted)
-    percent_contacted = round((contacted_count / total) * 100) if total else 0
+
+    percent_contacted = (
+        round((contacted_count / total) * 100)
+        if total
+        else 0
+    )
 
     status_breakdown = {
-        label: len([r for r in all_rows if r["status"] == key])
-        for key, label in STATUS_LABELS.items()
-        if key != "not_yet_contacted"
+        label: len(
+            [
+                row
+                for row in all_rows
+                if row["status"] == status
+            ]
+        )
+        for status, label in STATUS_LABELS.items()
+        if status not in ("not_yet_contacted", "contacted")
     }
 
     context = {
@@ -136,16 +224,28 @@ def dashboard_view(request):
         "org_type": org_type,
         "region": region,
     }
+
     return render(request, "outreach/dashboard.html", context)
 
 
 @login_required
 def organisation_detail(request, content_type_id, object_id):
-    content_type = get_object_or_404(ContentType, pk=content_type_id)
-    org = get_object_or_404(content_type.model_class(), pk=object_id)
+    content_type = get_object_or_404(
+        ContentType,
+        pk=content_type_id,
+    )
+
+    model_class = content_type.model_class()
+
+    # Prevent manipulated URLs from accessing unrelated Django models.
+    if model_class not in (Bank, Branch, Club):
+        raise Http404("Organisation not found.")
+
+    org = get_object_or_404(model_class, pk=object_id)
 
     opportunities = Opportunity.objects.filter(
-        content_type=content_type, object_id=object_id
+        content_type=content_type,
+        object_id=object_id,
     ).order_by("-date_created")
 
     context = {
@@ -153,4 +253,9 @@ def organisation_detail(request, content_type_id, object_id):
         "org_type": content_type.model,
         "opportunities": opportunities,
     }
-    return render(request, "outreach/organisation_detail.html", context)
+
+    return render(
+        request,
+        "outreach/organisation_detail.html",
+        context,
+    )
