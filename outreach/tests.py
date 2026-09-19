@@ -7,6 +7,7 @@ from django.urls import reverse
 from .models import Bank, Branch, Club, Opportunity
 from .status_transitions import (
     InvalidStatusTransition,
+    bulk_update_organisation_contact_statuses,
     update_organisation_contact_status,
 )
 
@@ -532,4 +533,61 @@ class DashboardStatusConflictTests(TestCase):
         self.assertEqual(
             status_breakdown["Needs Review"],
             1,
+        )
+
+
+class BulkContactStatusTransitionTests(TestCase):
+
+    def test_valid_updates_are_saved_when_another_update_is_invalid(self):
+        valid_bank = Bank.objects.create(
+            bank_name="Valid Bulk Bank",
+            region="Victoria",
+            contact_status="not_yet_contacted",
+        )
+
+        invalid_bank = Bank.objects.create(
+            bank_name="Invalid Bulk Bank",
+            region="Victoria",
+            contact_status="contacted",
+        )
+
+        updated, errors = (
+            bulk_update_organisation_contact_statuses(
+                [
+                    {
+                        "organisation": valid_bank,
+                        "new_status": "contacted",
+                        "contact_confirmed": True,
+                    },
+                    {
+                        "organisation": invalid_bank,
+                        "new_status": "not_yet_contacted",
+                    },
+                ],
+                actor="bulk-test-user",
+            )
+        )
+
+        valid_bank.refresh_from_db()
+        invalid_bank.refresh_from_db()
+
+        self.assertEqual(
+            valid_bank.contact_status,
+            "contacted",
+        )
+        self.assertEqual(
+            invalid_bank.contact_status,
+            "contacted",
+        )
+
+        self.assertEqual(len(updated), 1)
+        self.assertEqual(
+            updated[0].pk,
+            valid_bank.pk,
+        )
+
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(
+            errors[0]["id"],
+            invalid_bank.pk,
         )

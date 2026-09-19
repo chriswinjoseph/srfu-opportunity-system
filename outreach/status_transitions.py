@@ -140,6 +140,60 @@ def update_organisation_contact_status(
         return locked_organisation
 
 
+def bulk_update_organisation_contact_statuses(
+    updates,
+    *,
+    actor=None,
+):
+    """
+    Process multiple organisation status updates independently.
+
+    Valid updates are saved. Invalid transitions are left unchanged
+    and returned as individual errors instead of cancelling the
+    successful updates.
+    """
+    updated = []
+    errors = []
+
+    for item in updates:
+        organisation = item["organisation"]
+        new_status = item["new_status"]
+        contact_confirmed = item.get(
+            "contact_confirmed",
+            False,
+        )
+
+        try:
+            saved_organisation = (
+                update_organisation_contact_status(
+                    organisation,
+                    new_status,
+                    contact_confirmed=contact_confirmed,
+                    actor=actor,
+                )
+            )
+        except InvalidStatusTransition as error:
+            errors.append(
+                {
+                    "model": type(organisation).__name__,
+                    "id": organisation.pk,
+                    "error": str(error),
+                }
+            )
+        else:
+            updated.append(saved_organisation)
+
+    logger.info(
+        "Bulk organisation status update completed: "
+        "updated=%s rejected=%s actor=%s",
+        len(updated),
+        len(errors),
+        actor,
+    )
+
+    return updated, errors
+
+
 def record_positive_response(opportunity, *, actor=None):
     """
     Record a positive response safely.
@@ -198,7 +252,9 @@ def record_positive_response(opportunity, *, actor=None):
             )
         elif locked_opportunity.status == "contacted":
             locked_opportunity.status = "interested"
-            locked_opportunity.save(update_fields=["status"])
+            locked_opportunity.save(
+                update_fields=["status"],
+            )
 
             logger.info(
                 "Positive response recorded: opportunity=%s actor=%s",
