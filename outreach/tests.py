@@ -537,8 +537,7 @@ class DashboardStatusConflictTests(TestCase):
 
 
 class BulkContactStatusTransitionTests(TestCase):
-
-    def test_valid_updates_are_saved_when_another_update_is_invalid(self):
+     def test_valid_updates_are_saved_when_another_update_is_invalid(self):
         valid_bank = Bank.objects.create(
             bank_name="Valid Bulk Bank",
             region="Victoria",
@@ -590,4 +589,433 @@ class BulkContactStatusTransitionTests(TestCase):
         self.assertEqual(
             errors[0]["id"],
             invalid_bank.pk,
+        )
+
+        class OrganisationListApiTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            email="api@example.com",
+            first_name="API",
+            last_name="Tester",
+            password="Testing123!",
+        )
+
+        self.url = reverse(
+            "organisation_list_api"
+        )
+
+        self.alpha_bank = Bank.objects.create(
+            bank_name="Alpha Bank",
+            region="Victoria",
+            contact_status="contacted",
+            public_email="alpha@example.com",
+            public_phone="0311111111",
+        )
+
+        self.zeta_bank = Bank.objects.create(
+            bank_name="Zeta Bank",
+            region="New South Wales",
+            contact_status="not_yet_contacted",
+        )
+
+        self.branch = Branch.objects.create(
+            bank=self.alpha_bank,
+            branch_name="Beta Branch",
+            region="Victoria",
+            contact_status="contacted",
+        )
+
+        self.club = Club.objects.create(
+            club_name="Gamma Club",
+            region="Queensland",
+            contact_status="not_yet_contacted",
+        )
+
+        bank_content_type = (
+            ContentType.objects.get_for_model(
+                self.alpha_bank
+            )
+        )
+
+        Opportunity.objects.create(
+            content_type=bank_content_type,
+            object_id=self.alpha_bank.pk,
+            status="interested",
+        )
+
+        club_content_type = (
+            ContentType.objects.get_for_model(
+                self.club
+            )
+        )
+
+        Opportunity.objects.create(
+            content_type=club_content_type,
+            object_id=self.club.pk,
+            status="interested",
+        )
+
+    def test_logged_out_user_cannot_access_api(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("next=", response.url)
+
+    def test_api_only_accepts_get_requests(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(self.url)
+
+        self.assertEqual(response.status_code, 405)
+
+    def test_api_returns_all_organisation_types(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(self.url)
+        data = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            data["pagination"]["total_items"],
+            4,
+        )
+
+        returned_types = {
+            row["type"]
+            for row in data["results"]
+        }
+
+        self.assertEqual(
+            returned_types,
+            {
+                "bank",
+                "branch",
+                "club",
+            },
+        )
+
+    def test_contact_status_and_outcome_remain_separate(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(self.url)
+        results = response.json()["results"]
+
+        alpha_result = next(
+            row
+            for row in results
+            if row["name"] == "Alpha Bank"
+        )
+
+        self.assertEqual(
+            alpha_result["contact_status"],
+            "contacted",
+        )
+        self.assertEqual(
+            alpha_result["opportunity_outcome"],
+            "interested",
+        )
+        self.assertFalse(
+            alpha_result["status_conflict"]
+        )
+
+        club_result = next(
+            row
+            for row in results
+            if row["name"] == "Gamma Club"
+        )
+
+        self.assertEqual(
+            club_result["contact_status"],
+            "not_yet_contacted",
+        )
+        self.assertEqual(
+            club_result["opportunity_outcome"],
+            "interested",
+        )
+        self.assertTrue(
+            club_result["status_conflict"]
+        )
+
+    def test_single_contact_status_filter(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(
+            self.url,
+            {
+                "status": "contacted",
+            },
+        )
+
+        data = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            data["pagination"]["total_items"],
+            2,
+        )
+
+        self.assertEqual(
+            {
+                row["contact_status"]
+                for row in data["results"]
+            },
+            {"contacted"},
+        )
+
+    def test_multiple_contact_status_filter_formats(self):
+        self.client.force_login(self.user)
+
+        repeated_response = self.client.get(
+            (
+                f"{self.url}"
+                "?status=contacted"
+                "&status=not_yet_contacted"
+            )
+        )
+
+        comma_response = self.client.get(
+            self.url,
+            {
+                "status": (
+                    "contacted,not_yet_contacted"
+                ),
+            },
+        )
+
+        self.assertEqual(
+            repeated_response.status_code,
+            200,
+        )
+        self.assertEqual(
+            comma_response.status_code,
+            200,
+        )
+
+        self.assertEqual(
+            repeated_response.json()[
+                "pagination"
+            ]["total_items"],
+            4,
+        )
+        self.assertEqual(
+            comma_response.json()[
+                "pagination"
+            ]["total_items"],
+            4,
+        )
+
+    def test_combined_filters(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(
+            self.url,
+            {
+                "q": "Alpha",
+                "type": "bank",
+                "region": "Victoria",
+                "status": "contacted",
+            },
+        )
+
+        data = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            data["pagination"]["total_items"],
+            1,
+        )
+        self.assertEqual(
+            data["results"][0]["name"],
+            "Alpha Bank",
+        )
+
+    def test_invalid_status_and_type_are_rejected(self):
+        self.client.force_login(self.user)
+
+        status_response = self.client.get(
+            self.url,
+            {
+                "status": "interested",
+            },
+        )
+
+        type_response = self.client.get(
+            self.url,
+            {
+                "type": "school",
+            },
+        )
+
+        self.assertEqual(
+            status_response.status_code,
+            400,
+        )
+        self.assertEqual(
+            status_response.json()[
+                "invalid_statuses"
+            ],
+            ["interested"],
+        )
+
+        self.assertEqual(
+            type_response.status_code,
+            400,
+        )
+        self.assertEqual(
+            type_response.json()["invalid_type"],
+            "school",
+        )
+
+    def test_invalid_sort_values_are_rejected(self):
+        self.client.force_login(self.user)
+
+        field_response = self.client.get(
+            self.url,
+            {
+                "sort_by": "created",
+            },
+        )
+
+        direction_response = self.client.get(
+            self.url,
+            {
+                "sort_dir": "sideways",
+            },
+        )
+
+        self.assertEqual(
+            field_response.status_code,
+            400,
+        )
+        self.assertEqual(
+            direction_response.status_code,
+            400,
+        )
+
+    def test_descending_name_sort(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(
+            self.url,
+            {
+                "sort_by": "name",
+                "sort_dir": "desc",
+            },
+        )
+
+        names = [
+            row["name"]
+            for row in response.json()["results"]
+        ]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            names,
+            [
+                "Zeta Bank",
+                "Gamma Club",
+                "Beta Branch",
+                "Alpha Bank",
+            ],
+        )
+
+    def test_pagination(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(
+            self.url,
+            {
+                "page": 2,
+                "page_size": 2,
+            },
+        )
+
+        data = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            data["pagination"]["page"],
+            2,
+        )
+        self.assertEqual(
+            data["pagination"]["total_pages"],
+            2,
+        )
+        self.assertTrue(
+            data["pagination"]["has_previous"]
+        )
+        self.assertFalse(
+            data["pagination"]["has_next"]
+        )
+        self.assertEqual(
+            [
+                row["name"]
+                for row in data["results"]
+            ],
+            [
+                "Gamma Club",
+                "Zeta Bank",
+            ],
+        )
+
+    def test_invalid_pagination_values_are_rejected(self):
+        self.client.force_login(self.user)
+
+        invalid_parameters = [
+            {"page": "zero"},
+            {"page": "0"},
+            {"page_size": "zero"},
+            {"page_size": "0"},
+            {"page_size": "51"},
+            {"page": "99"},
+        ]
+
+        for parameters in invalid_parameters:
+            with self.subTest(parameters=parameters):
+                response = self.client.get(
+                    self.url,
+                    parameters,
+                )
+
+                self.assertEqual(
+                    response.status_code,
+                    400,
+                )
+
+    def test_empty_results_and_empty_out_of_range_page(self):
+        self.client.force_login(self.user)
+
+        empty_response = self.client.get(
+            self.url,
+            {
+                "q": "Missing Organisation",
+            },
+        )
+
+        out_of_range_response = self.client.get(
+            self.url,
+            {
+                "q": "Missing Organisation",
+                "page": 2,
+            },
+        )
+
+        self.assertEqual(
+            empty_response.status_code,
+            200,
+        )
+        self.assertEqual(
+            empty_response.json()["results"],
+            [],
+        )
+        self.assertEqual(
+            empty_response.json()[
+                "pagination"
+            ]["total_items"],
+            0,
+        )
+
+        self.assertEqual(
+            out_of_range_response.status_code,
+            400,
         )

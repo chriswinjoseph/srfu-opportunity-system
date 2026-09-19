@@ -3,7 +3,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.paginator import Paginator
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
 from .forms import BankForm, BranchForm, ClubForm
 from .models import Bank, Branch, Club, Opportunity
@@ -23,6 +23,20 @@ OPPORTUNITY_OUTCOME_LABELS = {
     "interested": "Interested",
     "not_interested": "Not Interested",
     "do_not_contact": "Do Not Contact",
+}
+
+
+CONTACT_STATUS_CHOICES_API = {
+    "not_yet_contacted",
+    "contacted",
+}
+
+
+ORGANISATION_API_SORT_FIELDS = {
+    "name",
+    "region",
+    "type",
+    "status",
 }
 
 
@@ -206,6 +220,260 @@ def _get_all_organisations(search="", org_type="", region=""):
 
 
 @login_required
+@require_GET
+def organisation_list_api(request):
+    """
+    Return organisations as filtered, sorted and paginated JSON.
+
+    Query parameters:
+    - q: partial name search
+    - type: bank, branch or club
+    - region: partial region match
+    - status: organisation contact status; repeated or comma-separated
+    - sort_by: name, region, type or status
+    - sort_dir: asc or desc
+    - page: positive integer
+    - page_size: positive integer with a maximum of 50
+    """
+    search = request.GET.get("q", "").strip()
+
+    organisation_type = (
+        request.GET.get("type", "")
+        .strip()
+        .lower()
+    )
+
+    region = request.GET.get(
+        "region",
+        "",
+    ).strip()
+
+    allowed_types = {
+        "",
+        "bank",
+        "branch",
+        "club",
+    }
+
+    if organisation_type not in allowed_types:
+        return JsonResponse(
+            {
+                "error": "Invalid organisation type.",
+                "invalid_type": organisation_type,
+                "allowed_types": [
+                    "bank",
+                    "branch",
+                    "club",
+                ],
+            },
+            status=400,
+        )
+
+    status_values = []
+
+    for raw_value in request.GET.getlist("status"):
+        for value in raw_value.split(","):
+            value = value.strip().lower()
+
+            if value and value not in status_values:
+                status_values.append(value)
+
+    invalid_statuses = sorted(
+        set(status_values) - CONTACT_STATUS_CHOICES_API
+    )
+
+    if invalid_statuses:
+        return JsonResponse(
+            {
+                "error": "Invalid contact status.",
+                "invalid_statuses": invalid_statuses,
+                "allowed_statuses": sorted(
+                    CONTACT_STATUS_CHOICES_API
+                ),
+            },
+            status=400,
+        )
+
+    sort_by = (
+        request.GET.get("sort_by", "name")
+        .strip()
+        .lower()
+    )
+
+    if sort_by not in ORGANISATION_API_SORT_FIELDS:
+        return JsonResponse(
+            {
+                "error": "Invalid sort field.",
+                "invalid_sort": sort_by,
+                "allowed_sort_fields": sorted(
+                    ORGANISATION_API_SORT_FIELDS
+                ),
+            },
+            status=400,
+        )
+
+    sort_dir = (
+        request.GET.get("sort_dir", "asc")
+        .strip()
+        .lower()
+    )
+
+    if sort_dir not in {"asc", "desc"}:
+        return JsonResponse(
+            {
+                "error": (
+                    "sort_dir must be either asc or desc."
+                ),
+            },
+            status=400,
+        )
+
+    try:
+        page_number = int(
+            request.GET.get("page", "1")
+        )
+    except ValueError:
+        return JsonResponse(
+            {
+                "error": "page must be a positive integer.",
+            },
+            status=400,
+        )
+
+    if page_number < 1:
+        return JsonResponse(
+            {
+                "error": "page must be a positive integer.",
+            },
+            status=400,
+        )
+
+    try:
+        page_size = int(
+            request.GET.get("page_size", "10")
+        )
+    except ValueError:
+        return JsonResponse(
+            {
+                "error": (
+                    "page_size must be a positive integer."
+                ),
+            },
+            status=400,
+        )
+
+    if page_size < 1:
+        return JsonResponse(
+            {
+                "error": (
+                    "page_size must be a positive integer."
+                ),
+            },
+            status=400,
+        )
+
+    if page_size > 50:
+        return JsonResponse(
+            {
+                "error": "page_size cannot exceed 50.",
+            },
+            status=400,
+        )
+
+    rows = _get_all_organisations(
+        search=search,
+        org_type=organisation_type,
+        region=region,
+    )
+
+    if status_values:
+        rows = [
+            row
+            for row in rows
+            if row["status"] in status_values
+        ]
+
+    sort_key_map = {
+        "name": lambda row: row["name"].lower(),
+        "region": lambda row: row["region"].lower(),
+        "type": lambda row: row["type"].lower(),
+        "status": lambda row: row["status"],
+    }
+
+    rows.sort(
+        key=lambda row: (
+            sort_key_map[sort_by](row),
+            row["name"].lower(),
+            row["type"].lower(),
+            row["id"],
+        ),
+        reverse=(sort_dir == "desc"),
+    )
+
+    paginator = Paginator(
+        rows,
+        page_size,
+    )
+
+    if page_number > paginator.num_pages:
+        return JsonResponse(
+            {
+                "error": "Page is out of range.",
+                "requested_page": page_number,
+                "total_pages": paginator.num_pages,
+            },
+            status=400,
+        )
+
+    page = paginator.page(page_number)
+
+    results = [
+        {
+            "id": row["id"],
+            "content_type_id": row["content_type_id"],
+            "type": row["type"].lower(),
+            "name": row["name"],
+            "region": row["region"],
+            "public_email": row["email"],
+            "public_phone": row["phone"],
+            "contact_status": row["status"],
+            "contact_status_label": (
+                CONTACT_STATUS_LABELS[row["status"]]
+            ),
+            "opportunity_outcome": (
+                row["outcome_status"] or None
+            ),
+            "status_conflict": row["status_conflict"],
+        }
+        for row in page.object_list
+    ]
+
+    return JsonResponse(
+        {
+            "results": results,
+            "pagination": {
+                "page": page.number,
+                "page_size": page_size,
+                "total_items": paginator.count,
+                "total_pages": paginator.num_pages,
+                "has_next": page.has_next(),
+                "has_previous": page.has_previous(),
+            },
+            "filters": {
+                "status": status_values,
+                "type": organisation_type or None,
+                "search": search or None,
+                "region": region or None,
+            },
+            "sorting": {
+                "sort_by": sort_by,
+                "sort_dir": sort_dir,
+            },
+        }
+    )
+
+
+@login_required
 def dashboard_view(request):
     search = request.GET.get("q", "").strip()
     org_type = request.GET.get("type", "")
@@ -252,7 +520,6 @@ def dashboard_view(request):
         else 0
     )
 
-    # Count only outcomes that agree with the organisation being contacted.
     status_breakdown = {
         label: len(
             [

@@ -15,6 +15,11 @@ urlpatterns = [
         name="outreach_dashboard",
     ),
     path(
+        "api/organisations/",
+        views.organisation_list_api,
+        name="organisation_list_api",
+    ),
+    path(
         "organisations/add/",
         views.add_organisation,
         name="add_organisation",
