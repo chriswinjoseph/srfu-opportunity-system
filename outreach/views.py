@@ -1,18 +1,35 @@
 from django.contrib.auth.decorators import login_required
 from django.contrib.contenttypes.models import ContentType
 from django.core.paginator import Paginator
-from django.db import models
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from .forms import BankForm, BranchForm, ClubForm
 from .models import Bank, Branch, Club, Opportunity
+from .status_transitions import (
+    InvalidStatusTransition,
+    record_positive_response,
+)
+
+
+CONTACT_STATUS_LABELS = {
+    "not_yet_contacted": "Not Yet Contacted",
+    "contacted": "Contacted",
+}
+
+
+OPPORTUNITY_OUTCOME_LABELS = {
+    "interested": "Interested",
+    "not_interested": "Not Interested",
+    "do_not_contact": "Do Not Contact",
+}
 
 
 @login_required
 def bank_list(request):
     banks = Bank.objects.all().order_by("bank_name")
+
     return render(
         request,
         "outreach/bank_list.html",
@@ -20,56 +37,14 @@ def bank_list(request):
     )
 
 
-def get_supported_clubs(bank):
-    """
-    Return every club supported by a bank, either directly or through
-    one of the bank's branches.
-    """
-    return (
-        Club.objects.filter(
-            models.Q(supported_by_bank=bank)
-            | models.Q(supported_by_branch__bank=bank)
-        )
-        .distinct()
-        .order_by("club_name")
-    )
-
-
-def record_positive_response(opportunity):
-    """
-    Record a positive response, update the responding organisation to
-    Interested, and return the clubs supported by its bank.
-    """
-    org = opportunity.organisation
-
-    if not isinstance(org, (Bank, Branch)):
-        raise ValueError(
-            "Only a bank or branch opportunity can trigger "
-            "supported-club lookup."
-        )
-
-    if org.contact_status not in ("contacted", "interested"):
-        raise ValueError(
-            "A positive response can only be recorded after the "
-            "organisation has been contacted."
-        )
-
-    opportunity.status = "interested"
-    opportunity.save(update_fields=["status"])
-
-    org.contact_status = "interested"
-    org.save(update_fields=["contact_status"])
-
-    bank = org if isinstance(org, Bank) else org.bank
-    return get_supported_clubs(bank)
-
-
 @login_required
 @require_POST
 def record_positive_response_api(request, opportunity_id):
     """
-    Protected endpoint used to record a positive response and return
-    the clubs supported by the responding bank.
+    Record a positive response.
+
+    The organisation remains Contacted while the opportunity changes
+    to Interested.
     """
     opportunity = get_object_or_404(
         Opportunity,
@@ -77,8 +52,11 @@ def record_positive_response_api(request, opportunity_id):
     )
 
     try:
-        supported_clubs = record_positive_response(opportunity)
-    except ValueError as error:
+        opportunity, supported_clubs = record_positive_response(
+            opportunity,
+            actor=request.user.pk,
+        )
+    except InvalidStatusTransition as error:
         return JsonResponse(
             {"error": str(error)},
             status=409,
@@ -101,24 +79,18 @@ def record_positive_response_api(request, opportunity_id):
             "organisation_status": (
                 opportunity.organisation.contact_status
             ),
+            "opportunity_status": opportunity.status,
             "clubs": clubs,
         }
     )
 
 
-STATUS_LABELS = {
-    "not_yet_contacted": "Not Yet Contacted",
-    "contacted": "Contacted",
-    "interested": "Interested",
-    "not_interested": "Not Interested",
-    "do_not_contact": "Do Not Contact",
-}
-
-
 def _org_to_row(org, org_type):
     """
-    Convert a Bank, Branch or Club into a common dictionary format
-    for the dashboard.
+    Convert a Bank, Branch or Club into a common dashboard format.
+
+    Contact status and opportunity outcome are kept separate. A response
+    outcome on a Not Yet Contacted organisation is flagged for review.
     """
     content_type = ContentType.objects.get_for_model(org)
 
@@ -127,6 +99,40 @@ def _org_to_row(org, org_type):
         or getattr(org, "branch_name", None)
         or getattr(org, "club_name", None)
     )
+
+    latest_opportunity = (
+        Opportunity.objects.filter(
+            content_type=content_type,
+            object_id=org.pk,
+        )
+        .order_by("-date_created")
+        .first()
+    )
+
+    outcome_status = ""
+
+    if (
+        latest_opportunity is not None
+        and latest_opportunity.status
+        in OPPORTUNITY_OUTCOME_LABELS
+    ):
+        outcome_status = latest_opportunity.status
+
+    status_conflict = (
+        org.contact_status == "not_yet_contacted"
+        and bool(outcome_status)
+    )
+
+    if status_conflict:
+        status_label = "Needs Review"
+    else:
+        status_label = OPPORTUNITY_OUTCOME_LABELS.get(
+            outcome_status,
+            CONTACT_STATUS_LABELS.get(
+                org.contact_status,
+                org.contact_status,
+            ),
+        )
 
     return {
         "id": org.pk,
@@ -137,31 +143,42 @@ def _org_to_row(org, org_type):
         "email": getattr(org, "public_email", "") or "",
         "phone": getattr(org, "public_phone", "") or "",
         "status": org.contact_status,
-        "status_label": STATUS_LABELS.get(
-            org.contact_status,
-            org.contact_status,
-        ),
+        "outcome_status": outcome_status,
+        "status_conflict": status_conflict,
+        "status_label": status_label,
     }
 
 
 def _get_all_organisations(search="", org_type="", region=""):
     """
-    Fetch Banks, Branches and Clubs, apply the selected filters,
-    and combine them into one list.
+    Fetch Banks, Branches and Clubs, apply filters and combine them
+    into one dashboard list.
     """
     banks = Bank.objects.all()
     branches = Branch.objects.all()
     clubs = Club.objects.all()
 
     if search:
-        banks = banks.filter(bank_name__icontains=search)
-        branches = branches.filter(branch_name__icontains=search)
-        clubs = clubs.filter(club_name__icontains=search)
+        banks = banks.filter(
+            bank_name__icontains=search,
+        )
+        branches = branches.filter(
+            branch_name__icontains=search,
+        )
+        clubs = clubs.filter(
+            club_name__icontains=search,
+        )
 
     if region:
-        banks = banks.filter(region__icontains=region)
-        branches = branches.filter(region__icontains=region)
-        clubs = clubs.filter(region__icontains=region)
+        banks = banks.filter(
+            region__icontains=region,
+        )
+        branches = branches.filter(
+            region__icontains=region,
+        )
+        clubs = clubs.filter(
+            region__icontains=region,
+        )
 
     rows = []
 
@@ -184,6 +201,7 @@ def _get_all_organisations(search="", org_type="", region=""):
         )
 
     rows.sort(key=lambda row: row["name"].lower())
+
     return rows
 
 
@@ -191,7 +209,7 @@ def _get_all_organisations(search="", org_type="", region=""):
 def dashboard_view(request):
     search = request.GET.get("q", "").strip()
     org_type = request.GET.get("type", "")
-    region = request.GET.get("region", "")
+    region = request.GET.get("region", "").strip()
 
     all_rows = _get_all_organisations(
         search=search,
@@ -208,14 +226,20 @@ def dashboard_view(request):
     contacted = [
         row
         for row in all_rows
-        if row["status"] != "not_yet_contacted"
+        if row["status"] == "contacted"
     ]
 
-    not_yet_page = Paginator(not_yet, 5).get_page(
+    not_yet_page = Paginator(
+        not_yet,
+        5,
+    ).get_page(
         request.GET.get("not_yet_page")
     )
 
-    contacted_page = Paginator(contacted, 5).get_page(
+    contacted_page = Paginator(
+        contacted,
+        5,
+    ).get_page(
         request.GET.get("contacted_page")
     )
 
@@ -228,17 +252,29 @@ def dashboard_view(request):
         else 0
     )
 
+    # Count only outcomes that agree with the organisation being contacted.
     status_breakdown = {
         label: len(
             [
                 row
                 for row in all_rows
-                if row["status"] == status
+                if (
+                    row["outcome_status"] == status
+                    and not row["status_conflict"]
+                )
             ]
         )
-        for status, label in STATUS_LABELS.items()
-        if status not in ("not_yet_contacted", "contacted")
+        for status, label
+        in OPPORTUNITY_OUTCOME_LABELS.items()
     }
+
+    status_breakdown["Needs Review"] = len(
+        [
+            row
+            for row in all_rows
+            if row["status_conflict"]
+        ]
+    )
 
     context = {
         "not_yet_page": not_yet_page,
@@ -260,7 +296,11 @@ def dashboard_view(request):
 
 
 @login_required
-def organisation_detail(request, content_type_id, object_id):
+def organisation_detail(
+    request,
+    content_type_id,
+    object_id,
+):
     content_type = get_object_or_404(
         ContentType,
         pk=content_type_id,
@@ -268,7 +308,6 @@ def organisation_detail(request, content_type_id, object_id):
 
     model_class = content_type.model_class()
 
-    # Prevent changed URLs from accessing unrelated Django models.
     if model_class not in (Bank, Branch, Club):
         raise Http404("Organisation not found.")
 
@@ -306,7 +345,8 @@ ORGANISATION_FORMS = {
 def add_organisation(request):
     """
     Allow a logged-in user to add a Bank, Branch or Club.
-    New organisations use the default Not Yet Contacted status.
+
+    New organisations start as Not Yet Contacted.
     """
     organisation_type = (
         request.POST.get("organisation_type")
@@ -314,7 +354,9 @@ def add_organisation(request):
         or "bank"
     ).lower()
 
-    form_class = ORGANISATION_FORMS.get(organisation_type)
+    form_class = ORGANISATION_FORMS.get(
+        organisation_type
+    )
 
     if form_class is None:
         raise Http404("Invalid organisation type.")

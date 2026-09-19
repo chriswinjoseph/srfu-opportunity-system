@@ -58,6 +58,11 @@
             font-size: 13px;
         }
 
+        .needs-review {
+            color: #b42318;
+            font-weight: normal;
+        }
+
         button:disabled {
             cursor: not-allowed;
             opacity: 0.5;
@@ -87,6 +92,7 @@
 </head>
 
 <body>
+
 <form
     class="logout-form"
     method="post"
@@ -191,10 +197,17 @@
                 <div class="card">
                     <div class="name">
                         {{ row.name }}
+
+                        {% if row.status_conflict %}
+                            <span class="needs-review">
+                                - Needs Review
+                            </span>
+                        {% endif %}
                     </div>
 
                     <div class="meta">
-                        {{ row.type }} - {{ row.region|default:"-" }}
+                        {{ row.type }} -
+                        {{ row.region|default:"-" }}
                     </div>
 
                     <div class="meta">
@@ -251,7 +264,8 @@
                     </div>
 
                     <div class="meta">
-                        {{ row.type }} - {{ row.region|default:"-" }}
+                        {{ row.type }} -
+                        {{ row.region|default:"-" }}
                     </div>
 
                     <div class="meta">
@@ -295,5 +309,6 @@
         </div>
     </div>
 </div>
+
 </body>
 </html>

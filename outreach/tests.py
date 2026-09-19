@@ -1,9 +1,14 @@
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 
 from .models import Bank, Branch, Club, Opportunity
+from .status_transitions import (
+    InvalidStatusTransition,
+    update_organisation_contact_status,
+)
 
 
 class PositiveResponseTests(TestCase):
@@ -22,7 +27,9 @@ class PositiveResponseTests(TestCase):
             contact_status="contacted",
         )
 
-        content_type = ContentType.objects.get_for_model(self.bank)
+        content_type = ContentType.objects.get_for_model(
+            self.bank
+        )
 
         self.opportunity = Opportunity.objects.create(
             content_type=content_type,
@@ -35,7 +42,7 @@ class PositiveResponseTests(TestCase):
             args=[self.opportunity.id],
         )
 
-    def test_positive_response_updates_status(self):
+    def test_positive_response_updates_only_opportunity(self):
         self.client.force_login(self.user)
 
         response = self.client.post(self.url)
@@ -44,12 +51,25 @@ class PositiveResponseTests(TestCase):
         self.opportunity.refresh_from_db()
 
         self.assertEqual(response.status_code, 200)
+
+        # The organisation remains Contacted.
         self.assertEqual(
             self.bank.contact_status,
-            "interested",
+            "contacted",
         )
+
+        # Only the response outcome becomes Interested.
         self.assertEqual(
             self.opportunity.status,
+            "interested",
+        )
+
+        self.assertEqual(
+            response.json()["organisation_status"],
+            "contacted",
+        )
+        self.assertEqual(
+            response.json()["opportunity_status"],
             "interested",
         )
 
@@ -86,10 +106,15 @@ class PositiveResponseTests(TestCase):
         )
 
         direct_club.refresh_from_db()
+        branch.refresh_from_db()
         branch_club.refresh_from_db()
 
         self.assertEqual(
             direct_club.contact_status,
+            "not_yet_contacted",
+        )
+        self.assertEqual(
+            branch.contact_status,
             "not_yet_contacted",
         )
         self.assertEqual(
@@ -111,10 +136,217 @@ class PositiveResponseTests(TestCase):
         self.assertEqual(response.status_code, 302)
 
         self.bank.refresh_from_db()
+        self.opportunity.refresh_from_db()
 
         self.assertEqual(
             self.bank.contact_status,
             "contacted",
+        )
+        self.assertEqual(
+            self.opportunity.status,
+            "contacted",
+        )
+
+    def test_response_rejected_when_organisation_not_contacted(self):
+        self.bank.contact_status = "not_yet_contacted"
+        self.bank.save(update_fields=["contact_status"])
+
+        self.client.force_login(self.user)
+
+        with self.assertLogs(
+            "outreach.status_transitions",
+            level="WARNING",
+        ):
+            response = self.client.post(self.url)
+
+        self.bank.refresh_from_db()
+        self.opportunity.refresh_from_db()
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            self.bank.contact_status,
+            "not_yet_contacted",
+        )
+        self.assertEqual(
+            self.opportunity.status,
+            "contacted",
+        )
+
+    def test_terminal_do_not_contact_response_is_rejected(self):
+        self.opportunity.status = "do_not_contact"
+        self.opportunity.save(update_fields=["status"])
+
+        self.client.force_login(self.user)
+
+        response = self.client.post(self.url)
+
+        self.bank.refresh_from_db()
+        self.opportunity.refresh_from_db()
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            self.bank.contact_status,
+            "contacted",
+        )
+        self.assertEqual(
+            self.opportunity.status,
+            "do_not_contact",
+        )
+
+    def test_duplicate_positive_response_is_idempotent(self):
+        self.client.force_login(self.user)
+
+        first_response = self.client.post(self.url)
+        second_response = self.client.post(self.url)
+
+        self.bank.refresh_from_db()
+        self.opportunity.refresh_from_db()
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(second_response.status_code, 200)
+        self.assertEqual(
+            self.bank.contact_status,
+            "contacted",
+        )
+        self.assertEqual(
+            self.opportunity.status,
+            "interested",
+        )
+        self.assertEqual(
+            Opportunity.objects.filter(
+                pk=self.opportunity.pk
+            ).count(),
+            1,
+        )
+
+    def test_club_cannot_trigger_supported_club_lookup(self):
+        club = Club.objects.create(
+            club_name="Test Club",
+            contact_status="contacted",
+        )
+
+        content_type = ContentType.objects.get_for_model(club)
+
+        opportunity = Opportunity.objects.create(
+            content_type=content_type,
+            object_id=club.pk,
+            status="contacted",
+        )
+
+        url = reverse(
+            "record_positive_response_api",
+            args=[opportunity.pk],
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.post(url)
+
+        opportunity.refresh_from_db()
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            opportunity.status,
+            "contacted",
+        )
+
+
+class ContactStatusTransitionTests(TestCase):
+
+    def setUp(self):
+        self.bank = Bank.objects.create(
+            bank_name="Transition Test Bank",
+            region="Victoria",
+            contact_status="not_yet_contacted",
+        )
+
+    def test_confirmed_contact_can_change_to_contacted(self):
+        updated_bank = update_organisation_contact_status(
+            self.bank,
+            "contacted",
+            contact_confirmed=True,
+            actor="test-user",
+        )
+
+        self.assertEqual(
+            updated_bank.contact_status,
+            "contacted",
+        )
+
+        self.bank.refresh_from_db()
+
+        self.assertEqual(
+            self.bank.contact_status,
+            "contacted",
+        )
+
+    def test_unconfirmed_contact_is_rejected(self):
+        with self.assertLogs(
+            "outreach.status_transitions",
+            level="WARNING",
+        ):
+            with self.assertRaises(InvalidStatusTransition):
+                update_organisation_contact_status(
+                    self.bank,
+                    "contacted",
+                    contact_confirmed=False,
+                    actor="test-user",
+                )
+
+        self.bank.refresh_from_db()
+
+        self.assertEqual(
+            self.bank.contact_status,
+            "not_yet_contacted",
+        )
+
+    def test_opportunity_outcome_cannot_be_contact_status(self):
+        with self.assertRaises(InvalidStatusTransition):
+            update_organisation_contact_status(
+                self.bank,
+                "interested",
+                contact_confirmed=True,
+                actor="test-user",
+            )
+
+        self.bank.refresh_from_db()
+
+        self.assertEqual(
+            self.bank.contact_status,
+            "not_yet_contacted",
+        )
+
+    def test_contacted_cannot_return_to_not_yet_contacted(self):
+        self.bank.contact_status = "contacted"
+        self.bank.save(update_fields=["contact_status"])
+
+        with self.assertRaises(InvalidStatusTransition):
+            update_organisation_contact_status(
+                self.bank,
+                "not_yet_contacted",
+                actor="test-user",
+            )
+
+        self.bank.refresh_from_db()
+
+        self.assertEqual(
+            self.bank.contact_status,
+            "contacted",
+        )
+
+    def test_database_constraint_rejects_invalid_status(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Bank.objects.filter(
+                    pk=self.bank.pk
+                ).update(
+                    contact_status="interested"
+                )
+
+        self.bank.refresh_from_db()
+
+        self.assertEqual(
+            self.bank.contact_status,
+            "not_yet_contacted",
         )
 
 
@@ -246,4 +478,58 @@ class AddOrganisationTests(TestCase):
         self.assertEqual(
             club.contact_status,
             "not_yet_contacted",
+        )
+class DashboardStatusConflictTests(TestCase):
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            email="conflict@example.com",
+            first_name="Conflict",
+            last_name="Tester",
+            password="Testing123!",
+        )
+
+        self.club = Club.objects.create(
+            club_name="Conflict Test Club",
+            contact_status="not_yet_contacted",
+        )
+
+        content_type = ContentType.objects.get_for_model(
+            self.club
+        )
+
+        Opportunity.objects.create(
+            content_type=content_type,
+            object_id=self.club.pk,
+            status="interested",
+        )
+
+    def test_conflicting_status_is_flagged_for_review(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(
+            reverse("outreach_dashboard")
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Conflict Test Club",
+        )
+        self.assertContains(
+            response,
+            "Needs Review",
+        )
+
+        status_breakdown = response.context[
+            "status_breakdown"
+        ]
+
+        self.assertEqual(
+            status_breakdown["Interested"],
+            0,
+        )
+        self.assertEqual(
+            status_breakdown["Needs Review"],
+            1,
         )
