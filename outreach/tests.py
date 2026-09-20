@@ -537,7 +537,7 @@ class DashboardStatusConflictTests(TestCase):
 
 
 class BulkContactStatusTransitionTests(TestCase):
-     def test_valid_updates_are_saved_when_another_update_is_invalid(self):
+    def test_valid_updates_are_saved_when_another_update_is_invalid(self):
         valid_bank = Bank.objects.create(
             bank_name="Valid Bulk Bank",
             region="Victoria",
@@ -591,7 +591,8 @@ class BulkContactStatusTransitionTests(TestCase):
             invalid_bank.pk,
         )
 
-        class OrganisationListApiTests(TestCase):
+class OrganisationListApiTests(TestCase):
+
     def setUp(self):
         self.user = get_user_model().objects.create_user(
             email="api@example.com",
