@@ -480,6 +480,7 @@ class AddOrganisationTests(TestCase):
             club.contact_status,
             "not_yet_contacted",
         )
+
 class DashboardStatusConflictTests(TestCase):
 
     def setUp(self):
@@ -508,21 +509,16 @@ class DashboardStatusConflictTests(TestCase):
     def test_conflicting_status_is_flagged_for_review(self):
         self.client.force_login(self.user)
 
-        response = self.client.get(
+        dashboard_response = self.client.get(
             reverse("outreach_dashboard")
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(
-            response,
-            "Conflict Test Club",
-        )
-        self.assertContains(
-            response,
-            "Needs Review",
+        self.assertEqual(
+            dashboard_response.status_code,
+            200,
         )
 
-        status_breakdown = response.context[
+        status_breakdown = dashboard_response.context[
             "status_breakdown"
         ]
 
@@ -534,6 +530,39 @@ class DashboardStatusConflictTests(TestCase):
             status_breakdown["Needs Review"],
             1,
         )
+
+        api_response = self.client.get(
+            reverse("organisation_list_api"),
+            {
+                "q": "Conflict Test Club",
+                "type": "club",
+            },
+        )
+
+        self.assertEqual(
+            api_response.status_code,
+            200,
+        )
+
+        results = api_response.json()["results"]
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(
+            results[0]["name"],
+            "Conflict Test Club",
+        )
+        self.assertEqual(
+            results[0]["contact_status"],
+            "not_yet_contacted",
+        )
+        self.assertEqual(
+            results[0]["opportunity_outcome"],
+            "interested",
+        )
+        self.assertTrue(
+            results[0]["status_conflict"]
+        )
+
 
 
 class BulkContactStatusTransitionTests(TestCase):

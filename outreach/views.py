@@ -393,6 +393,32 @@ def organisation_list_api(request):
             if row["status"] in status_values
         ]
 
+    # Calculate totals before pagination so dashboard statistics
+    # represent every filtered organisation, not only this page.
+    summary = {
+        "contact_status_counts": {
+            status: sum(
+                row["status"] == status
+                for row in rows
+            )
+            for status in CONTACT_STATUS_LABELS
+        },
+        "opportunity_outcome_counts": {
+            status: sum(
+                (
+                    row["outcome_status"] == status
+                    and not row["status_conflict"]
+                )
+                for row in rows
+            )
+            for status in OPPORTUNITY_OUTCOME_LABELS
+        },
+        "needs_review": sum(
+            row["status_conflict"]
+            for row in rows
+        ),
+    }
+
     sort_key_map = {
         "name": lambda row: row["name"].lower(),
         "region": lambda row: row["region"].lower(),

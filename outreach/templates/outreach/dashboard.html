@@ -1,314 +1,549 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Dashboard</title>
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1"
+    >
+    <title>Dashboard | Safe Roads For Us</title>
 
-    <style>
-        body {
-            display: flex;
-            margin: 0;
-            font-family: sans-serif;
-        }
+    <link
+        rel="stylesheet"
+        href="{% static 'css/dashboard.css' %}"
+    >
 
-        .sidebar {
-            width: 200px;
-            min-height: 100vh;
-            padding: 16px;
-            border-right: 1px solid #ccc;
-        }
-
-        .main {
-            flex: 1;
-            padding: 16px;
-        }
-
-        .stat {
-            margin-bottom: 16px;
-        }
-
-        .stat .big {
-            font-size: 28px;
-            font-weight: bold;
-        }
-
-        .columns {
-            display: flex;
-            gap: 24px;
-            margin-top: 16px;
-        }
-
-        .column {
-            flex: 1;
-        }
-
-        .card {
-            padding: 10px;
-            margin-bottom: 8px;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-        }
-
-        .card .name {
-            font-weight: bold;
-        }
-
-        .card .meta {
-            color: #555;
-            font-size: 13px;
-        }
-
-        .needs-review {
-            color: #b42318;
-            font-weight: normal;
-        }
-
-        button:disabled {
-            cursor: not-allowed;
-            opacity: 0.5;
-        }
-
-        .filters input,
-        .filters select {
-            margin-right: 8px;
-        }
-
-        .logout-form {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 1000;
-        }
-
-        .logout-button {
-            padding: 9px 16px;
-            color: white;
-            background: #173363;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-    </style>
+    <script
+        src="{% static 'js/dashboard.js' %}"
+        defer
+    ></script>
 </head>
 
 <body>
-
-<form
-    class="logout-form"
-    method="post"
-    action="{% url 'logout' %}"
+<div
+    id="dashboardApp"
+    class="dashboard-shell"
+    data-api-url="{% url 'organisation_list_api' %}"
+    data-detail-url-template="{% url 'organisation_detail' 999999999 888888888 %}"
 >
-    {% csrf_token %}
-
-    <button class="logout-button" type="submit">
-        Log out
-    </button>
-</form>
-
-<div class="sidebar">
-    <div class="stat">
-        <div>Contact Progress</div>
-        <div class="big">{{ percent_contacted }}%</div>
-    </div>
-
-    <div class="stat">
-        <div>Not Yet Contacted</div>
-        <div class="big">{{ not_yet_count }}</div>
-    </div>
-
-    <div class="stat">
-        <div>Contacted</div>
-        <div class="big">{{ contacted_count }}</div>
-    </div>
-
-    <div class="stat">
-        <div>Organisation Status</div>
-
-        {% for label, count in status_breakdown.items %}
-            <div>{{ label }}: {{ count }}</div>
-        {% endfor %}
-    </div>
-
-    <p>
-        <a href="{% url 'add_organisation' %}">
-            + Add Organisation
-        </a>
-    </p>
-</div>
-
-<div class="main">
-    <h1>Dashboard</h1>
-
-    <form class="filters" method="get">
-        <input
-            type="text"
-            name="q"
-            placeholder="Search by name"
-            value="{{ search }}"
-        >
-
-        <select name="type">
-            <option
-                value=""
-                {% if org_type == "" %}selected{% endif %}
+    <aside class="sidebar">
+        <div class="brand">
+            <img
+                class="brand-logo"
+                src="{% static 'images/logo.png' %}"
+                alt="Safe Roads For Us"
             >
-                All types
-            </option>
-
-            <option
-                value="bank"
-                {% if org_type == "bank" %}selected{% endif %}
-            >
-                Bank
-            </option>
-
-            <option
-                value="branch"
-                {% if org_type == "branch" %}selected{% endif %}
-            >
-                Branch
-            </option>
-
-            <option
-                value="club"
-                {% if org_type == "club" %}selected{% endif %}
-            >
-                Club
-            </option>
-        </select>
-
-        <input
-            type="text"
-            name="region"
-            placeholder="Region"
-            value="{{ region }}"
-        >
-
-        <button type="submit">
-            Search / Filter
-        </button>
-    </form>
-
-    <div class="columns">
-        <div class="column">
-            <h2>Not Yet Contacted</h2>
-
-            {% for row in not_yet_page %}
-                <div class="card">
-                    <div class="name">
-                        {{ row.name }}
-
-                        {% if row.status_conflict %}
-                            <span class="needs-review">
-                                - Needs Review
-                            </span>
-                        {% endif %}
-                    </div>
-
-                    <div class="meta">
-                        {{ row.type }} -
-                        {{ row.region|default:"-" }}
-                    </div>
-
-                    <div class="meta">
-                        {{ row.email|default:"-" }} -
-                        {{ row.phone|default:"-" }}
-                    </div>
-
-                    <a href="{% url 'organisation_detail' row.content_type_id row.id %}">
-                        View Details
-                    </a>
-
-                    <button
-                        disabled
-                        title="Draft email generation is still in progress"
-                    >
-                        Email (coming soon)
-                    </button>
-                </div>
-            {% empty %}
-                <p>No organisations found.</p>
-            {% endfor %}
-
-            {% if not_yet_page.has_other_pages %}
-                <p>
-                    {% if not_yet_page.has_previous %}
-                        <a href="?q={{ search|urlencode }}&type={{ org_type|urlencode }}&region={{ region|urlencode }}&not_yet_page={{ not_yet_page.previous_page_number }}">
-                            Previous
-                        </a>
-                    {% endif %}
-
-                    Page {{ not_yet_page.number }}
-                    of {{ not_yet_page.paginator.num_pages }}
-
-                    {% if not_yet_page.has_next %}
-                        <a href="?q={{ search|urlencode }}&type={{ org_type|urlencode }}&region={{ region|urlencode }}&not_yet_page={{ not_yet_page.next_page_number }}">
-                            Next
-                        </a>
-                    {% endif %}
-                </p>
-            {% endif %}
         </div>
 
-        <div class="column">
-            <h2>Contacted</h2>
+        <section
+            class="sidebar-summary"
+            aria-labelledby="summaryHeading"
+        >
+            <h2 id="summaryHeading" class="visually-hidden">
+                Contact Summary
+            </h2>
 
-            {% for row in contacted_page %}
-                <div class="card">
-                    <div class="name">
-                        {{ row.name }}
+            <div class="sidebar-metric">
+                <span class="metric-label">
+                    Contact<br>Progress
+                </span>
 
-                        <span style="font-weight: normal;">
-                            - {{ row.status_label }}
+                <strong
+                    id="percentContacted"
+                    class="metric-fallback"
+                >
+                    {{ percent_contacted }}%
+                </strong>
+
+                <div
+                    id="progressRing"
+                    class="progress-ring"
+                    style="--progress: {{ percent_contacted }};"
+                    aria-label="{{ percent_contacted }} percent contacted"
+                >
+                    <span>{{ percent_contacted }}%</span>
+                </div>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            <div class="sidebar-metric">
+                <span class="metric-label">
+                    Not Yet<br>Contacted
+                </span>
+
+                <div class="count-ring">
+                    <strong id="notYetCount">
+                        {{ not_yet_count }}
+                    </strong>
+                </div>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            <div class="sidebar-metric">
+                <span class="metric-label">
+                    Contacted
+                </span>
+
+                <div class="count-ring">
+                    <strong id="contactedCount">
+                        {{ contacted_count }}
+                    </strong>
+                </div>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            <div class="outcome-summary">
+                <h3>Organisation Status</h3>
+
+                <div class="outcome-row">
+                    <span>Interested</span>
+                    <strong id="interestedCount">0</strong>
+                </div>
+
+                <div class="outcome-row">
+                    <span>Not Interested</span>
+                    <strong id="notInterestedCount">0</strong>
+                </div>
+
+                <div class="outcome-row">
+                    <span>Do Not Contact</span>
+                    <strong id="doNotContactCount">0</strong>
+                </div>
+
+                <div class="outcome-row review-row">
+                    <span>Needs Review</span>
+                    <strong id="needsReviewCount">0</strong>
+                </div>
+            </div>
+        </section>
+
+        <div class="sidebar-actions">
+            <button
+                class="secondary-button sidebar-button"
+                type="button"
+                disabled
+                title="Organisation scraping will be added in a future task."
+            >
+                Scrape Organisations
+            </button>
+
+            <a
+                class="primary-button sidebar-button"
+                href="{% url 'add_organisation' %}"
+            >
+                + Add Organisation
+            </a>
+        </div>
+    </aside>
+
+    <div class="page-shell">
+        <header class="topbar">
+            <a
+                class="topbar-dashboard-link"
+                href="{% url 'outreach_dashboard' %}"
+                aria-current="page"
+            >
+                Dashboard
+            </a>
+
+            <div class="topbar-user">
+                <span class="user-icon" aria-hidden="true">
+                    &#9786;
+                </span>
+
+                <span class="welcome-text">
+                    Welcome Back,
+                    {% if request.user.first_name %}
+                        {{ request.user.first_name }}
+                    {% else %}
+                        User
+                    {% endif %}
+                </span>
+
+                <form method="post" action="{% url 'logout' %}">
+                    {% csrf_token %}
+
+                    <button class="logout-button" type="submit">
+                        Log out
+                    </button>
+                </form>
+            </div>
+        </header>
+
+        <main class="dashboard-main">
+            <header class="page-header">
+                <h1>Dashboard</h1>
+            </header>
+
+            <form
+                id="dashboardFilters"
+                class="filter-bar"
+                method="get"
+                novalidate
+            >
+                <div class="search-control">
+                    <label
+                        class="visually-hidden"
+                        for="searchInput"
+                    >
+                        Search organisations
+                    </label>
+
+                    <input
+                        id="searchInput"
+                        type="search"
+                        name="q"
+                        placeholder="Search..."
+                        value="{{ search }}"
+                    >
+
+                    <button
+                        class="search-button"
+                        type="submit"
+                        aria-label="Search"
+                    >
+                        &#128269;
+                    </button>
+                </div>
+
+                <input
+                    id="typeFilter"
+                    type="hidden"
+                    name="type"
+                    value=""
+                >
+
+                <input
+                    id="regionFilter"
+                    type="hidden"
+                    name="region"
+                    value=""
+                >
+
+                <div class="sort-control-wrapper">
+                    <label
+                        class="visually-hidden"
+                        for="sortControl"
+                    >
+                        Sort organisations
+                    </label>
+
+                    <select id="sortControl">
+                        <option value="name:asc">
+                            Sort: Name A-Z
+                        </option>
+
+                        <option value="name:desc">
+                            Sort: Name Z-A
+                        </option>
+
+                        <option value="region:asc">
+                            Sort: Region
+                        </option>
+
+                        <option value="type:asc">
+                            Sort: Organisation Type
+                        </option>
+
+                        <option value="status:asc">
+                            Sort: Contact Status
+                        </option>
+                    </select>
+                </div>
+
+                <button
+                    id="clearFilters"
+                    class="clear-filter-button"
+                    type="button"
+                >
+                    Clear
+                </button>
+            </form>
+
+            <div
+                id="dashboardError"
+                class="message error-message"
+                role="alert"
+                hidden
+            ></div>
+
+            <div class="organisation-columns">
+                <section
+                    class="organisation-column"
+                    aria-labelledby="notYetHeading"
+                >
+                    <header class="column-header">
+                        <h2 id="notYetHeading">
+                            Not Yet Contacted
+                        </h2>
+
+                        <span
+                            id="notYetTotal"
+                            class="column-count"
+                        >
+                            {{ not_yet_count }}
                         </span>
+                    </header>
+
+                    <div
+                        id="notYetLoading"
+                        class="loading-state"
+                    >
+                        Loading organisations&hellip;
                     </div>
 
-                    <div class="meta">
-                        {{ row.type }} -
-                        {{ row.region|default:"-" }}
+                    <div
+                        id="notYetEmpty"
+                        class="empty-state"
+                        hidden
+                    >
+                        <h3>No organisations found</h3>
+                        <p>
+                            Try changing or clearing the search.
+                        </p>
                     </div>
 
-                    <div class="meta">
-                        {{ row.email|default:"-" }} -
-                        {{ row.phone|default:"-" }}
+                    <div
+                        id="notYetCards"
+                        class="organisation-cards"
+                    ></div>
+
+                    <nav
+                        class="pagination"
+                        aria-label="Not Yet Contacted pagination"
+                    >
+                        <button
+                            id="notYetPrevious"
+                            class="pagination-button"
+                            type="button"
+                            disabled
+                        >
+                            Previous
+                        </button>
+
+                        <span id="notYetPage">
+                            Page 1 of 1
+                        </span>
+
+                        <button
+                            id="notYetNext"
+                            class="pagination-button"
+                            type="button"
+                            disabled
+                        >
+                            Next
+                        </button>
+                    </nav>
+                </section>
+
+                <section
+                    class="organisation-column"
+                    aria-labelledby="contactedHeading"
+                >
+                    <header class="column-header">
+                        <h2 id="contactedHeading">
+                            Contacted
+                        </h2>
+
+                        <span
+                            id="contactedTotal"
+                            class="column-count"
+                        >
+                            {{ contacted_count }}
+                        </span>
+                    </header>
+
+                    <div
+                        id="contactedLoading"
+                        class="loading-state"
+                    >
+                        Loading organisations&hellip;
                     </div>
 
-                    <a href="{% url 'organisation_detail' row.content_type_id row.id %}">
+                    <div
+                        id="contactedEmpty"
+                        class="empty-state"
+                        hidden
+                    >
+                        <h3>No organisations found</h3>
+                        <p>
+                            Try changing or clearing the search.
+                        </p>
+                    </div>
+
+                    <div
+                        id="contactedCards"
+                        class="organisation-cards"
+                    ></div>
+
+                    <nav
+                        class="pagination"
+                        aria-label="Contacted pagination"
+                    >
+                        <button
+                            id="contactedPrevious"
+                            class="pagination-button"
+                            type="button"
+                            disabled
+                        >
+                            Previous
+                        </button>
+
+                        <span id="contactedPage">
+                            Page 1 of 1
+                        </span>
+
+                        <button
+                            id="contactedNext"
+                            class="pagination-button"
+                            type="button"
+                            disabled
+                        >
+                            Next
+                        </button>
+                    </nav>
+                </section>
+            </div>
+
+            <section
+                id="detailsPanel"
+                class="details-panel"
+                aria-labelledby="detailsHeading"
+                hidden
+            >
+                <header class="details-header">
+                    <h2 id="detailsHeading">
+                        Organisation Details
+                    </h2>
+
+                    <button
+                        id="closeDetails"
+                        class="details-close-button"
+                        type="button"
+                        aria-label="Close organisation details"
+                    >
+                        &times;
+                    </button>
+                </header>
+
+                <div class="details-grid">
+                    <div class="detail-item">
+                        <span>Name</span>
+                        <strong id="detailName">&mdash;</strong>
+                    </div>
+
+                    <div class="detail-item">
+                        <span>Type</span>
+                        <strong id="detailType">&mdash;</strong>
+                    </div>
+
+                    <div class="detail-item">
+                        <span>Contact status</span>
+                        <strong id="detailStatus">&mdash;</strong>
+                    </div>
+
+                    <div class="detail-item">
+                        <span>Latest outcome</span>
+                        <strong id="detailOutcome">&mdash;</strong>
+                    </div>
+
+                    <div class="detail-item">
+                        <span>Region</span>
+                        <strong id="detailRegion">&mdash;</strong>
+                    </div>
+
+                    <div class="detail-item">
+                        <span>Email</span>
+                        <strong id="detailEmail">&mdash;</strong>
+                    </div>
+
+                    <div class="detail-item">
+                        <span>Phone</span>
+                        <strong id="detailPhone">&mdash;</strong>
+                    </div>
+                </div>
+
+                <a
+                    id="fullDetailsLink"
+                    class="primary-button"
+                    href="#"
+                >
+                    Open Full Details
+                </a>
+            </section>
+        </main>
+    </div>
+</div>
+
+<template id="organisationCardTemplate">
+    <article class="organisation-card" tabindex="0">
+        <div class="card-accent"></div>
+
+        <div class="card-content">
+            <header class="card-header">
+                <div class="card-title-area">
+                              <h3 data-field="name"></h3>
+                </div>
+
+                <span
+                    class="status-badge"
+                    data-field="status-label"
+                ></span>
+            </header>
+
+            <div class="card-body-row">
+                <div class="card-information">
+                    <p>
+                        <span>Type:</span>
+                        <strong data-field="type"></strong>
+                    </p>
+
+                    <p>
+                        <span>Email:</span>
+                        <strong data-field="email"></strong>
+                    </p>
+
+                    <p>
+                        <span>Region:</span>
+                        <strong data-field="region"></strong>
+                    </p>
+
+                    <p>
+                        <span>Contact Number:</span>
+                        <strong data-field="phone"></strong>
+                    </p>
+                </div>
+
+                <div class="card-actions">
+                    <a
+                        class="card-link"
+                        data-field="details-link"
+                        href="#"
+                    >
                         View Details
                     </a>
 
                     <button
+                        type="button"
                         disabled
-                        title="Draft email generation is still in progress"
+                        title="Email workflow is not available yet."
                     >
-                        Email (coming soon)
+                        Email
                     </button>
                 </div>
-            {% empty %}
-                <p>No organisations found.</p>
-            {% endfor %}
-
-            {% if contacted_page.has_other_pages %}
-                <p>
-                    {% if contacted_page.has_previous %}
-                        <a href="?q={{ search|urlencode }}&type={{ org_type|urlencode }}&region={{ region|urlencode }}&contacted_page={{ contacted_page.previous_page_number }}">
-                            Previous
-                        </a>
-                    {% endif %}
-
-                    Page {{ contacted_page.number }}
-                    of {{ contacted_page.paginator.num_pages }}
-
-                    {% if contacted_page.has_next %}
-                        <a href="?q={{ search|urlencode }}&type={{ org_type|urlencode }}&region={{ region|urlencode }}&contacted_page={{ contacted_page.next_page_number }}">
-                            Next
-                        </a>
-                    {% endif %}
-                </p>
-            {% endif %}
+            </div>
         </div>
-    </div>
-</div>
+    </article>
+</template>
 
+<noscript>
+    <p class="noscript-message">
+        JavaScript must be enabled to load the dashboard.
+    </p>
+</noscript>
 </body>
 </html>
