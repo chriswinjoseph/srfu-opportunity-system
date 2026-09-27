@@ -1,9 +1,16 @@
+import re
+from difflib import SequenceMatcher
+
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_POST
+from django.utils import timezone
 
 from .forms import BankForm, BranchForm, ClubForm
 from .models import Bank, Branch, Club, Opportunity
@@ -11,7 +18,6 @@ from .status_transitions import (
     InvalidStatusTransition,
     record_positive_response,
 )
-
 
 CONTACT_STATUS_LABELS = {
     "not_yet_contacted": "Not Yet Contacted",
@@ -60,6 +66,7 @@ def record_positive_response_api(request, opportunity_id):
     The organisation remains Contacted while the opportunity changes
     to Interested.
     """
+
     opportunity = get_object_or_404(
         Opportunity,
         pk=opportunity_id,
@@ -70,6 +77,7 @@ def record_positive_response_api(request, opportunity_id):
             opportunity,
             actor=request.user.pk,
         )
+
     except InvalidStatusTransition as error:
         return JsonResponse(
             {"error": str(error)},
@@ -103,9 +111,11 @@ def _org_to_row(org, org_type):
     """
     Convert a Bank, Branch or Club into a common dashboard format.
 
-    Contact status and opportunity outcome are kept separate. A response
-    outcome on a Not Yet Contacted organisation is flagged for review.
+    Contact status and opportunity outcome are kept separate.
+    A response outcome on a Not Yet Contacted organisation is
+    flagged for review.
     """
+
     content_type = ContentType.objects.get_for_model(org)
 
     name = (
@@ -139,6 +149,7 @@ def _org_to_row(org, org_type):
 
     if status_conflict:
         status_label = "Needs Review"
+
     else:
         status_label = OPPORTUNITY_OUTCOME_LABELS.get(
             outcome_status,
@@ -163,11 +174,16 @@ def _org_to_row(org, org_type):
     }
 
 
-def _get_all_organisations(search="", org_type="", region=""):
+def _get_all_organisations(
+    search="",
+    org_type="",
+    region="",
+):
     """
-    Fetch Banks, Branches and Clubs, apply filters and combine them
-    into one dashboard list.
+    Fetch Banks, Branches and Clubs, apply filters and combine
+    them into one dashboard list.
     """
+
     banks = Bank.objects.all()
     branches = Branch.objects.all()
     clubs = Club.objects.all()
@@ -176,9 +192,11 @@ def _get_all_organisations(search="", org_type="", region=""):
         banks = banks.filter(
             bank_name__icontains=search,
         )
+
         branches = branches.filter(
             branch_name__icontains=search,
         )
+
         clubs = clubs.filter(
             club_name__icontains=search,
         )
@@ -187,9 +205,11 @@ def _get_all_organisations(search="", org_type="", region=""):
         banks = banks.filter(
             region__icontains=region,
         )
+
         branches = branches.filter(
             region__icontains=region,
         )
+
         clubs = clubs.filter(
             region__icontains=region,
         )
@@ -214,7 +234,9 @@ def _get_all_organisations(search="", org_type="", region=""):
             for club in clubs
         )
 
-    rows.sort(key=lambda row: row["name"].lower())
+    rows.sort(
+        key=lambda row: row["name"].lower()
+    )
 
     return rows
 
@@ -229,16 +251,23 @@ def organisation_list_api(request):
     - q: partial name search
     - type: bank, branch or club
     - region: partial region match
-    - status: organisation contact status; repeated or comma-separated
+    - status: organisation contact status
     - sort_by: name, region, type or status
     - sort_dir: asc or desc
     - page: positive integer
     - page_size: positive integer with a maximum of 50
     """
-    search = request.GET.get("q", "").strip()
+
+    search = request.GET.get(
+        "q",
+        "",
+    ).strip()
 
     organisation_type = (
-        request.GET.get("type", "")
+        request.GET.get(
+            "type",
+            "",
+        )
         .strip()
         .lower()
     )
@@ -279,7 +308,8 @@ def organisation_list_api(request):
                 status_values.append(value)
 
     invalid_statuses = sorted(
-        set(status_values) - CONTACT_STATUS_CHOICES_API
+        set(status_values)
+        - CONTACT_STATUS_CHOICES_API
     )
 
     if invalid_statuses:
@@ -295,7 +325,10 @@ def organisation_list_api(request):
         )
 
     sort_by = (
-        request.GET.get("sort_by", "name")
+        request.GET.get(
+            "sort_by",
+            "name",
+        )
         .strip()
         .lower()
     )
@@ -313,7 +346,10 @@ def organisation_list_api(request):
         )
 
     sort_dir = (
-        request.GET.get("sort_dir", "asc")
+        request.GET.get(
+            "sort_dir",
+            "asc",
+        )
         .strip()
         .lower()
     )
@@ -330,12 +366,18 @@ def organisation_list_api(request):
 
     try:
         page_number = int(
-            request.GET.get("page", "1")
+            request.GET.get(
+                "page",
+                "1",
+            )
         )
+
     except ValueError:
         return JsonResponse(
             {
-                "error": "page must be a positive integer.",
+                "error": (
+                    "page must be a positive integer."
+                ),
             },
             status=400,
         )
@@ -343,20 +385,27 @@ def organisation_list_api(request):
     if page_number < 1:
         return JsonResponse(
             {
-                "error": "page must be a positive integer.",
+                "error": (
+                    "page must be a positive integer."
+                ),
             },
             status=400,
         )
 
     try:
         page_size = int(
-            request.GET.get("page_size", "10")
+            request.GET.get(
+                "page_size",
+                "10",
+            )
         )
+
     except ValueError:
         return JsonResponse(
             {
                 "error": (
-                    "page_size must be a positive integer."
+                    "page_size must be a "
+                    "positive integer."
                 ),
             },
             status=400,
@@ -366,7 +415,8 @@ def organisation_list_api(request):
         return JsonResponse(
             {
                 "error": (
-                    "page_size must be a positive integer."
+                    "page_size must be a "
+                    "positive integer."
                 ),
             },
             status=400,
@@ -375,7 +425,9 @@ def organisation_list_api(request):
     if page_size > 50:
         return JsonResponse(
             {
-                "error": "page_size cannot exceed 50.",
+                "error": (
+                    "page_size cannot exceed 50."
+                ),
             },
             status=400,
         )
@@ -393,8 +445,6 @@ def organisation_list_api(request):
             if row["status"] in status_values
         ]
 
-    # Calculate totals before pagination so dashboard statistics
-    # represent every filtered organisation, not only this page.
     summary = {
         "contact_status_counts": {
             status: sum(
@@ -406,12 +456,14 @@ def organisation_list_api(request):
         "opportunity_outcome_counts": {
             status: sum(
                 (
-                    row["outcome_status"] == status
+                    row["outcome_status"]
+                    == status
                     and not row["status_conflict"]
                 )
                 for row in rows
             )
-            for status in OPPORTUNITY_OUTCOME_LABELS
+            for status
+            in OPPORTUNITY_OUTCOME_LABELS
         },
         "needs_review": sum(
             row["status_conflict"]
@@ -420,10 +472,18 @@ def organisation_list_api(request):
     }
 
     sort_key_map = {
-        "name": lambda row: row["name"].lower(),
-        "region": lambda row: row["region"].lower(),
-        "type": lambda row: row["type"].lower(),
-        "status": lambda row: row["status"],
+        "name": (
+            lambda row: row["name"].lower()
+        ),
+        "region": (
+            lambda row: row["region"].lower()
+        ),
+        "type": (
+            lambda row: row["type"].lower()
+        ),
+        "status": (
+            lambda row: row["status"]
+        ),
     }
 
     rows.sort(
@@ -433,7 +493,9 @@ def organisation_list_api(request):
             row["type"].lower(),
             row["id"],
         ),
-        reverse=(sort_dir == "desc"),
+        reverse=(
+            sort_dir == "desc"
+        ),
     )
 
     paginator = Paginator(
@@ -446,17 +508,23 @@ def organisation_list_api(request):
             {
                 "error": "Page is out of range.",
                 "requested_page": page_number,
-                "total_pages": paginator.num_pages,
+                "total_pages": (
+                    paginator.num_pages
+                ),
             },
             status=400,
         )
 
-    page = paginator.page(page_number)
+    page = paginator.page(
+        page_number
+    )
 
     results = [
         {
             "id": row["id"],
-            "content_type_id": row["content_type_id"],
+            "content_type_id": (
+                row["content_type_id"]
+            ),
             "type": row["type"].lower(),
             "name": row["name"],
             "region": row["region"],
@@ -464,12 +532,17 @@ def organisation_list_api(request):
             "public_phone": row["phone"],
             "contact_status": row["status"],
             "contact_status_label": (
-                CONTACT_STATUS_LABELS[row["status"]]
+                CONTACT_STATUS_LABELS[
+                    row["status"]
+                ]
             ),
             "opportunity_outcome": (
-                row["outcome_status"] or None
+                row["outcome_status"]
+                or None
             ),
-            "status_conflict": row["status_conflict"],
+            "status_conflict": (
+                row["status_conflict"]
+            ),
         }
         for row in page.object_list
     ]
@@ -481,13 +554,22 @@ def organisation_list_api(request):
                 "page": page.number,
                 "page_size": page_size,
                 "total_items": paginator.count,
-                "total_pages": paginator.num_pages,
-                "has_next": page.has_next(),
-                "has_previous": page.has_previous(),
+                "total_pages": (
+                    paginator.num_pages
+                ),
+                "has_next": (
+                    page.has_next()
+                ),
+                "has_previous": (
+                    page.has_previous()
+                ),
             },
             "filters": {
                 "status": status_values,
-                "type": organisation_type or None,
+                "type": (
+                    organisation_type
+                    or None
+                ),
                 "search": search or None,
                 "region": region or None,
             },
@@ -495,15 +577,27 @@ def organisation_list_api(request):
                 "sort_by": sort_by,
                 "sort_dir": sort_dir,
             },
+            "summary": summary,
         }
     )
 
 
 @login_required
 def dashboard_view(request):
-    search = request.GET.get("q", "").strip()
-    org_type = request.GET.get("type", "")
-    region = request.GET.get("region", "").strip()
+    search = request.GET.get(
+        "q",
+        "",
+    ).strip()
+
+    org_type = request.GET.get(
+        "type",
+        "",
+    )
+
+    region = request.GET.get(
+        "region",
+        "",
+    ).strip()
 
     all_rows = _get_all_organisations(
         search=search,
@@ -514,7 +608,8 @@ def dashboard_view(request):
     not_yet = [
         row
         for row in all_rows
-        if row["status"] == "not_yet_contacted"
+        if row["status"]
+        == "not_yet_contacted"
     ]
 
     contacted = [
@@ -527,21 +622,28 @@ def dashboard_view(request):
         not_yet,
         5,
     ).get_page(
-        request.GET.get("not_yet_page")
+        request.GET.get(
+            "not_yet_page"
+        )
     )
 
     contacted_page = Paginator(
         contacted,
         5,
     ).get_page(
-        request.GET.get("contacted_page")
+        request.GET.get(
+            "contacted_page"
+        )
     )
 
     total = len(all_rows)
     contacted_count = len(contacted)
 
     percent_contacted = (
-        round((contacted_count / total) * 100)
+        round(
+            (contacted_count / total)
+            * 100
+        )
         if total
         else 0
     )
@@ -552,8 +654,11 @@ def dashboard_view(request):
                 row
                 for row in all_rows
                 if (
-                    row["outcome_status"] == status
-                    and not row["status_conflict"]
+                    row["outcome_status"]
+                    == status
+                    and not row[
+                        "status_conflict"
+                    ]
                 )
             ]
         )
@@ -561,7 +666,9 @@ def dashboard_view(request):
         in OPPORTUNITY_OUTCOME_LABELS.items()
     }
 
-    status_breakdown["Needs Review"] = len(
+    status_breakdown[
+        "Needs Review"
+    ] = len(
         [
             row
             for row in all_rows
@@ -572,10 +679,16 @@ def dashboard_view(request):
     context = {
         "not_yet_page": not_yet_page,
         "contacted_page": contacted_page,
-        "percent_contacted": percent_contacted,
+        "percent_contacted": (
+            percent_contacted
+        ),
         "not_yet_count": len(not_yet),
-        "contacted_count": contacted_count,
-        "status_breakdown": status_breakdown,
+        "contacted_count": (
+            contacted_count
+        ),
+        "status_breakdown": (
+            status_breakdown
+        ),
         "search": search,
         "org_type": org_type,
         "region": region,
@@ -599,20 +712,31 @@ def organisation_detail(
         pk=content_type_id,
     )
 
-    model_class = content_type.model_class()
+    model_class = (
+        content_type.model_class()
+    )
 
-    if model_class not in (Bank, Branch, Club):
-        raise Http404("Organisation not found.")
+    if model_class not in (
+        Bank,
+        Branch,
+        Club,
+    ):
+        raise Http404(
+            "Organisation not found."
+        )
 
     org = get_object_or_404(
         model_class,
         pk=object_id,
     )
 
-    opportunities = Opportunity.objects.filter(
-        content_type=content_type,
-        object_id=object_id,
-    ).order_by("-date_created")
+    opportunities = (
+        Opportunity.objects.filter(
+            content_type=content_type,
+            object_id=object_id,
+        )
+        .order_by("-date_created")
+    )
 
     context = {
         "org": org,
@@ -627,6 +751,439 @@ def organisation_detail(
     )
 
 
+# ---------------------------------------------------------
+# Add Organisation helpers
+# ---------------------------------------------------------
+
+
+def _normalise_duplicate_value(value):
+    """
+    Normalise text used during duplicate checking.
+
+    This ignores:
+    - capitalisation
+    - leading/trailing spaces
+    - repeated spaces
+    - common punctuation differences
+    """
+
+    value = (
+        str(value or "")
+        .strip()
+        .lower()
+    )
+
+    value = re.sub(
+        r"[^\w\s]",
+        "",
+        value,
+    )
+
+    value = re.sub(
+        r"\s+",
+        " ",
+        value,
+    )
+
+    return value
+
+
+def _organisation_name(organisation):
+    """
+    Return the organisation's display name.
+    """
+
+    return (
+        getattr(
+            organisation,
+            "bank_name",
+            None,
+        )
+        or getattr(
+            organisation,
+            "branch_name",
+            None,
+        )
+        or getattr(
+            organisation,
+            "club_name",
+            None,
+        )
+        or ""
+    )
+
+
+def _find_exact_duplicate(
+    organisation_type,
+    cleaned_data,
+):
+    """
+    Look for an exact organisation duplicate using
+    normalised name and location details.
+    """
+
+    if organisation_type == "bank":
+        queryset = Bank.objects.all()
+
+        submitted_name = (
+            cleaned_data.get(
+                "bank_name",
+                "",
+            )
+        )
+
+    elif organisation_type == "branch":
+        queryset = Branch.objects.all()
+
+        submitted_name = (
+            cleaned_data.get(
+                "branch_name",
+                "",
+            )
+        )
+
+    elif organisation_type == "club":
+        queryset = Club.objects.all()
+
+        submitted_name = (
+            cleaned_data.get(
+                "club_name",
+                "",
+            )
+        )
+
+    else:
+        return None
+
+    submitted_name = (
+        _normalise_duplicate_value(
+            submitted_name
+        )
+    )
+
+    submitted_state = (
+        _normalise_duplicate_value(
+            cleaned_data.get(
+                "state",
+                "",
+            )
+        )
+    )
+
+    submitted_region = (
+        _normalise_duplicate_value(
+            cleaned_data.get(
+                "region",
+                "",
+            )
+        )
+    )
+
+    submitted_suburb = (
+        _normalise_duplicate_value(
+            cleaned_data.get(
+                "suburb",
+                "",
+            )
+        )
+    )
+
+    submitted_postcode = (
+        _normalise_duplicate_value(
+            cleaned_data.get(
+                "postcode",
+                "",
+            )
+        )
+    )
+
+    for organisation in queryset:
+        existing_name = (
+            _normalise_duplicate_value(
+                _organisation_name(
+                    organisation
+                )
+            )
+        )
+
+        existing_state = (
+            _normalise_duplicate_value(
+                getattr(
+                    organisation,
+                    "state",
+                    "",
+                )
+            )
+        )
+
+        existing_region = (
+            _normalise_duplicate_value(
+                getattr(
+                    organisation,
+                    "region",
+                    "",
+                )
+            )
+        )
+
+        existing_suburb = (
+            _normalise_duplicate_value(
+                getattr(
+                    organisation,
+                    "suburb",
+                    "",
+                )
+            )
+        )
+
+        existing_postcode = (
+            _normalise_duplicate_value(
+                getattr(
+                    organisation,
+                    "postcode",
+                    "",
+                )
+            )
+        )
+
+        name_matches = (
+            existing_name
+            == submitted_name
+        )
+
+        state_matches = (
+            existing_state
+            == submitted_state
+        )
+
+        region_matches = (
+            existing_region
+            == submitted_region
+            if submitted_region
+            else True
+        )
+
+        suburb_matches = (
+            existing_suburb
+            == submitted_suburb
+            if submitted_suburb
+            else True
+        )
+
+        postcode_matches = (
+            existing_postcode
+            == submitted_postcode
+            if submitted_postcode
+            else True
+        )
+
+        if (
+            name_matches
+            and state_matches
+            and region_matches
+            and suburb_matches
+            and postcode_matches
+        ):
+            return organisation
+
+    return None
+
+
+def _find_likely_duplicate(
+    organisation_type,
+    cleaned_data,
+):
+    """
+    Find an organisation that may be a duplicate.
+
+    A possible duplicate is detected when:
+    - the same public email is used, or
+    - the same phone number is used, or
+    - the same website is used, or
+    - the name is very similar and the location matches.
+    """
+
+    if organisation_type == "bank":
+        queryset = Bank.objects.all()
+        submitted_name = cleaned_data.get(
+            "bank_name",
+            "",
+        )
+
+    elif organisation_type == "branch":
+        queryset = Branch.objects.all()
+        submitted_name = cleaned_data.get(
+            "branch_name",
+            "",
+        )
+
+    elif organisation_type == "club":
+        queryset = Club.objects.all()
+        submitted_name = cleaned_data.get(
+            "club_name",
+            "",
+        )
+
+    else:
+        return None
+
+    submitted_name = _normalise_duplicate_value(
+        submitted_name
+    )
+
+    submitted_email = _normalise_duplicate_value(
+        cleaned_data.get(
+            "public_email",
+            "",
+        )
+    )
+
+    submitted_phone = _normalise_duplicate_value(
+        cleaned_data.get(
+            "public_phone",
+            "",
+        )
+    )
+
+    submitted_website = _normalise_duplicate_value(
+        cleaned_data.get(
+            "website_url",
+            "",
+        )
+    )
+
+    submitted_region = _normalise_duplicate_value(
+        cleaned_data.get(
+            "region",
+            "",
+        )
+    )
+
+    submitted_suburb = _normalise_duplicate_value(
+        cleaned_data.get(
+            "suburb",
+            "",
+        )
+    )
+
+    submitted_postcode = _normalise_duplicate_value(
+        cleaned_data.get(
+            "postcode",
+            "",
+        )
+    )
+
+    for organisation in queryset:
+        existing_name = _normalise_duplicate_value(
+            _organisation_name(
+                organisation
+            )
+        )
+
+        existing_email = _normalise_duplicate_value(
+            getattr(
+                organisation,
+                "public_email",
+                "",
+            )
+        )
+
+        existing_phone = _normalise_duplicate_value(
+            getattr(
+                organisation,
+                "public_phone",
+                "",
+            )
+        )
+
+        existing_website = _normalise_duplicate_value(
+            getattr(
+                organisation,
+                "website_url",
+                "",
+            )
+        )
+
+        existing_region = _normalise_duplicate_value(
+            getattr(
+                organisation,
+                "region",
+                "",
+            )
+        )
+
+        existing_suburb = _normalise_duplicate_value(
+            getattr(
+                organisation,
+                "suburb",
+                "",
+            )
+        )
+
+        existing_postcode = _normalise_duplicate_value(
+            getattr(
+                organisation,
+                "postcode",
+                "",
+            )
+        )
+
+        same_email = (
+            bool(submitted_email)
+            and submitted_email == existing_email
+        )
+
+        same_phone = (
+            bool(submitted_phone)
+            and submitted_phone == existing_phone
+        )
+
+        same_website = (
+            bool(submitted_website)
+            and submitted_website == existing_website
+        )
+
+        name_similarity = SequenceMatcher(
+            None,
+            submitted_name,
+            existing_name,
+        ).ratio()
+
+        similar_name = (
+            name_similarity >= 0.80
+        )
+
+        same_location = (
+            (
+                bool(submitted_region)
+                and submitted_region
+                == existing_region
+            )
+            or (
+                bool(submitted_suburb)
+                and submitted_suburb
+                == existing_suburb
+            )
+            or (
+                bool(submitted_postcode)
+                and submitted_postcode
+                == existing_postcode
+            )
+        )
+
+        if (
+            same_email
+            or same_phone
+            or same_website
+            or (
+                similar_name
+                and same_location
+            )
+        ):
+            return organisation
+
+    return None
+
 ORGANISATION_FORMS = {
     "bank": BankForm,
     "branch": BranchForm,
@@ -637,44 +1194,232 @@ ORGANISATION_FORMS = {
 @login_required
 def add_organisation(request):
     """
-    Allow a logged-in user to add a Bank, Branch or Club.
+    Allow an authorised user to manually create a
+    Bank, Branch or Club.
 
-    New organisations start as Not Yet Contacted.
+    New organisations always start as
+    Not Yet Contacted.
     """
+
     organisation_type = (
         request.POST.get("organisation_type")
         or request.GET.get("type")
         or "bank"
-    ).lower()
+    ).strip().lower()
 
     form_class = ORGANISATION_FORMS.get(
         organisation_type
     )
 
     if form_class is None:
-        raise Http404("Invalid organisation type.")
+        raise Http404(
+            "Invalid organisation type."
+        )
+
+    permission_name = (
+        f"outreach.add_{organisation_type}"
+    )
+
+    if not request.user.has_perm(
+        permission_name
+    ):
+        form = form_class()
+
+        context = {
+            "form": form,
+            "organisation_type": organisation_type,
+            "permission_error": True,
+        }
+
+        return render(
+            request,
+            "outreach/add_organisation.html",
+            context,
+            status=403,
+        )
+
+    duplicate_organisation = None
+    likely_duplicate_organisation = None
+    created_organisation = None
+
+    duplicate_override_reason = (
+        request.POST.get(
+            "duplicate_override_reason",
+            ""
+        ).strip()
+    )
+
+    confirm_likely_duplicate = (
+        request.POST.get(
+            "confirm_likely_duplicate"
+        )
+        == "1"
+    )
+
+    override_reason_error = None
 
     if request.method == "POST":
-        form = form_class(request.POST)
+        form = form_class(
+            request.POST
+        )
 
         if form.is_valid():
-            organisation = form.save()
 
-            content_type = ContentType.objects.get_for_model(
-                organisation
+            # Exact duplicates are always blocked.
+            duplicate_organisation = (
+                _find_exact_duplicate(
+                    organisation_type,
+                    form.cleaned_data,
+                )
             )
 
-            return redirect(
-                "organisation_detail",
-                content_type_id=content_type.pk,
-                object_id=organisation.pk,
-            )
+            if duplicate_organisation is None:
+
+                # Always check for a possible duplicate.
+                likely_duplicate_organisation = (
+                    _find_likely_duplicate(
+                        organisation_type,
+                        form.cleaned_data,
+                    )
+                )
+
+                can_save = True
+
+                # Possible duplicate has been found.
+                if likely_duplicate_organisation is not None:
+
+                    # User has not confirmed yet.
+                    if not confirm_likely_duplicate:
+                        can_save = False
+
+                    # User clicked Continue Anyway
+                    # but did not provide a reason.
+                    elif not duplicate_override_reason:
+                        can_save = False
+
+                        override_reason_error = (
+                            "Please enter a reason for "
+                            "continuing with this "
+                            "possible duplicate."
+                        )
+
+                if can_save:
+                    try:
+                        with transaction.atomic():
+
+                            # Check again immediately
+                            # before saving.
+                            duplicate_organisation = (
+                                _find_exact_duplicate(
+                                    organisation_type,
+                                    form.cleaned_data,
+                                )
+                            )
+
+                            if duplicate_organisation is None:
+
+                                organisation = (
+                                    form.save(
+                                        commit=False
+                                    )
+                                )
+
+                                # Default organisation status.
+                                organisation.contact_status = (
+                                    "not_yet_contacted"
+                                )
+
+                                # Creation audit information.
+                                organisation.created_by = (
+                                    request.user
+                                )
+
+                                organisation.record_source = (
+                                    "Manual Entry"
+                                )
+
+                                # Record duplicate override audit
+                                # only when an actual likely
+                                # duplicate was found.
+                                if (
+                                    likely_duplicate_organisation
+                                    is not None
+                                    and confirm_likely_duplicate
+                                ):
+                                    organisation.duplicate_override_reason = (
+                                        duplicate_override_reason
+                                    )
+
+                                    organisation.duplicate_override_at = (
+                                        timezone.now()
+                                    )
+
+                                    organisation.duplicate_override_by = (
+                                        request.user
+                                    )
+
+                                organisation.save()
+
+                                form.save_m2m()
+
+                                created_organisation = (
+                                    organisation
+                                )
+
+                    except Exception:
+                        messages.error(
+                            request,
+                            (
+                                "The organisation could not "
+                                "be saved. Please try again."
+                            ),
+                        )
+
+                    else:
+                        if created_organisation is not None:
+
+                            messages.success(
+                                request,
+                                (
+                                    "Organisation has been "
+                                    "added successfully."
+                                ),
+                            )
+
+                            form = form_class()
+
+                            # Remove warning after a
+                            # successful override/save.
+                            likely_duplicate_organisation = None
+
+                            duplicate_override_reason = ""
+
     else:
         form = form_class()
 
     context = {
         "form": form,
         "organisation_type": organisation_type,
+
+        "duplicate_organisation": (
+            duplicate_organisation
+        ),
+
+        "likely_duplicate_organisation": (
+            likely_duplicate_organisation
+        ),
+
+        "created_organisation": (
+            created_organisation
+        ),
+
+        "duplicate_override_reason": (
+            duplicate_override_reason
+        ),
+
+        "override_reason_error": (
+            override_reason_error
+        ),
     }
 
     return render(

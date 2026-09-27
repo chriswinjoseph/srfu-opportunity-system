@@ -1,124 +1,800 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>Add Organisation</title>
 
     <style>
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             margin: 0;
-            padding: 30px;
-            background: #f4f6f8;
+            background: #f5f7fa;
             font-family: Arial, sans-serif;
+            color: #1f2937;
+        }
+
+        .page-wrapper {
+            min-height: 100vh;
+            padding: 40px 20px;
         }
 
         .container {
-            max-width: 700px;
-            margin: auto;
-            padding: 30px;
+            width: 100%;
+            max-width: 850px;
+            margin: 0 auto;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #173363;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+
+        .card {
+            position: relative;
             background: white;
-            border: 1px solid #ddd;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 32px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+
+        h1 {
+            margin-top: 0;
+            margin-bottom: 8px;
+            text-align: center;
+            font-size: 30px;
+            color: #111827;
+            text-decoration: underline;
+        }
+
+        .description {
+            margin-top: 0;
+            margin-bottom: 25px;
+            text-align: center;
+            color: #64748b;
+            line-height: 1.5;
+        }
+
+        /* Success / error / warning banners */
+
+        .ux-banner {
+            width: fit-content;
+            max-width: 450px;
+            margin: 0 auto 20px;
+            padding: 12px 18px;
+            border-radius: 6px;
+            color: white;
+            font-size: 14px;
+            font-weight: 700;
+            text-align: center;
+        }
+
+        .ux-banner-success {
+            background: #63dc4c;
+        }
+
+        .ux-banner-error {
+            background: #ff5a5f;
+        }
+
+        .ux-banner-warning {
+            background: #f59e0b;
+        }
+
+        .status-note {
+            margin-bottom: 25px;
+            padding: 14px 16px;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
             border-radius: 8px;
+            color: #1e3a5f;
+        }
+
+        .section-title {
+            margin-top: 28px;
+            margin-bottom: 18px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e5e7eb;
+            font-size: 18px;
+        }
+
+        .type-selector {
+            margin-bottom: 28px;
+            padding: 18px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+        }
+
+        .type-selector label {
+            margin-bottom: 8px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
         }
 
         label {
             display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
+            margin-bottom: 7px;
+            font-weight: 600;
+            color: #374151;
         }
 
         input,
-        select {
-            box-sizing: border-box;
+        select,
+        textarea {
             width: 100%;
-            padding: 9px;
+            min-height: 44px;
+            padding: 10px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 7px;
+            background: white;
+            font-family: inherit;
+            font-size: 15px;
+            color: #111827;
+        }
+
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #173363;
+            box-shadow: 0 0 0 3px rgba(23, 51, 99, 0.1);
+        }
+
+        .required-mark {
+            color: #b91c1c;
+        }
+
+        .help-text {
+            display: block;
+            margin-top: 6px;
+            color: #64748b;
+            font-size: 13px;
+        }
+
+        .field-error {
+            margin-top: 6px;
+            color: #b91c1c;
+            font-size: 14px;
+        }
+
+        .non-field-errors {
+            margin-bottom: 20px;
+            padding: 14px 16px;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            color: #991b1b;
+        }
+
+        .message {
+            margin-bottom: 20px;
+            padding: 14px 16px;
+            border-radius: 8px;
+            font-size: 15px;
+        }
+
+        .message.error {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+        }
+
+        /*
+         * Organisation preview.
+         */
+
+        .preview-heading {
+            margin-top: 25px;
             margin-bottom: 8px;
+            text-align: center;
+            font-weight: 700;
+            font-size: 14px;
+        }
+
+        .organisation-preview {
+            margin-bottom: 8px;
+            padding: 14px 16px;
+            background: #ffffff;
+            border: 1px solid #d1d5db;
+            border-left: 5px solid #ef4444;
+            border-radius: 6px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+        }
+
+        .organisation-preview-name {
+            margin-bottom: 8px;
+            font-weight: 700;
+            color: #111827;
+        }
+
+        .preview-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5px 20px;
+            font-size: 13px;
+        }
+
+        .preview-label {
+            font-weight: 600;
+        }
+
+        .button-row {
+            display: flex;
+            justify-content: center;
+            gap: 22px;
+            margin-top: 30px;
+            padding-top: 22px;
+            border-top: 1px solid #e5e7eb;
         }
 
         .button {
-            padding: 10px 18px;
-            color: white;
-            background: #173363;
-            border: none;
-            border-radius: 5px;
+            min-width: 130px;
+            padding: 11px 18px;
+            border-radius: 7px;
+            font-size: 15px;
+            font-weight: 600;
             cursor: pointer;
         }
 
-        .errorlist {
-            color: #b00020;
+        .button-primary {
+            background: white;
+            color: #111827;
+            border: 1px solid #9ca3af;
+        }
+
+        .button-primary:hover {
+            background: #f3f4f6;
+        }
+
+        .button-secondary {
+            background: #d1d5db;
+            color: #111827;
+            border: 1px solid #9ca3af;
+        }
+
+        .button-secondary:hover {
+            background: #c4c8ce;
+        }
+
+        @media (max-width: 650px) {
+            .page-wrapper {
+                padding: 20px 12px;
+            }
+
+            .card {
+                padding: 22px 18px;
+            }
+
+            h1 {
+                font-size: 25px;
+            }
+
+            .preview-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .button-row {
+                flex-direction: column-reverse;
+            }
+
+            .button {
+                width: 100%;
+            }
         }
     </style>
 </head>
 
 <body>
-<div class="container">
-    <p>
-        <a href="{% url 'outreach_dashboard' %}">
+
+<div class="page-wrapper">
+
+    <div class="container">
+
+        <a
+            class="back-link"
+            href="{% url 'outreach_dashboard' %}"
+        >
             &larr; Back to dashboard
         </a>
-    </p>
 
-    <h1>Add Organisation</h1>
+        <div class="card">
 
-    <form method="get">
-        <label for="organisation-type">
-            Organisation type
+            <h1>Add Organisation</h1>
+
+
+            <!-- Permission error -->
+
+            {% if permission_error %}
+                <div class="ux-banner ux-banner-error">
+                    You don't have permission to add an organisation.
+                </div>
+            {% endif %}
+
+
+            <!-- Exact duplicate -->
+
+            {% if duplicate_organisation %}
+                <div class="ux-banner ux-banner-error">
+                    This organisation already exists.
+                </div>
+            {% endif %}
+
+
+            <!-- Likely duplicate -->
+
+            {% if likely_duplicate_organisation %}
+                <div class="ux-banner ux-banner-warning">
+                    Possible duplicate found. Please review the matching organisation.
+                </div>
+            {% endif %}
+
+
+            <!-- Successful creation -->
+
+            {% if created_organisation %}
+                <div class="ux-banner ux-banner-success">
+                    Organisation has been added successfully.
+                </div>
+            {% endif %}
+
+
+            <p class="description">
+                Manually add a bank, branch or club to the outreach system.
+            </p>
+
+
+            <!-- Django system errors -->
+
+            {% if messages %}
+                {% for message in messages %}
+
+                    {% if message.tags == "error" %}
+                        <div class="message error">
+                            {{ message }}
+                        </div>
+                    {% endif %}
+
+                {% endfor %}
+            {% endif %}
+
+
+            <div class="status-note">
+                New organisations will automatically start as
+                <strong>Not Yet Contacted</strong>.
+            </div>
+
+
+            <!-- Organisation Type -->
+
+            <div class="type-selector">
+
+                <form method="get">
+
+                    <label for="organisation-type">
+                        Organisation Type
+                        <span class="required-mark">*</span>
+                    </label>
+
+                    <select
+                        id="organisation-type"
+                        name="type"
+                        onchange="this.form.submit()"
+                    >
+
+                        <option
+                            value="bank"
+                            {% if organisation_type == "bank" %}
+                                selected
+                            {% endif %}
+                        >
+                            Bank
+                        </option>
+
+                        <option
+                            value="branch"
+                            {% if organisation_type == "branch" %}
+                                selected
+                            {% endif %}
+                        >
+                            Branch
+                        </option>
+
+                        <option
+                            value="club"
+                            {% if organisation_type == "club" %}
+                                selected
+                            {% endif %}
+                        >
+                            Club
+                        </option>
+
+                    </select>
+
+                    <noscript>
+                        <button type="submit">
+                            Change organisation type
+                        </button>
+                    </noscript>
+
+                </form>
+
+            </div>
+
+
+            <h2 class="section-title">
+                {{ organisation_type|title }} Details
+            </h2>
+
+
+            <form method="post" novalidate>
+
+                {% csrf_token %}
+
+                <input
+                    type="hidden"
+                    name="organisation_type"
+                    value="{{ organisation_type }}"
+                >
+
+
+                <!-- General validation errors -->
+
+                {% if form.non_field_errors %}
+
+                    <div class="non-field-errors">
+
+                        {% for error in form.non_field_errors %}
+
+                            <div>
+                                {{ error }}
+                            </div>
+
+                        {% endfor %}
+
+                    </div>
+
+                {% endif %}
+
+
+                <!-- Form fields -->
+
+                {% for field in form %}
+
+                    <div class="form-group">
+
+                        <label for="{{ field.id_for_label }}">
+
+                            {{ field.label }}
+
+                            {% if field.field.required %}
+                                <span class="required-mark">*</span>
+                            {% endif %}
+
+                        </label>
+
+                        {{ field }}
+
+                        {% if field.help_text %}
+                            <span class="help-text">
+                                {{ field.help_text }}
+                            </span>
+                        {% endif %}
+
+                        {% if field.errors %}
+
+                            {% for error in field.errors %}
+                                <div class="field-error">
+                                    {{ error }}
+                                </div>
+                            {% endfor %}
+
+                        {% endif %}
+
+                    </div>
+
+                {% endfor %}
+
+
+                <!-- Exact duplicate preview -->
+
+                {% if duplicate_organisation %}
+
+                    <div class="preview-heading">
+                        Existing Organisation
+                    </div>
+
+                    <div class="organisation-preview">
+
+                        <div class="organisation-preview-name">
+
+                            {% if organisation_type == "bank" %}
+
+                                {{ duplicate_organisation.bank_name }}
+
+                            {% elif organisation_type == "branch" %}
+
+                                {{ duplicate_organisation.branch_name }}
+
+                            {% elif organisation_type == "club" %}
+
+                                {{ duplicate_organisation.club_name }}
+
+                            {% endif %}
+
+                        </div>
+
+
+                        <div class="preview-grid">
+
+                            <div>
+                                <span class="preview-label">
+                                    Type:
+                                </span>
+
+                                {{ organisation_type|title }}
+                            </div>
+
+                            <div>
+                                <span class="preview-label">
+                                    Email:
+                                </span>
+
+                                {{ duplicate_organisation.public_email|default:"-" }}
+                            </div>
+
+                            <div>
+                                <span class="preview-label">
+                                    Region:
+                                </span>
+
+                                {{ duplicate_organisation.region|default:"-" }}
+                            </div>
+
+                            <div>
+                                <span class="preview-label">
+                                    Contact Number:
+                                </span>
+
+                                {{ duplicate_organisation.public_phone|default:"-" }}
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                {% endif %}
+
+
+                <!-- Likely duplicate preview -->
+
+                <!-- Likely duplicate preview -->
+
+{% if likely_duplicate_organisation %}
+
+    <div class="preview-heading">
+        Possible Matching Organisation
+    </div>
+
+    <div class="organisation-preview">
+
+        <div class="organisation-preview-name">
+
+            {% if organisation_type == "bank" %}
+                {{ likely_duplicate_organisation.bank_name }}
+
+            {% elif organisation_type == "branch" %}
+                {{ likely_duplicate_organisation.branch_name }}
+
+            {% elif organisation_type == "club" %}
+                {{ likely_duplicate_organisation.club_name }}
+
+            {% endif %}
+
+        </div>
+
+        <div class="preview-grid">
+
+            <div>
+                <span class="preview-label">
+                    Type:
+                </span>
+
+                {{ organisation_type|title }}
+            </div>
+
+            <div>
+                <span class="preview-label">
+                    Email:
+                </span>
+
+                {{ likely_duplicate_organisation.public_email|default:"-" }}
+            </div>
+
+            <div>
+                <span class="preview-label">
+                    Region:
+                </span>
+
+                {{ likely_duplicate_organisation.region|default:"-" }}
+            </div>
+
+            <div>
+                <span class="preview-label">
+                    Contact Number:
+                </span>
+
+                {{ likely_duplicate_organisation.public_phone|default:"-" }}
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- Duplicate override reason -->
+
+    <div class="form-group" style="margin-top: 25px;">
+
+        <label for="duplicate_override_reason">
+            Reason for continuing
+            <span class="required-mark">*</span>
         </label>
 
-        <select
-            id="organisation-type"
-            name="type"
-            onchange="this.form.submit()"
+        <textarea
+            id="duplicate_override_reason"
+            name="duplicate_override_reason"
+            placeholder="Explain why these are different organisations."
+        >{{ duplicate_override_reason }}</textarea>
+
+        <span class="help-text">
+            Please explain why you believe this is a different organisation.
+        </span>
+
+        {% if override_reason_error %}
+
+            <div class="field-error">
+                {{ override_reason_error }}
+            </div>
+
+        {% endif %}
+
+    </div>
+
+{% endif %}
+
+
+<!-- Newly-created organisation preview -->
+
+{% if created_organisation %}
+
+    <div class="preview-heading">
+        Added Organisation
+    </div>
+
+    <div class="organisation-preview">
+
+        <div class="organisation-preview-name">
+
+            {% if organisation_type == "bank" %}
+
+                {{ created_organisation.bank_name }}
+
+            {% elif organisation_type == "branch" %}
+
+                {{ created_organisation.branch_name }}
+
+            {% elif organisation_type == "club" %}
+
+                {{ created_organisation.club_name }}
+
+            {% endif %}
+
+        </div>
+
+        <div class="preview-grid">
+
+            <div>
+                <span class="preview-label">
+                    Type:
+                </span>
+
+                {{ organisation_type|title }}
+            </div>
+
+            <div>
+                <span class="preview-label">
+                    Email:
+                </span>
+
+                {{ created_organisation.public_email|default:"-" }}
+            </div>
+
+            <div>
+                <span class="preview-label">
+                    Region:
+                </span>
+
+                {{ created_organisation.region|default:"-" }}
+            </div>
+
+            <div>
+                <span class="preview-label">
+                    Contact Number:
+                </span>
+
+                {{ created_organisation.public_phone|default:"-" }}
+            </div>
+
+        </div>
+
+    </div>
+
+{% endif %}
+
+
+<!-- Buttons -->
+
+{% if likely_duplicate_organisation %}
+
+    <div class="button-row">
+
+        <button
+            type="reset"
+            class="button button-secondary"
         >
-            <option
-                value="bank"
-                {% if organisation_type == "bank" %}selected{% endif %}
-            >
-                Bank
-            </option>
-
-            <option
-                value="branch"
-                {% if organisation_type == "branch" %}selected{% endif %}
-            >
-                Branch
-            </option>
-
-            <option
-                value="club"
-                {% if organisation_type == "club" %}selected{% endif %}
-            >
-                Club
-            </option>
-        </select>
-
-        <noscript>
-            <button type="submit">Change form</button>
-        </noscript>
-    </form>
-
-    <h2>Add {{ organisation_type|title }}</h2>
-
-    <p>
-        The new organisation will start as
-        <strong>Not Yet Contacted</strong>.
-    </p>
-
-    <form method="post">
-        {% csrf_token %}
-
-        <input
-            type="hidden"
-            name="organisation_type"
-            value="{{ organisation_type }}"
-        >
-
-        {{ form.as_p }}
-
-        <button class="button" type="submit">
-            Add {{ organisation_type|title }}
+            Cancel
         </button>
-    </form>
-</div>
-</body>
-</html>
+
+        <button
+            type="submit"
+            name="confirm_likely_duplicate"
+            value="1"
+            class="button button-primary"
+        >
+            Continue Anyway
+        </button>
+
+    </div>
+
+{% else %}
+
+    <div class="button-row">
+
+        <button
+            type="reset"
+            class="button button-secondary"
+        >
+            Clear
+        </button>
+
+        <button
+            type="submit"
+            class="button button-primary"
+        >
+            Submit
+        </button>
+
+    </div>
+
+{% endif %}

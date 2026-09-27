@@ -1,3 +1,6 @@
+import uuid
+
+from django.conf import settings
 from django.db import models
 from django.contrib.contenttypes.fields import (
     GenericForeignKey,
@@ -24,24 +27,101 @@ OPPORTUNITY_STATUS_CHOICES = [
 
 
 class Bank(models.Model):
-    bank_name = models.CharField(max_length=255)
-    website_url = models.URLField(blank=True)
-    region = models.CharField(max_length=100)
+    organisation_id = models.UUIDField(
+    default=uuid.uuid4,
+    editable=False,
+    unique=True,
+)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_banks",
+    )
+
+    record_source = models.CharField(
+        max_length=50,
+        blank=True,
+        default="",
+    )
+    duplicate_override_reason = models.TextField(
+        blank=True,
+        default="",
+    )
+
+    duplicate_override_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    duplicate_override_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bank_duplicate_overrides",
+    )
+
+    bank_name = models.CharField(
+        max_length=255,
+    )
+
+    website_url = models.URLField(
+        blank=True,
+    )
+
+    region = models.CharField(
+        max_length=100,
+    )
+
+    suburb = models.CharField(
+        max_length=100,
+        blank=True,
+    )
+
+    state = models.CharField(
+        max_length=50,
+        blank=True,
+    )
+
+    postcode = models.CharField(
+        max_length=10,
+        blank=True,
+    )
+
     contact_status = models.CharField(
         max_length=20,
         choices=ORGANISATION_CONTACT_STATUS_CHOICES,
         default="not_yet_contacted",
     )
-    public_email = models.EmailField(blank=True)
-    public_phone = models.CharField(max_length=30, blank=True)
-    source_url = models.URLField(blank=True)
-    date_added = models.DateTimeField(auto_now_add=True)
-    last_updated = models.DateTimeField(auto_now=True)
+
+    public_email = models.EmailField(
+        blank=True,
+    )
+
+    public_phone = models.CharField(
+        max_length=30,
+        blank=True,
+    )
+
+    source_url = models.URLField(
+        blank=True,
+    )
+
+    date_added = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    last_updated = models.DateTimeField(
+        auto_now=True,
+    )
 
     contacts = GenericRelation(
         "Contact",
         related_query_name="bank",
     )
+
     opportunities = GenericRelation(
         "Opportunity",
         related_query_name="bank",
@@ -65,20 +145,96 @@ class Bank(models.Model):
 
 
 class Branch(models.Model):
+    organisation_id = models.UUIDField(
+    default=uuid.uuid4,
+    editable=False,
+    unique=True,
+)
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_branches",
+    )
+    record_source = models.CharField(
+        max_length=50,
+        blank=True,
+        default="",
+    )
+
+    duplicate_override_reason = models.TextField(
+        blank=True,
+        default="",
+    )
+
+    duplicate_override_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    duplicate_override_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="branch_duplicate_overrides",
+    )
+
+    date_added = models.DateTimeField(
+        auto_now_add=True,
+        null=True,
+    )
+
     bank = models.ForeignKey(
         Bank,
         on_delete=models.CASCADE,
         related_name="branches",
     )
-    branch_name = models.CharField(max_length=255)
-    address = models.CharField(max_length=255, blank=True)
-    suburb = models.CharField(max_length=100, blank=True)
-    state = models.CharField(max_length=50, blank=True)
-    postcode = models.CharField(max_length=10, blank=True)
-    region = models.CharField(max_length=100, blank=True)
-    public_email = models.EmailField(blank=True)
-    public_phone = models.CharField(max_length=30, blank=True)
-    website_url = models.URLField(blank=True)
+
+    branch_name = models.CharField(
+        max_length=255,
+    )
+
+    address = models.CharField(
+        max_length=255,
+        blank=True,
+    )
+
+    suburb = models.CharField(
+        max_length=100,
+        blank=True,
+    )
+
+    state = models.CharField(
+        max_length=50,
+        blank=True,
+    )
+
+    postcode = models.CharField(
+        max_length=10,
+        blank=True,
+    )
+
+    region = models.CharField(
+        max_length=100,
+        blank=True,
+    )
+
+    public_email = models.EmailField(
+        blank=True,
+    )
+
+    public_phone = models.CharField(
+        max_length=30,
+        blank=True,
+    )
+
+    website_url = models.URLField(
+        blank=True,
+    )
+
     contact_status = models.CharField(
         max_length=20,
         choices=ORGANISATION_CONTACT_STATUS_CHOICES,
@@ -89,6 +245,7 @@ class Branch(models.Model):
         "Contact",
         related_query_name="branch",
     )
+
     opportunities = GenericRelation(
         "Opportunity",
         related_query_name="branch",
@@ -96,6 +253,7 @@ class Branch(models.Model):
 
     class Meta:
         verbose_name_plural = "branches"
+
         constraints = [
             models.CheckConstraint(
                 condition=models.Q(
@@ -113,14 +271,90 @@ class Branch(models.Model):
 
 
 class Club(models.Model):
-    club_name = models.CharField(max_length=255)
-    club_type = models.CharField(max_length=100, blank=True)
-    suburb = models.CharField(max_length=100, blank=True)
-    state = models.CharField(max_length=50, blank=True)
-    region = models.CharField(max_length=100, blank=True)
-    website_url = models.URLField(blank=True)
-    public_email = models.EmailField(blank=True)
-    public_phone = models.CharField(max_length=30, blank=True)
+    organisation_id = models.UUIDField(
+    default=uuid.uuid4,
+    editable=False,
+    unique=True,
+)
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_clubs",
+    )
+    record_source = models.CharField(
+        max_length=50,
+        blank=True,
+        default="",
+    )
+
+    duplicate_override_reason = models.TextField(
+        blank=True,
+        default="",
+    )
+
+    duplicate_override_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    duplicate_override_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="club_duplicate_overrides",
+    )
+    
+
+    date_added = models.DateTimeField(
+        auto_now_add=True,
+        null=True,
+    )
+
+    club_name = models.CharField(
+        max_length=255,
+    )
+
+    club_type = models.CharField(
+        max_length=100,
+        blank=True,
+    )
+
+    suburb = models.CharField(
+        max_length=100,
+        blank=True,
+    )
+
+    state = models.CharField(
+        max_length=50,
+        blank=True,
+    )
+
+    region = models.CharField(
+        max_length=100,
+        blank=True,
+    )
+
+    postcode = models.CharField(
+        max_length=10,
+        blank=True,
+    )
+
+    website_url = models.URLField(
+        blank=True,
+    )
+
+    public_email = models.EmailField(
+        blank=True,
+    )
+
+    public_phone = models.CharField(
+        max_length=30,
+        blank=True,
+    )
 
     supported_by_bank = models.ForeignKey(
         Bank,
@@ -129,6 +363,7 @@ class Club(models.Model):
         blank=True,
         related_name="supported_clubs",
     )
+
     supported_by_branch = models.ForeignKey(
         Branch,
         on_delete=models.SET_NULL,
@@ -147,6 +382,7 @@ class Club(models.Model):
         "Contact",
         related_query_name="club",
     )
+
     opportunities = GenericRelation(
         "Opportunity",
         related_query_name="club",
@@ -171,9 +407,18 @@ class Club(models.Model):
 
 # Contact and Opportunity can link to a Bank, Branch or Club.
 ORGANISATION_MODELS = (
-    models.Q(app_label="outreach", model="bank")
-    | models.Q(app_label="outreach", model="branch")
-    | models.Q(app_label="outreach", model="club")
+    models.Q(
+        app_label="outreach",
+        model="bank",
+    )
+    | models.Q(
+        app_label="outreach",
+        model="branch",
+    )
+    | models.Q(
+        app_label="outreach",
+        model="club",
+    )
 )
 
 
@@ -183,29 +428,62 @@ class Contact(models.Model):
         on_delete=models.CASCADE,
         limit_choices_to=ORGANISATION_MODELS,
     )
+
     object_id = models.PositiveIntegerField()
+
     organisation = GenericForeignKey(
         "content_type",
         "object_id",
     )
 
-    contact_name = models.CharField(max_length=255, blank=True)
-    role = models.CharField(max_length=100, blank=True)
-    email = models.EmailField(blank=True)
-    phone = models.CharField(max_length=30, blank=True)
-    source_url = models.URLField(blank=True)
-    last_verified = models.DateField(null=True, blank=True)
+    contact_name = models.CharField(
+        max_length=255,
+        blank=True,
+    )
+
+    role = models.CharField(
+        max_length=100,
+        blank=True,
+    )
+
+    email = models.EmailField(
+        blank=True,
+    )
+
+    phone = models.CharField(
+        max_length=30,
+        blank=True,
+    )
+
+    source_url = models.URLField(
+        blank=True,
+    )
+
+    last_verified = models.DateField(
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         indexes = [
             models.Index(
-                fields=["content_type", "object_id"],
+                fields=[
+                    "content_type",
+                    "object_id",
+                ],
             ),
         ]
 
     def __str__(self):
-        name = self.contact_name or "Unnamed contact"
-        return f"{name} @ {self.organisation}"
+        name = (
+            self.contact_name
+            or "Unnamed contact"
+        )
+
+        return (
+            f"{name} @ "
+            f"{self.organisation}"
+        )
 
 
 class Opportunity(models.Model):
@@ -214,7 +492,9 @@ class Opportunity(models.Model):
         on_delete=models.CASCADE,
         limit_choices_to=ORGANISATION_MODELS,
     )
+
     object_id = models.PositiveIntegerField()
+
     organisation = GenericForeignKey(
         "content_type",
         "object_id",
@@ -225,33 +505,53 @@ class Opportunity(models.Model):
         choices=OPPORTUNITY_STATUS_CHOICES,
         default="not_yet_contacted",
     )
-    date_created = models.DateTimeField(auto_now_add=True)
+
+    date_created = models.DateTimeField(
+        auto_now_add=True,
+    )
+
     date_contacted = models.DateTimeField(
         null=True,
         blank=True,
     )
+
     outreach_method = models.CharField(
         max_length=50,
         blank=True,
     )
-    draft_email = models.TextField(blank=True)
-    approved = models.BooleanField(default=False)
+
+    draft_email = models.TextField(
+        blank=True,
+    )
+
+    approved = models.BooleanField(
+        default=False,
+    )
+
     approved_by = models.CharField(
         max_length=255,
         blank=True,
     )
+
     date_approved = models.DateTimeField(
         null=True,
         blank=True,
     )
-    notes = models.TextField(blank=True)
+
+    notes = models.TextField(
+        blank=True,
+    )
 
     class Meta:
         indexes = [
             models.Index(
-                fields=["content_type", "object_id"],
+                fields=[
+                    "content_type",
+                    "object_id",
+                ],
             ),
         ]
+
         constraints = [
             models.CheckConstraint(
                 condition=models.Q(
@@ -266,10 +566,12 @@ class Opportunity(models.Model):
                 name="opportunity_valid_status",
             ),
         ]
+
         verbose_name_plural = "opportunities"
 
     def __str__(self):
         return (
-            f"Opportunity for {self.organisation} - "
+            f"Opportunity for "
+            f"{self.organisation} - "
             f"{self.status}"
         )

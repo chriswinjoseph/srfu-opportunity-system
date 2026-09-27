@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 from django.db import IntegrityError, transaction
 from django.test import TestCase
@@ -361,41 +362,112 @@ class AddOrganisationTests(TestCase):
             password="Testing123!",
         )
 
-        self.url = reverse("add_organisation")
+        # Give this user permission to manually create
+        # Banks, Branches and Clubs.
+        permissions = Permission.objects.filter(
+            content_type__app_label="outreach",
+            codename__in=[
+                "add_bank",
+                "add_branch",
+                "add_club",
+            ],
+        )
+
+        self.user.user_permissions.add(
+            *permissions
+        )
+
+        self.url = reverse(
+            "add_organisation"
+        )
 
         self.bank = Bank.objects.create(
             bank_name="Existing Test Bank",
             region="Victoria",
+            state="VIC",
+            postcode="3000",
         )
 
     def test_logged_out_user_is_redirected_to_login(self):
-        response = self.client.get(self.url)
+        response = self.client.get(
+            self.url
+        )
 
-        self.assertEqual(response.status_code, 302)
-        self.assertIn(reverse("login"), response.url)
-        self.assertIn("next=", response.url)
+        self.assertEqual(
+            response.status_code,
+            302,
+        )
 
-    def test_logged_in_user_can_open_add_page(self):
-        self.client.force_login(self.user)
+        self.assertIn(
+            reverse("login"),
+            response.url,
+        )
 
-        response = self.client.get(self.url)
+        self.assertIn(
+            "next=",
+            response.url,
+        )
 
-        self.assertEqual(response.status_code, 200)
+    def test_authorised_user_can_open_add_page(self):
+        self.client.force_login(
+            self.user
+        )
+
+        response = self.client.get(
+            self.url
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
+
         self.assertTemplateUsed(
             response,
             "outreach/add_organisation.html",
         )
-        self.assertContains(response, "Add Organisation")
 
-    def test_logged_in_user_can_add_bank(self):
-        self.client.force_login(self.user)
+        self.assertContains(
+            response,
+            "Add Organisation",
+        )
+
+    def test_user_without_permission_cannot_open_add_page(self):
+        self.user.user_permissions.clear()
+
+        self.client.force_login(
+            self.user
+        )
+
+        response = self.client.get(
+            self.url
+        )
+
+        self.assertEqual(
+            response.status_code,
+            403,
+        )
+
+        self.assertContains(
+            response,
+            "You don't have permission",
+            status_code=403,
+        )
+
+    def test_authorised_user_can_add_bank(self):
+        self.client.force_login(
+            self.user
+        )
 
         response = self.client.post(
             self.url,
             {
                 "organisation_type": "bank",
                 "bank_name": "FR10 Test Bank",
-                "region": "Victoria",
+                "state": "VIC",
+                "region": "Melbourne",
+                "suburb": "",
+                "postcode": "3000",
                 "website_url": "https://example.com",
                 "public_email": "bank@example.com",
                 "public_phone": "0312345678",
@@ -403,7 +475,12 @@ class AddOrganisationTests(TestCase):
             },
         )
 
-        self.assertEqual(response.status_code, 302)
+        # Successful creation remains on the
+        # Add Organisation page.
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
 
         bank = Bank.objects.get(
             bank_name="FR10 Test Bank"
@@ -414,8 +491,29 @@ class AddOrganisationTests(TestCase):
             "not_yet_contacted",
         )
 
-    def test_logged_in_user_can_add_branch(self):
-        self.client.force_login(self.user)
+        self.assertEqual(
+            bank.created_by,
+            self.user,
+        )
+
+        self.assertEqual(
+            bank.record_source,
+            "Manual Entry",
+        )
+
+        self.assertIsNotNone(
+            bank.organisation_id
+        )
+
+        self.assertContains(
+            response,
+            "Organisation has been added successfully.",
+        )
+
+    def test_authorised_user_can_add_branch(self):
+        self.client.force_login(
+            self.user
+        )
 
         response = self.client.post(
             self.url,
@@ -425,29 +523,52 @@ class AddOrganisationTests(TestCase):
                 "branch_name": "Melbourne Test Branch",
                 "address": "",
                 "suburb": "Melbourne",
-                "state": "Victoria",
+                "state": "VIC",
                 "postcode": "3000",
-                "region": "Victoria",
+                "region": "Melbourne",
                 "public_email": "",
                 "public_phone": "",
                 "website_url": "",
             },
         )
 
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
 
         branch = Branch.objects.get(
             branch_name="Melbourne Test Branch"
         )
 
-        self.assertEqual(branch.bank, self.bank)
+        self.assertEqual(
+            branch.bank,
+            self.bank,
+        )
+
         self.assertEqual(
             branch.contact_status,
             "not_yet_contacted",
         )
 
-    def test_logged_in_user_can_add_club(self):
-        self.client.force_login(self.user)
+        self.assertEqual(
+            branch.created_by,
+            self.user,
+        )
+
+        self.assertEqual(
+            branch.record_source,
+            "Manual Entry",
+        )
+
+        self.assertIsNotNone(
+            branch.organisation_id
+        )
+
+    def test_authorised_user_can_add_club(self):
+        self.client.force_login(
+            self.user
+        )
 
         response = self.client.post(
             self.url,
@@ -456,8 +577,9 @@ class AddOrganisationTests(TestCase):
                 "club_name": "FR10 Youth Club",
                 "club_type": "Football",
                 "suburb": "Melbourne",
-                "state": "Victoria",
-                "region": "Victoria",
+                "state": "VIC",
+                "postcode": "3000",
+                "region": "Melbourne",
                 "website_url": "",
                 "public_email": "",
                 "public_phone": "",
@@ -466,7 +588,10 @@ class AddOrganisationTests(TestCase):
             },
         )
 
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
 
         club = Club.objects.get(
             club_name="FR10 Youth Club"
@@ -476,11 +601,62 @@ class AddOrganisationTests(TestCase):
             club.supported_by_bank,
             self.bank,
         )
+
         self.assertEqual(
             club.contact_status,
             "not_yet_contacted",
         )
 
+        self.assertEqual(
+            club.created_by,
+            self.user,
+        )
+
+        self.assertEqual(
+            club.record_source,
+            "Manual Entry",
+        )
+
+        self.assertIsNotNone(
+            club.organisation_id
+        )
+
+    def test_missing_required_fields_do_not_create_bank(self):
+        self.client.force_login(
+            self.user
+        )
+
+        response = self.client.post(
+            self.url,
+            {
+                "organisation_type": "bank",
+                "bank_name": "",
+                "state": "",
+                "region": "",
+                "suburb": "",
+                "postcode": "",
+                "website_url": "",
+                "public_email": "",
+                "public_phone": "",
+                "source_url": "",
+            },
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
+
+        self.assertFalse(
+            Bank.objects.filter(
+                bank_name=""
+            ).exists()
+        )
+
+        self.assertContains(
+            response,
+            "This field is required",
+        )
 class DashboardStatusConflictTests(TestCase):
 
     def setUp(self):
