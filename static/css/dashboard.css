@@ -971,3 +971,308 @@ select:focus-visible,
     gap: 4px;
     padding: 6px 10px 8px;
 }
+/* =========================================================
+   FINAL DASHBOARD READABILITY + CARD LAYOUT
+   ========================================================= */
+
+html {
+    font-size: 17px;
+}
+
+body {
+    font-size: 17px;
+    line-height: 1.5;
+}
+
+/* Main headings */
+
+.page-header h1 {
+    font-size: 32px;
+}
+
+.column-header h2 {
+    font-size: 22px;
+}
+
+/* Search / sort controls */
+
+.filter-bar input,
+.filter-bar select,
+.filter-bar button {
+    font-size: 16px;
+}
+
+/* Sidebar */
+
+.sidebar {
+    font-size: 16px;
+}
+
+.metric-label {
+    font-size: 16px;
+}
+
+.outcome-summary {
+    font-size: 15px;
+}
+
+.outcome-summary h3 {
+    font-size: 18px;
+}
+
+.outcome-row {
+    font-size: 16px;
+}
+
+.sidebar-button {
+    font-size: 16px;
+}
+
+.topbar-dashboard-link,
+.welcome-text,
+.logout-button {
+    font-size: 16px;
+}
+
+/* =========================================================
+   Organisation columns
+   ========================================================= */
+
+.organisation-columns {
+    display: grid;
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 32px;
+    align-items: start;
+}
+
+.organisation-column {
+    min-width: 0;
+    padding: 0 18px;
+}
+
+.organisation-column:first-child {
+    border-right: 1px solid #d4d7dd;
+}
+
+/* =========================================================
+   Organisation cards
+   ========================================================= */
+
+.organisation-card {
+    display: grid;
+    min-height: 165px;
+    grid-template-columns: 7px minmax(0, 1fr);
+    font-size: 16px;
+}
+
+.card-content {
+    min-width: 0;
+    padding: 14px 16px;
+}
+
+.card-header {
+    display: flex;
+    min-width: 0;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+}
+
+.card-title-area {
+    min-width: 0;
+    flex: 1;
+}
+
+.card-header h3,
+.organisation-card h3 {
+    margin: 0;
+    font-size: 19px;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+}
+
+.status-badge {
+    flex: 0 0 auto;
+    max-width: 170px;
+    padding: 4px 7px;
+    font-size: 14px;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+/* =========================================================
+   Card body
+   ========================================================= */
+
+.card-body-row {
+    display: grid;
+    margin-top: 18px;
+    grid-template-columns: minmax(0, 1fr) 125px;
+    gap: 22px;
+    align-items: center;
+}
+
+.card-information {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: minmax(135px, 0.9fr) minmax(250px, 1.5fr);
+    gap: 12px 28px;
+}
+
+.card-information p {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 6px;
+
+    min-width: 0;
+    margin: 0;
+
+    font-size: 16px;
+    line-height: 1.45;
+}
+
+.card-information span {
+    font-size: 16px;
+    color: #111111;
+}
+
+.card-information strong {
+    min-width: 0;
+    font-size: 16px;
+    color: #263142;
+    font-weight: 400;
+
+    overflow-wrap: anywhere;
+    word-break: normal;
+}
+
+/* =========================================================
+   Card action buttons
+   ========================================================= */
+
+.card-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+
+    width: 125px;
+    min-width: 125px;
+}
+
+.card-actions .card-link,
+.card-actions button {
+    width: 125px;
+    min-width: 125px;
+    height: 44px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 8px 10px;
+
+    font-size: 15px;
+    font-weight: 600;
+
+    line-height: 1;
+    text-align: center;
+    white-space: nowrap;
+
+    border-radius: 6px;
+}
+
+/* Pagination */
+
+.pagination,
+.pagination button {
+    font-size: 16px;
+}
+
+/* Details popup */
+
+.details-panel {
+    font-size: 16px;
+}
+
+.details-panel h2 {
+    font-size: 22px;
+}
+
+.detail-item span,
+.detail-item strong {
+    font-size: 15px;
+}
+
+/* =========================================================
+   Responsive behaviour
+   ========================================================= */
+
+/*
+Keep two columns on larger desktop screens.
+Stack them before the cards become too narrow.
+*/
+
+@media (max-width: 1400px) {
+    .organisation-columns {
+        grid-template-columns: 1fr;
+    }
+
+    .organisation-column {
+        padding: 0;
+    }
+
+    .organisation-column:first-child {
+        margin-bottom: 28px;
+        padding-bottom: 28px;
+        border-right: 0;
+        border-bottom: 1px solid #d4d7dd;
+    }
+}
+
+/*
+For narrower organisation cards,
+reduce the information grid to one column.
+*/
+
+@media (max-width: 900px) {
+    .card-information {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .card-body-row {
+        grid-template-columns: minmax(0, 1fr) 125px;
+    }
+}
+
+/*
+Mobile layout.
+*/
+
+@media (max-width: 650px) {
+    .card-body-row {
+        grid-template-columns: 1fr;
+    }
+
+    .card-actions {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .card-actions .card-link,
+    .card-actions button {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .organisation-card h3 {
+        font-size: 18px;
+    }
+
+    .card-information p,
+    .card-information span,
+    .card-information strong {
+        font-size: 15px;
+    }
+}

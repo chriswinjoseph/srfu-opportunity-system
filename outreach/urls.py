@@ -30,6 +30,16 @@ urlpatterns = [
         name="organisation_detail",
     ),
     path(
+        "organisation/<int:content_type_id>/<int:object_id>/generate-draft/",
+        views.generate_email_draft,
+        name="generate_email_draft",
+    ),
+    path(
+    "email-draft/<uuid:draft_id>/update/",
+    views.update_email_draft,
+    name="update_email_draft",
+    ),
+    path(
         "opportunities/<int:opportunity_id>/positive-response/",
         views.record_positive_response_api,
         name="record_positive_response_api",

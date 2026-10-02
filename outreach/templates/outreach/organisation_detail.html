@@ -1,77 +1,602 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Organisation Details</title>
-</head>
+{% extends "base.html" %}
+{% load static %}
 
-<body style="font-family: sans-serif; padding: 16px;">
+{% block title %}
+Organisation Details | Safe Roads For Us
+{% endblock %}
 
-    <p>
-        <a href="/outreach/dashboard/">&larr; Back to dashboard</a>
-    </p>
 
-    <h1>{{ org }}</h1>
+{% block extra_css %}
 
-    <p><strong>Type:</strong> {{ org_type|title }}</p>
-    <p><strong>Region:</strong> {{ org.region|default:"-" }}</p>
-    <p><strong>Status:</strong> {{ org.get_contact_status_display }}</p>
-    <p><strong>Email:</strong> {{ org.public_email|default:"-" }}</p>
-    <p><strong>Phone:</strong> {{ org.public_phone|default:"-" }}</p>
-    <p><strong>Website:</strong> {{ org.website_url|default:"-" }}</p>
+<style>
 
-    <h2>Outreach History</h2>
+    .detail-page {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 48px 28px;
+    }
 
-    {% for opp in opportunities %}
-        <div style="
-            border: 1px solid #ccc;
-            padding: 12px;
-            margin-bottom: 10px;
-        ">
+    .back-link {
+        display: inline-block;
+        margin-bottom: 24px;
+        color: #173363;
+        font-size: 18px;
+        font-weight: 600;
+        text-decoration: none;
+    }
+
+    .back-link:hover {
+        text-decoration: underline;
+    }
+
+    .detail-card,
+    .draft-card {
+        background: #ffffff;
+        border: 1px solid #dbe2ea;
+        border-radius: 12px;
+        padding: 34px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        margin-bottom: 32px;
+    }
+
+    .detail-card h1 {
+        margin-top: 0;
+        margin-bottom: 30px;
+        font-size: 38px;
+        line-height: 1.2;
+    }
+
+    .detail-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 22px 36px;
+    }
+
+    .detail-item {
+        padding: 18px 0;
+        border-bottom: 1px solid #e5e7eb;
+        font-size: 18px;
+    }
+
+    .detail-label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 18px;
+        font-weight: 700;
+        color: #374151;
+    }
+
+    .detail-value {
+        font-size: 18px;
+        color: #111827;
+        line-height: 1.5;
+    }
+
+    .detail-value a {
+        font-size: 18px;
+        color: #173363;
+        word-break: break-word;
+    }
+
+    .section-heading {
+        margin-top: 0;
+        margin-bottom: 22px;
+        font-size: 30px;
+    }
+
+    .draft-card h2 {
+        margin-top: 0;
+        margin-bottom: 10px;
+        font-size: 28px;
+    }
+
+    .draft-card p {
+        font-size: 17px;
+        line-height: 1.5;
+    }
+
+    .draft-card label {
+        display: block;
+        margin-top: 18px;
+        margin-bottom: 8px;
+        font-size: 17px;
+        font-weight: 700;
+    }
+
+    .draft-card input[type="text"] {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 12px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        font-size: 17px;
+    }
+
+    .draft-card textarea {
+        width: 100%;
+        min-height: 220px;
+        box-sizing: border-box;
+        padding: 12px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        font-size: 17px;
+        line-height: 1.6;
+        resize: vertical;
+    }
+
+    .generate-draft-button,
+    .save-draft-button {
+        margin-top: 16px;
+        background: #173363;
+        color: #ffffff;
+        border: none;
+        border-radius: 6px;
+        padding: 12px 22px;
+        font-size: 17px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .generate-draft-button:hover,
+    .save-draft-button:hover {
+        opacity: 0.92;
+    }
+
+    .draft-warning {
+        margin-top: 15px;
+        padding: 14px;
+        background: #fff7ed;
+        border: 1px solid #fed7aa;
+        border-radius: 6px;
+        font-size: 16px;
+    }
+
+    .history-card {
+        background: #ffffff;
+        border: 1px solid #d1d5db;
+        border-left: 5px solid #2563eb;
+        border-radius: 8px;
+        padding: 22px;
+        margin-bottom: 16px;
+        line-height: 1.6;
+    }
+
+    .history-card p {
+        margin: 8px 0;
+        font-size: 18px;
+        line-height: 1.6;
+        word-break: break-word;
+    }
+
+    .history-card strong {
+        font-size: 18px;
+    }
+
+    .positive-response-button {
+        margin-top: 16px;
+        background: #5b3cc4;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        padding: 12px 20px;
+        font-size: 17px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .positive-response-button:hover {
+        opacity: 0.92;
+    }
+
+    .empty-history {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 22px;
+        font-size: 18px;
+        line-height: 1.6;
+    }
+
+    @media (max-width: 700px) {
+
+        .detail-page {
+            padding: 26px 16px;
+        }
+
+        .detail-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .detail-card,
+        .draft-card {
+            padding: 24px;
+        }
+
+        .detail-card h1 {
+            font-size: 30px;
+        }
+
+        .section-heading {
+            font-size: 26px;
+        }
+
+        .detail-item,
+        .detail-label,
+        .detail-value,
+        .detail-value a,
+        .history-card p,
+        .history-card strong,
+        .empty-history {
+            font-size: 17px;
+        }
+
+    }
+
+</style>
+
+{% endblock %}
+
+
+{% block content %}
+
+<div class="detail-page">
+
+    {% if messages %}
+
+        {% for message in messages %}
+
+            <div
+                style="
+                    padding: 14px;
+                    margin-bottom: 20px;
+                    background: #ecfdf5;
+                    border: 1px solid #86efac;
+                    border-radius: 6px;
+                    font-size: 17px;
+                "
+            >
+                {{ message }}
+            </div>
+
+        {% endfor %}
+
+    {% endif %}
+
+
+    <a
+        href="{% url 'outreach_dashboard' %}"
+        class="back-link"
+    >
+        &larr; Back to dashboard
+    </a>
+
+
+    <section class="detail-card">
+
+        <h1>{{ org }}</h1>
+
+        <div class="detail-grid">
+
+            <div class="detail-item">
+
+                <span class="detail-label">
+                    Type
+                </span>
+
+                <span class="detail-value">
+                    {{ org_type|title }}
+                </span>
+
+            </div>
+
+
+            <div class="detail-item">
+
+                <span class="detail-label">
+                    Status
+                </span>
+
+                <span class="detail-value">
+                    {{ org.get_contact_status_display }}
+                </span>
+
+            </div>
+
+
+            <div class="detail-item">
+
+                <span class="detail-label">
+                    Region
+                </span>
+
+                <span class="detail-value">
+                    {{ org.region|default:"-" }}
+                </span>
+
+            </div>
+
+
+            <div class="detail-item">
+
+                <span class="detail-label">
+                    Email
+                </span>
+
+                <span class="detail-value">
+                    {{ org.public_email|default:"Not provided" }}
+                </span>
+
+            </div>
+
+
+            <div class="detail-item">
+
+                <span class="detail-label">
+                    Phone
+                </span>
+
+                <span class="detail-value">
+                    {{ org.public_phone|default:"Not provided" }}
+                </span>
+
+            </div>
+
+
+            <div class="detail-item">
+
+                <span class="detail-label">
+                    Website
+                </span>
+
+                <span class="detail-value">
+
+                    {% if org.website_url %}
+
+                        <a
+                            href="{{ org.website_url }}"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            {{ org.website_url }}
+                        </a>
+
+                    {% else %}
+
+                        Not provided
+
+                    {% endif %}
+
+                </span>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+
+    {% if perms.outreach.generate_emaildraft %}
+
+        <section class="draft-card">
+
+            <h2>
+                Generate Email Draft
+            </h2>
+
             <p>
-                <strong>Status:</strong>
-                {{ opp.get_status_display }}
+                Create a draft outreach email for this organisation.
             </p>
 
-            <p>
-                <strong>Created:</strong>
-                {{ opp.date_created }}
-            </p>
 
-            {% if opp.notes %}
-                <p>
-                    <strong>Notes:</strong>
-                    {{ opp.notes }}
-                </p>
-            {% endif %}
+            {% if org.public_email %}
 
-            {% if opp.status == "contacted" and org_type != "club" %}
                 <form
                     method="post"
-                    action="{% url 'record_positive_response_api' opp.id %}"
-                    target="_blank"
+                    action="{% url 'generate_email_draft' content_type_id object_id %}"
                 >
+
                     {% csrf_token %}
+
+                    <label for="outreach-purpose">
+                        Outreach Purpose
+                    </label>
+
+                    <textarea
+                        id="outreach-purpose"
+                        name="outreach_purpose"
+                        placeholder="For example: Introduce Safe Roads For Us and discuss a possible community partnership."
+                        required
+                    ></textarea>
 
                     <button
                         type="submit"
-                        style="
-                            background: #5b3cc4;
-                            color: white;
-                            border: none;
-                            border-radius: 5px;
-                            padding: 9px 14px;
-                            cursor: pointer;
-                        "
+                        class="generate-draft-button"
                     >
-                        Record Positive Response
+                        Generate Draft
                     </button>
+
                 </form>
+
+            {% else %}
+
+                <div class="draft-warning">
+
+                    A public email address must be added before
+                    an email draft can be generated.
+
+                </div>
+
             {% endif %}
-        </div>
 
-    {% empty %}
-        <p>No outreach recorded yet for this organisation.</p>
-    {% endfor %}
+        </section>
 
-</body>
-</html>
+    {% endif %}
+
+
+
+    {% if latest_draft %}
+
+        <section class="draft-card">
+
+            <h2>
+                Latest Email Draft
+            </h2>
+
+
+            <p>
+                <strong>Status:</strong>
+                {{ latest_draft.get_workflow_status_display }}
+            </p>
+
+
+            <p>
+                <strong>Outreach Purpose:</strong>
+                {{ latest_draft.outreach_purpose }}
+            </p>
+
+
+            {% if latest_draft.workflow_status == "draft" and perms.outreach.generate_emaildraft %}
+
+                <form
+                    method="post"
+                    action="{% url 'update_email_draft' latest_draft.draft_id %}"
+                >
+
+                    {% csrf_token %}
+
+
+                    <label for="draft-subject">
+                        Subject
+                    </label>
+
+                    <input
+                        id="draft-subject"
+                        type="text"
+                        name="subject"
+                        value="{{ latest_draft.subject }}"
+                        required
+                    >
+
+
+                    <label for="latest-draft-body">
+                        Email Body
+                    </label>
+
+                    <textarea
+                        id="latest-draft-body"
+                        name="body"
+                        required
+                    >{{ latest_draft.body }}</textarea>
+
+
+                    <button
+                        type="submit"
+                        class="save-draft-button"
+                    >
+                        Save Draft
+                    </button>
+
+                </form>
+
+
+            {% else %}
+
+                <p>
+                    <strong>Subject:</strong>
+                    {{ latest_draft.subject }}
+                </p>
+
+
+                <label for="latest-draft-body">
+                    Email Body
+                </label>
+
+                <textarea
+                    id="latest-draft-body"
+                    readonly
+                >{{ latest_draft.body }}</textarea>
+
+            {% endif %}
+
+        </section>
+
+    {% endif %}
+
+
+
+    <section>
+
+        <h2 class="section-heading">
+            Outreach History
+        </h2>
+
+
+        {% for opp in opportunities %}
+
+            <div class="history-card">
+
+                <p>
+                    <strong>Status:</strong>
+                    {{ opp.get_status_display }}
+                </p>
+
+                <p>
+                    <strong>Created:</strong>
+                    {{ opp.date_created }}
+                </p>
+
+
+                {% if opp.notes %}
+
+                    <p>
+                        <strong>Notes:</strong>
+                        {{ opp.notes }}
+                    </p>
+
+                {% endif %}
+
+
+                {% if opp.status == "contacted" and org_type != "club" %}
+
+                    <form
+                        method="post"
+                        action="{% url 'record_positive_response_api' opp.id %}"
+                        target="_blank"
+                    >
+
+                        {% csrf_token %}
+
+                        <button
+                            type="submit"
+                            class="positive-response-button"
+                        >
+                            Record Positive Response
+                        </button>
+
+                    </form>
+
+                {% endif %}
+
+            </div>
+
+
+        {% empty %}
+
+            <div class="empty-history">
+
+                No outreach activity yet.
+                This organisation has not been contacted.
+
+                Outreach history will appear here once
+                contact activity begins.
+
+            </div>
+
+        {% endfor %}
+
+    </section>
+
+</div>
+
+{% endblock %}

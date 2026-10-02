@@ -28,10 +28,11 @@ OPPORTUNITY_STATUS_CHOICES = [
 
 class Bank(models.Model):
     organisation_id = models.UUIDField(
-    default=uuid.uuid4,
-    editable=False,
-    unique=True,
-)
+        default=uuid.uuid4,
+        editable=False,
+        unique=True,
+    )
+
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -45,6 +46,7 @@ class Bank(models.Model):
         blank=True,
         default="",
     )
+
     duplicate_override_reason = models.TextField(
         blank=True,
         default="",
@@ -146,10 +148,10 @@ class Bank(models.Model):
 
 class Branch(models.Model):
     organisation_id = models.UUIDField(
-    default=uuid.uuid4,
-    editable=False,
-    unique=True,
-)
+        default=uuid.uuid4,
+        editable=False,
+        unique=True,
+    )
 
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -158,6 +160,7 @@ class Branch(models.Model):
         blank=True,
         related_name="created_branches",
     )
+
     record_source = models.CharField(
         max_length=50,
         blank=True,
@@ -272,10 +275,10 @@ class Branch(models.Model):
 
 class Club(models.Model):
     organisation_id = models.UUIDField(
-    default=uuid.uuid4,
-    editable=False,
-    unique=True,
-)
+        default=uuid.uuid4,
+        editable=False,
+        unique=True,
+    )
 
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -284,6 +287,7 @@ class Club(models.Model):
         blank=True,
         related_name="created_clubs",
     )
+
     record_source = models.CharField(
         max_length=50,
         blank=True,
@@ -307,7 +311,6 @@ class Club(models.Model):
         blank=True,
         related_name="club_duplicate_overrides",
     )
-    
 
     date_added = models.DateTimeField(
         auto_now_add=True,
@@ -475,15 +478,9 @@ class Contact(models.Model):
         ]
 
     def __str__(self):
-        name = (
-            self.contact_name
-            or "Unnamed contact"
-        )
+        name = self.contact_name or "Unnamed contact"
 
-        return (
-            f"{name} @ "
-            f"{self.organisation}"
-        )
+        return f"{name} @ {self.organisation}"
 
 
 class Opportunity(models.Model):
@@ -520,6 +517,7 @@ class Opportunity(models.Model):
         blank=True,
     )
 
+    # Keep this for compatibility with existing code.
     draft_email = models.TextField(
         blank=True,
     )
@@ -574,4 +572,113 @@ class Opportunity(models.Model):
             f"Opportunity for "
             f"{self.organisation} - "
             f"{self.status}"
+        )
+
+
+# ---------------------------------------------------------
+# AI Email Draft
+# ---------------------------------------------------------
+
+class EmailDraft(models.Model):
+    WORKFLOW_CHOICES = [
+        ("draft", "Draft"),
+        ("pending_review", "Pending Review"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+
+    GENERATION_CHOICES = [
+        ("pending", "Pending"),
+        ("success", "Success"),
+        ("failed", "Failed"),
+        ("timed_out", "Timed Out"),
+    ]
+
+    draft_id = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        unique=True,
+    )
+
+    opportunity = models.ForeignKey(
+        Opportunity,
+        on_delete=models.CASCADE,
+        related_name="email_drafts",
+    )
+
+    subject = models.CharField(
+        max_length=255,
+        blank=True,
+    )
+
+    body = models.TextField(
+        blank=True,
+    )
+
+    outreach_purpose = models.CharField(
+        max_length=255,
+    )
+
+    template_version = models.CharField(
+        max_length=50,
+        default="v1",
+    )
+
+    workflow_status = models.CharField(
+        max_length=20,
+        choices=WORKFLOW_CHOICES,
+        default="draft",
+    )
+
+    generation_status = models.CharField(
+        max_length=20,
+        choices=GENERATION_CHOICES,
+        default="pending",
+    )
+
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="requested_email_drafts",
+    )
+
+    trigger_source = models.CharField(
+        max_length=20,
+        default="manual",
+    )
+
+    version = models.PositiveIntegerField(
+        default=1,
+    )
+
+    regeneration_attempts = models.PositiveIntegerField(
+        default=0,
+    )
+
+    error_message = models.TextField(
+        blank=True,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True,
+    )
+
+    class Meta:
+        permissions = [
+            (
+                "generate_emaildraft",
+                "Can generate email draft",
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.draft_id} - "
+            f"{self.workflow_status}"
         )

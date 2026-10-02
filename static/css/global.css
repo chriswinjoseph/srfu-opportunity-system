@@ -1,0 +1,51 @@
+html {
+    font-size: 17px;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    font-size: 17px;
+    line-height: 1.6;
+}
+
+h1 {
+    font-size: 34px;
+}
+
+h2 {
+    font-size: 26px;
+}
+
+h3 {
+    font-size: 21px;
+}
+
+p,
+span,
+li,
+td,
+th {
+    font-size: 17px;
+}
+
+label {
+    font-size: 17px;
+    font-weight: 600;
+}
+
+input,
+select,
+textarea,
+button {
+    font-size: 17px;
+}
+
+small,
+.help-text {
+    font-size: 15px;
+}
+
+small,
+.help-text {
+    font-size: 15px;
+}
