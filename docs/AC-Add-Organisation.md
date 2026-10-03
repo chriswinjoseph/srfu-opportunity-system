@@ -1,4 +1,4 @@
-# Acceptance Criteria: AI draft-email cost/quality guardrails 
+# Acceptance Criteria: Add Organisation 
 
 ## 1. Purpose
 

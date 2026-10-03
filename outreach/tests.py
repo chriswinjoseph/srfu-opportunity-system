@@ -1,3 +1,4 @@
+from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
@@ -5,7 +6,14 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import Bank, Branch, Club, Opportunity
+from .models import (
+    Bank,
+    Branch,
+    Club,
+    Opportunity,
+    EmailDraft,
+    EmailGenerationLog,
+)
 from .status_transitions import (
     InvalidStatusTransition,
     bulk_update_organisation_contact_statuses,
@@ -1224,4 +1232,581 @@ class OrganisationListApiTests(TestCase):
         self.assertEqual(
             out_of_range_response.status_code,
             400,
+        )
+class EmailDraftWorkflowTests(TestCase):
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            email="ai-test@example.com",
+            first_name="AI",
+            last_name="Tester",
+            password="Testing123!",
+        )
+
+        permissions = Permission.objects.filter(
+            content_type__app_label="outreach",
+            codename__in=[
+                "generate_emaildraft",
+                "change_emaildraft",
+            ],
+        )
+
+        self.user.user_permissions.add(
+            *permissions
+        )
+
+        self.bank = Bank.objects.create(
+            bank_name="AI Test Community Bank",
+            region="Victoria",
+            public_email="bank@example.com",
+            contact_status="not_yet_contacted",
+        )
+
+        self.content_type = (
+            ContentType.objects.get_for_model(
+                self.bank
+            )
+        )
+
+        self.generate_url = reverse(
+            "generate_email_draft",
+            args=[
+                self.content_type.pk,
+                self.bank.pk,
+            ],
+        )
+
+        self.client.force_login(
+            self.user
+        )
+
+    def create_opportunity(
+        self,
+        status="not_yet_contacted",
+    ):
+        return Opportunity.objects.create(
+            content_type=self.content_type,
+            object_id=self.bank.pk,
+            status=status,
+        )
+
+    def create_draft(
+        self,
+        workflow_status="draft",
+        opportunity=None,
+    ):
+        if opportunity is None:
+            opportunity = self.create_opportunity()
+
+        return EmailDraft.objects.create(
+            opportunity=opportunity,
+            subject="Test Subject",
+            body="Test email body.",
+            outreach_purpose=(
+                "Explore a possible community collaboration."
+            ),
+            workflow_status=workflow_status,
+            generation_status="success",
+            requested_by=self.user,
+            trigger_source="manual",
+        )
+
+    @patch(
+        "outreach.views.generate_outreach_email"
+    )
+    def test_successful_generation_creates_draft_and_audit_log(
+        self,
+        mock_generate,
+    ):
+        mock_generate.return_value = (
+            "Generated Subject",
+            "Generated email body.",
+        )
+
+        response = self.client.post(
+            self.generate_url,
+            {
+                "outreach_purpose": (
+                    "Explore a possible community collaboration."
+                )
+            },
+        )
+
+        self.assertEqual(
+            response.status_code,
+            302,
+        )
+
+        draft = EmailDraft.objects.get()
+
+        self.assertEqual(
+            draft.subject,
+            "Generated Subject",
+        )
+
+        self.assertEqual(
+            draft.body,
+            "Generated email body.",
+        )
+
+        self.assertEqual(
+            draft.workflow_status,
+            "draft",
+        )
+
+        self.assertEqual(
+            draft.generation_status,
+            "success",
+        )
+
+        self.assertEqual(
+            draft.trigger_source,
+            "manual",
+        )
+
+        self.assertEqual(
+            draft.requested_by,
+            self.user,
+        )
+
+        log = EmailGenerationLog.objects.get()
+
+        self.assertEqual(
+            log.status,
+            "success",
+        )
+
+        self.assertEqual(
+            log.trigger_source,
+            "manual",
+        )
+
+        self.bank.refresh_from_db()
+
+        self.assertEqual(
+            self.bank.contact_status,
+            "not_yet_contacted",
+        )
+
+    @patch(
+        "outreach.views.generate_outreach_email"
+    )
+    def test_generation_failure_does_not_create_draft(
+        self,
+        mock_generate,
+    ):
+        mock_generate.side_effect = RuntimeError(
+            "Test AI failure"
+        )
+
+        response = self.client.post(
+            self.generate_url,
+            {
+                "outreach_purpose": (
+                    "Explore community collaboration."
+                )
+            },
+            follow=True,
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
+
+        self.assertFalse(
+            EmailDraft.objects.exists()
+        )
+
+        log = EmailGenerationLog.objects.get()
+
+        self.assertEqual(
+            log.status,
+            "failed",
+        )
+
+        self.assertIn(
+            "RuntimeError",
+            log.error_message,
+        )
+
+        self.bank.refresh_from_db()
+
+        self.assertEqual(
+            self.bank.contact_status,
+            "not_yet_contacted",
+        )
+
+    def test_timeout_is_recorded_as_timed_out(self):
+
+        class FakeAPIError(Exception):
+
+            def __init__(self, code):
+                super().__init__(
+                    f"API error {code}"
+                )
+                self.code = code
+
+        with patch(
+            "outreach.views.genai_errors.APIError",
+            FakeAPIError,
+        ):
+            with patch(
+                "outreach.views.generate_outreach_email",
+                side_effect=FakeAPIError(504),
+            ):
+                response = self.client.post(
+                    self.generate_url,
+                    {
+                        "outreach_purpose": (
+                            "Explore community collaboration."
+                        )
+                    },
+                    follow=True,
+                )
+
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
+
+        self.assertFalse(
+            EmailDraft.objects.exists()
+        )
+
+        log = EmailGenerationLog.objects.get()
+
+        self.assertEqual(
+            log.status,
+            "timed_out",
+        )
+
+    @patch(
+        "outreach.views.generate_outreach_email"
+    )
+    def test_do_not_contact_blocks_generation(
+        self,
+        mock_generate,
+    ):
+        self.create_opportunity(
+            status="do_not_contact"
+        )
+
+        response = self.client.post(
+            self.generate_url,
+            {
+                "outreach_purpose": (
+                    "Explore community collaboration."
+                )
+            },
+            follow=True,
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
+
+        mock_generate.assert_not_called()
+
+        self.assertFalse(
+            EmailDraft.objects.exists()
+        )
+
+        self.assertContains(
+            response,
+            "Do Not Contact",
+        )
+
+    @patch(
+        "outreach.views.generate_outreach_email"
+    )
+    def test_rate_limit_blocks_generation(
+        self,
+        mock_generate,
+    ):
+        for _ in range(5):
+            EmailGenerationLog.objects.create(
+                content_type=self.content_type,
+                object_id=self.bank.pk,
+                requested_by=self.user,
+                trigger_source="manual",
+                status="failed",
+                error_message="Rate limit test",
+            )
+
+        response = self.client.post(
+            self.generate_url,
+            {
+                "outreach_purpose": (
+                    "Explore community collaboration."
+                )
+            },
+            follow=True,
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
+
+        mock_generate.assert_not_called()
+
+        self.assertFalse(
+            EmailDraft.objects.exists()
+        )
+
+        self.assertContains(
+            response,
+            "Too many email generation requests",
+        )
+
+    @patch(
+        "outreach.views.generate_outreach_email"
+    )
+    def test_missing_email_blocks_generation(
+        self,
+        mock_generate,
+    ):
+        self.bank.public_email = ""
+
+        self.bank.save(
+            update_fields=[
+                "public_email",
+            ]
+        )
+
+        response = self.client.post(
+            self.generate_url,
+            {
+                "outreach_purpose": (
+                    "Explore community collaboration."
+                )
+            },
+            follow=True,
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
+
+        mock_generate.assert_not_called()
+
+        self.assertFalse(
+            EmailDraft.objects.exists()
+        )
+
+        self.assertContains(
+            response,
+            "A valid recipient email is required",
+        )
+
+    @patch(
+        "outreach.views.generate_outreach_email"
+    )
+    def test_user_without_permission_cannot_generate(
+        self,
+        mock_generate,
+    ):
+        self.user.user_permissions.clear()
+
+        response = self.client.post(
+            self.generate_url,
+            {
+                "outreach_purpose": (
+                    "Explore community collaboration."
+                )
+            },
+        )
+
+        self.assertEqual(
+            response.status_code,
+            302,
+        )
+
+        mock_generate.assert_not_called()
+
+        self.assertFalse(
+            EmailDraft.objects.exists()
+        )
+
+    def test_submit_draft_for_review(self):
+        draft = self.create_draft()
+
+        url = reverse(
+            "submit_email_draft_for_review",
+            args=[
+                draft.draft_id,
+            ],
+        )
+
+        response = self.client.post(
+            url
+        )
+
+        self.assertEqual(
+            response.status_code,
+            302,
+        )
+
+        draft.refresh_from_db()
+
+        self.assertEqual(
+            draft.workflow_status,
+            "pending_review",
+        )
+
+        self.bank.refresh_from_db()
+
+        self.assertEqual(
+            self.bank.contact_status,
+            "not_yet_contacted",
+        )
+
+    def test_reject_returns_draft_for_editing(self):
+        draft = self.create_draft(
+            workflow_status="pending_review"
+        )
+
+        url = reverse(
+            "reject_email_draft",
+            args=[
+                draft.draft_id,
+            ],
+        )
+
+        response = self.client.post(
+            url
+        )
+
+        self.assertEqual(
+            response.status_code,
+            302,
+        )
+
+        draft.refresh_from_db()
+
+        self.assertEqual(
+            draft.workflow_status,
+            "draft",
+        )
+
+    def test_pending_draft_can_be_approved(self):
+        draft = self.create_draft(
+            workflow_status="pending_review"
+        )
+
+        url = reverse(
+            "approve_email_draft",
+            args=[
+                draft.draft_id,
+            ],
+        )
+
+        response = self.client.post(
+            url
+        )
+
+        self.assertEqual(
+            response.status_code,
+            302,
+        )
+
+        draft.refresh_from_db()
+
+        self.assertEqual(
+            draft.workflow_status,
+            "approved",
+        )
+
+        self.bank.refresh_from_db()
+
+        self.assertEqual(
+            self.bank.contact_status,
+            "not_yet_contacted",
+        )
+
+    def test_do_not_contact_blocks_approval(self):
+        opportunity = self.create_opportunity(
+            status="do_not_contact"
+        )
+
+        draft = self.create_draft(
+            workflow_status="pending_review",
+            opportunity=opportunity,
+        )
+
+        url = reverse(
+            "approve_email_draft",
+            args=[
+                draft.draft_id,
+            ],
+        )
+
+        response = self.client.post(
+            url,
+            follow=True,
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
+
+        draft.refresh_from_db()
+
+        self.assertEqual(
+            draft.workflow_status,
+            "pending_review",
+        )
+
+        self.assertContains(
+            response,
+            "Do Not Contact",
+        )
+
+    def test_approved_draft_cannot_be_edited(self):
+        draft = self.create_draft(
+            workflow_status="approved"
+        )
+
+        original_subject = draft.subject
+        original_body = draft.body
+
+        url = reverse(
+            "update_email_draft",
+            args=[
+                draft.draft_id,
+            ],
+        )
+
+        response = self.client.post(
+            url,
+            {
+                "subject": "Changed Subject",
+                "body": "Changed body.",
+            },
+        )
+
+        self.assertEqual(
+            response.status_code,
+            302,
+        )
+
+        draft.refresh_from_db()
+
+        self.assertEqual(
+            draft.subject,
+            original_subject,
+        )
+
+        self.assertEqual(
+            draft.body,
+            original_body,
+        )
+
+        self.assertEqual(
+            draft.workflow_status,
+            "approved",
         )

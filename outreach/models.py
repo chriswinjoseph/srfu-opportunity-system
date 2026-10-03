@@ -479,7 +479,6 @@ class Contact(models.Model):
 
     def __str__(self):
         name = self.contact_name or "Unnamed contact"
-
         return f"{name} @ {self.organisation}"
 
 
@@ -681,4 +680,63 @@ class EmailDraft(models.Model):
         return (
             f"{self.draft_id} - "
             f"{self.workflow_status}"
+        )
+
+
+# ---------------------------------------------------------
+# AI Email Generation Audit Log
+# ---------------------------------------------------------
+
+class EmailGenerationLog(models.Model):
+    STATUS_CHOICES = [
+        ("success", "Success"),
+        ("failed", "Failed"),
+        ("timed_out", "Timed Out"),
+    ]
+
+    content_type = models.ForeignKey(
+        ContentType,
+        on_delete=models.CASCADE,
+    )
+
+    object_id = models.PositiveIntegerField()
+
+    opportunity = models.ForeignKey(
+        Opportunity,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="generation_logs",
+    )
+
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="email_generation_logs",
+    )
+
+    trigger_source = models.CharField(
+        max_length=20,
+        default="manual",
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+    )
+
+    error_message = models.TextField(
+        blank=True,
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    def __str__(self):
+        return (
+            f"Email generation {self.status} "
+            f"for object {self.object_id}"
         )

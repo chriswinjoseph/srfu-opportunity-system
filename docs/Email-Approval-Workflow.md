@@ -319,7 +319,7 @@ The functional requirements do not clearly answer the following scenarios:
 
 ## 8. Final Expected Behaviour
 
-A draft email cannot be sent until an authorised approver has reviewed and approved the exact version being sent. Rejected drafts return for correction with a clear reason and must be submitted again. Any material change to a submitted or approved draft invalidates its previous approval.
+A draft email cannot be sent until an authorised approver has reviewed and approved the exact version being sent. Rejected drafts return for correction with a clear reason and must be submitted again. Any material change to a submitted or approved draft invalidates its previous approval.git 
 
 Unauthorised users cannot approve, reject or send drafts. If no approver is available, the draft remains pending and unsent. Approval alone does not change the organisation’s contact status.
 

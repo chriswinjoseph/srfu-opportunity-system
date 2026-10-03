@@ -1,6 +1,9 @@
+import logging
 import re
+
+from datetime import timedelta
 from difflib import SequenceMatcher
-from .services import generate_outreach_email
+from google.genai import errors as genai_errors
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -10,8 +13,10 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.views.decorators.http import require_GET, require_POST
 from django.utils import timezone
+from django.views.decorators.http import require_GET, require_POST
+
+from .services import generate_outreach_email
 
 from .forms import BankForm, BranchForm, ClubForm
 from .models import (
@@ -20,11 +25,15 @@ from .models import (
     Club,
     Opportunity,
     EmailDraft,
+    EmailGenerationLog,
 )
 from .status_transitions import (
     InvalidStatusTransition,
     record_positive_response,
 )
+
+
+logger = logging.getLogger(__name__)
 
 CONTACT_STATUS_LABELS = {
     "not_yet_contacted": "Not Yet Contacted",
@@ -1218,7 +1227,7 @@ def generate_email_draft(
     ):
         messages.error(
             request,
-            "You do not have permission to generate email drafts."
+            "You do not have permission to generate email drafts.",
         )
 
         return redirect(
@@ -1256,7 +1265,10 @@ def generate_email_draft(
     if not organisation.public_email:
         messages.error(
             request,
-            "A valid recipient email is required before a draft can be generated."
+            (
+                "A valid recipient email is required "
+                "before a draft can be generated."
+            ),
         )
 
         return redirect(
@@ -1268,7 +1280,7 @@ def generate_email_draft(
     if not outreach_purpose:
         messages.error(
             request,
-            "Please provide the purpose of the outreach."
+            "Please provide the purpose of the outreach.",
         )
 
         return redirect(
@@ -1286,17 +1298,17 @@ def generate_email_draft(
         .first()
     )
 
+    # Do Not Contact blocks draft generation.
     if (
         latest_opportunity
-        and latest_opportunity.status
-        == "do_not_contact"
+        and latest_opportunity.status == "do_not_contact"
     ):
         messages.error(
             request,
             (
                 "Email generation is unavailable because "
                 "this organisation is marked Do Not Contact."
-            )
+            ),
         )
 
         return redirect(
@@ -1305,6 +1317,36 @@ def generate_email_draft(
             object_id=object_id,
         )
 
+    # ---------------------------------------------------------
+    # Rate limiting
+    # Maximum 5 AI generation attempts per user in 5 minutes.
+    # ---------------------------------------------------------
+
+    rate_limit_start = timezone.now() - timedelta(
+        minutes=5
+    )
+
+    recent_attempts = EmailGenerationLog.objects.filter(
+        requested_by=request.user,
+        created_at__gte=rate_limit_start,
+    ).count()
+
+    if recent_attempts >= 5:
+        messages.error(
+            request,
+            (
+                "Too many email generation requests were made recently. "
+                "Please wait a few minutes and try again."
+            ),
+        )
+
+        return redirect(
+            "organisation_detail",
+            content_type_id=content_type_id,
+            object_id=object_id,
+        )
+
+    # Prevent another generation if one is already processing.
     processing_exists = EmailDraft.objects.filter(
         opportunity__content_type=content_type,
         opportunity__object_id=object_id,
@@ -1314,7 +1356,10 @@ def generate_email_draft(
     if processing_exists:
         messages.error(
             request,
-            "An email draft generation request is already processing."
+            (
+                "An email draft generation request "
+                "is already processing."
+            ),
         )
 
         return redirect(
@@ -1366,13 +1411,71 @@ def generate_email_draft(
             ) or "",
         )
 
-    except Exception:
-        messages.error(
-            request,
-            (
+    except genai_errors.APIError as error:
+        logger.exception(
+            "Gemini API error while generating email draft "
+            "for organisation '%s'.",
+            organisation_name,
+        )
+
+        error_code = getattr(
+            error,
+            "code",
+            None,
+        )
+
+        if error_code in {
+            408,
+            504,
+        }:
+            audit_status = "timed_out"
+        else:
+            audit_status = "failed"
+
+        EmailGenerationLog.objects.create(
+            content_type=content_type,
+            object_id=object_id,
+            opportunity=latest_opportunity,
+            requested_by=request.user,
+            trigger_source="manual",
+            status=audit_status,
+            error_message=(
+                f"Gemini API error "
+                f"({error_code or 'unknown'})."
+            ),
+        )
+
+        if error_code in {
+            408,
+            429,
+            500,
+            502,
+            503,
+            504,
+        }:
+            message = (
+                "The AI service is temporarily unavailable or busy. "
+                "Please try again shortly."
+            )
+
+        elif error_code in {
+            401,
+            403,
+        }:
+            message = (
+                "The AI service could not be accessed. "
+                "Please contact an administrator."
+            )
+
+        else:
+            message = (
                 "The email draft could not be generated. "
                 "Please try again."
             )
+
+        messages.error(
+            request,
+            message,
         )
 
         return redirect(
@@ -1381,8 +1484,41 @@ def generate_email_draft(
             object_id=object_id,
         )
 
-    # Only create the opportunity after
-    # Gemini successfully returns a draft.
+    except Exception as error:
+        logger.exception(
+            "Unexpected error while generating email draft "
+            "for organisation '%s'.",
+            organisation_name,
+        )
+
+        EmailGenerationLog.objects.create(
+            content_type=content_type,
+            object_id=object_id,
+            opportunity=latest_opportunity,
+            requested_by=request.user,
+            trigger_source="manual",
+            status="failed",
+            error_message=(
+                "Unexpected generation error: "
+                f"{type(error).__name__}"
+            ),
+        )
+
+        messages.error(
+            request,
+            (
+                "An unexpected error occurred while generating "
+                "the email draft. Please try again."
+            ),
+        )
+
+        return redirect(
+            "organisation_detail",
+            content_type_id=content_type_id,
+            object_id=object_id,
+        )
+
+    # Create an opportunity only after AI generation succeeds.
     if latest_opportunity is None:
         latest_opportunity = Opportunity.objects.create(
             content_type=content_type,
@@ -1401,12 +1537,23 @@ def generate_email_draft(
         trigger_source="manual",
     )
 
+    EmailGenerationLog.objects.create(
+        content_type=content_type,
+        object_id=object_id,
+        opportunity=latest_opportunity,
+        requested_by=request.user,
+        trigger_source="manual",
+        status="success",
+        error_message="",
+    )
+
     messages.success(
         request,
         (
             "Draft generated successfully. "
-            "Review and edit the email before submitting it for approval."
-        )
+            "Review and edit the email before "
+            "submitting it for approval."
+        ),
     )
 
     return redirect(
@@ -1414,6 +1561,7 @@ def generate_email_draft(
         content_type_id=content_type_id,
         object_id=object_id,
     )
+
 @login_required
 @require_POST
 def update_email_draft(request, draft_id):
@@ -1480,6 +1628,192 @@ def update_email_draft(request, draft_id):
     messages.success(
         request,
         "Draft changes saved successfully."
+    )
+
+    return redirect(
+        "organisation_detail",
+        content_type_id=draft.opportunity.content_type_id,
+        object_id=draft.opportunity.object_id,
+    )
+@login_required
+@require_POST
+def submit_email_draft_for_review(request, draft_id):
+    if not request.user.has_perm(
+        "outreach.generate_emaildraft"
+    ):
+        messages.error(
+            request,
+            "You do not have permission to submit email drafts."
+        )
+
+        return redirect("outreach_dashboard")
+
+    draft = get_object_or_404(
+        EmailDraft,
+        draft_id=draft_id,
+    )
+
+    # Do Not Contact must block the workflow.
+    if draft.opportunity.status == "do_not_contact":
+        messages.error(
+            request,
+            "This organisation is marked Do Not Contact."
+        )
+
+        return redirect(
+            "organisation_detail",
+            content_type_id=draft.opportunity.content_type_id,
+            object_id=draft.opportunity.object_id,
+        )
+
+    # Only a normal draft can be submitted.
+    if draft.workflow_status != "draft":
+        messages.error(
+            request,
+            "Only drafts can be submitted for approval."
+        )
+
+        return redirect(
+            "organisation_detail",
+            content_type_id=draft.opportunity.content_type_id,
+            object_id=draft.opportunity.object_id,
+        )
+
+    # Subject and body must exist.
+    if not draft.subject.strip() or not draft.body.strip():
+        messages.error(
+            request,
+            "Subject and email body are required before submission."
+        )
+
+        return redirect(
+            "organisation_detail",
+            content_type_id=draft.opportunity.content_type_id,
+            object_id=draft.opportunity.object_id,
+        )
+
+    draft.workflow_status = "pending_review"
+
+    draft.save(
+        update_fields=[
+            "workflow_status",
+            "updated_at",
+        ]
+    )
+
+    messages.success(
+        request,
+        "Draft submitted for approval successfully."
+    )
+
+    return redirect(
+        "organisation_detail",
+        content_type_id=draft.opportunity.content_type_id,
+        object_id=draft.opportunity.object_id,
+    )
+@login_required
+@require_POST
+def approve_email_draft(request, draft_id):
+    if not request.user.has_perm(
+        "outreach.change_emaildraft"
+    ):
+        messages.error(
+            request,
+            "You do not have permission to approve email drafts."
+        )
+        return redirect("outreach_dashboard")
+
+    draft = get_object_or_404(
+        EmailDraft,
+        draft_id=draft_id,
+    )
+
+    if draft.opportunity.status == "do_not_contact":
+        messages.error(
+            request,
+            "This organisation is marked Do Not Contact."
+        )
+
+        return redirect(
+            "organisation_detail",
+            content_type_id=draft.opportunity.content_type_id,
+            object_id=draft.opportunity.object_id,
+        )
+
+    if draft.workflow_status != "pending_review":
+        messages.error(
+            request,
+            "Only drafts pending review can be approved."
+        )
+
+        return redirect(
+            "organisation_detail",
+            content_type_id=draft.opportunity.content_type_id,
+            object_id=draft.opportunity.object_id,
+        )
+
+    draft.workflow_status = "approved"
+
+    draft.save(
+        update_fields=[
+            "workflow_status",
+            "updated_at",
+        ]
+    )
+
+    messages.success(
+        request,
+        "Draft approved successfully."
+    )
+
+    return redirect(
+        "organisation_detail",
+        content_type_id=draft.opportunity.content_type_id,
+        object_id=draft.opportunity.object_id,
+    )
+
+
+@login_required
+@require_POST
+def reject_email_draft(request, draft_id):
+    if not request.user.has_perm(
+        "outreach.change_emaildraft"
+    ):
+        messages.error(
+            request,
+            "You do not have permission to reject email drafts."
+        )
+        return redirect("outreach_dashboard")
+
+    draft = get_object_or_404(
+        EmailDraft,
+        draft_id=draft_id,
+    )
+
+    if draft.workflow_status != "pending_review":
+        messages.error(
+            request,
+            "Only drafts pending review can be rejected."
+        )
+
+        return redirect(
+            "organisation_detail",
+            content_type_id=draft.opportunity.content_type_id,
+            object_id=draft.opportunity.object_id,
+        )
+
+    draft.workflow_status = "draft"
+
+    draft.save(
+        update_fields=[
+            "workflow_status",
+            "updated_at",
+        ]
+    )
+
+    messages.success(
+        request,
+        "Draft rejected and returned for editing."
     )
 
     return redirect(
