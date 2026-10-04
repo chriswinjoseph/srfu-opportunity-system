@@ -35,11 +35,16 @@ urlpatterns = [
     ),
 
     path(
-        "organisation/<int:content_type_id>/<int:object_id>/generate-draft/",
-        views.generate_email_draft,
-        name="generate_email_draft",
-    ),
+    "organisations/<int:content_type_id>/<int:object_id>/generate-email-draft/",
+    views.generate_email_draft,
+    name="generate_email_draft",
+),
 
+path(
+    "organisations/<int:content_type_id>/<int:object_id>/manual-email-draft/",
+    views.create_manual_email_draft,
+    name="create_manual_email_draft",
+),
     path(
         "email-draft/<uuid:draft_id>/update/",
         views.update_email_draft,
@@ -53,20 +58,26 @@ urlpatterns = [
     ),
 
     path(
-        "email-draft/<uuid:draft_id>/approve/",
-        views.approve_email_draft,
-        name="approve_email_draft",
-    ),
+    "email-draft/<uuid:draft_id>/approve/",
+    views.approve_email_draft,
+    name="approve_email_draft",
+),
 
-    path(
-        "email-draft/<uuid:draft_id>/reject/",
-        views.reject_email_draft,
-        name="reject_email_draft",
-    ),
+path(
+    "email-draft/<uuid:draft_id>/reject/",
+    views.reject_email_draft,
+    name="reject_email_draft",
+),
 
-    path(
-        "opportunities/<int:opportunity_id>/positive-response/",
-        views.record_positive_response_api,
-        name="record_positive_response_api",
-    ),
+path(
+    "email-draft/<uuid:draft_id>/sent/",
+    views.mark_email_draft_sent,
+    name="mark_email_draft_sent",
+),
+
+path(
+    "opportunities/<int:opportunity_id>/positive-response/",
+    views.record_positive_response_api,
+    name="record_positive_response_api",
+),
 ]

@@ -352,9 +352,13 @@
             '[data-field="status-label"]'
         ).textContent = getStatusLabel(row);
 
-        card.querySelector(
-            '[data-field="region"]'
-        ).textContent = getDisplayValue(row.region);
+        const stateField = card.querySelector(
+    '[data-field="state"], [data-field="region"]'
+);
+
+if (stateField) {
+    stateField.textContent = getDisplayValue(row.state);
+}
 
         card.querySelector(
             '[data-field="email"]'

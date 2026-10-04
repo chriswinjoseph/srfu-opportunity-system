@@ -112,6 +112,16 @@ Organisation Details | Safe Roads For Us
         font-size: 17px;
     }
 
+    .draft-card select {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 12px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        font-size: 17px;
+        background: #ffffff;
+    }
+
     .draft-card textarea {
         width: 100%;
         min-height: 220px;
@@ -124,11 +134,14 @@ Organisation Details | Safe Roads For Us
         resize: vertical;
     }
 
+
     .generate-draft-button,
     .save-draft-button,
     .submit-review-button,
     .approve-draft-button,
-    .reject-draft-button {
+    .reject-draft-button,
+    .sent-draft-button,
+    .regenerate-draft-button {
         margin-top: 16px;
         color: #ffffff;
         border: none;
@@ -156,13 +169,30 @@ Organisation Details | Safe Roads For Us
         background: #b91c1c;
     }
 
+    .sent-draft-button {
+        background: #2563eb;
+    }
+
+    .regenerate-draft-button {
+        background: #7c3aed;
+    }
+
     .generate-draft-button:hover,
     .save-draft-button:hover,
     .submit-review-button:hover,
     .approve-draft-button:hover,
-    .reject-draft-button:hover {
+    .reject-draft-button:hover,
+    .sent-draft-button:hover,
+    .regenerate-draft-button:hover {
         opacity: 0.92;
     }
+
+    .generate-draft-button:disabled,
+    .regenerate-draft-button:disabled {
+        opacity: 0.65;
+        cursor: not-allowed;
+    }
+
 
     .review-actions {
         margin-top: 12px;
@@ -175,6 +205,7 @@ Organisation Details | Safe Roads For Us
         margin: 0;
     }
 
+
     .draft-warning {
         margin-top: 15px;
         padding: 14px;
@@ -183,6 +214,7 @@ Organisation Details | Safe Roads For Us
         border-radius: 6px;
         font-size: 16px;
     }
+
 
     .history-card {
         background: #ffffff;
@@ -205,6 +237,7 @@ Organisation Details | Safe Roads For Us
         font-size: 18px;
     }
 
+
     .positive-response-button {
         margin-top: 16px;
         background: #5b3cc4;
@@ -221,6 +254,7 @@ Organisation Details | Safe Roads For Us
         opacity: 0.92;
     }
 
+
     .empty-history {
         background: #f8fafc;
         border: 1px solid #e2e8f0;
@@ -229,37 +263,40 @@ Organisation Details | Safe Roads For Us
         font-size: 18px;
         line-height: 1.6;
     }
+
+
     .message {
-    padding: 14px;
-    margin-bottom: 20px;
-    border: 1px solid;
-    border-radius: 6px;
-    font-size: 17px;
-}
+        padding: 14px;
+        margin-bottom: 20px;
+        border: 1px solid;
+        border-radius: 6px;
+        font-size: 17px;
+    }
 
-.message.success {
-    background: #ecfdf5;
-    border-color: #86efac;
-    color: #166534;
-}
+    .message.success {
+        background: #ecfdf5;
+        border-color: #86efac;
+        color: #166534;
+    }
 
-.message.error {
-    background: #fef2f2;
-    border-color: #fca5a5;
-    color: #991b1b;
-}
+    .message.error {
+        background: #fef2f2;
+        border-color: #fca5a5;
+        color: #991b1b;
+    }
 
-.message.warning {
-    background: #fffbeb;
-    border-color: #fcd34d;
-    color: #92400e;
-}
+    .message.warning {
+        background: #fffbeb;
+        border-color: #fcd34d;
+        color: #92400e;
+    }
 
-.message.info {
-    background: #eff6ff;
-    border-color: #93c5fd;
-    color: #1e40af;
-}
+    .message.info {
+        background: #eff6ff;
+        border-color: #93c5fd;
+        color: #1e40af;
+    }
+
 
     @media (max-width: 700px) {
 
@@ -306,15 +343,15 @@ Organisation Details | Safe Roads For Us
 
     {% if messages %}
 
-    {% for message in messages %}
+        {% for message in messages %}
 
-        <div class="message {{ message.tags }}">
-            {{ message }}
-        </div>
+            <div class="message {{ message.tags }}">
+                {{ message }}
+            </div>
 
-    {% endfor %}
+        {% endfor %}
 
-{% endif %}
+    {% endif %}
 
 
     <a
@@ -324,6 +361,10 @@ Organisation Details | Safe Roads For Us
         &larr; Back to dashboard
     </a>
 
+
+    <!-- ===================================================== -->
+    <!-- ORGANISATION DETAILS -->
+    <!-- ===================================================== -->
 
     <section class="detail-card">
 
@@ -429,7 +470,13 @@ Organisation Details | Safe Roads For Us
     </section>
 
 
+
     {% if perms.outreach.generate_emaildraft %}
+
+
+        <!-- ===================================================== -->
+        <!-- AI EMAIL DRAFT -->
+        <!-- ===================================================== -->
 
         <section class="draft-card">
 
@@ -438,7 +485,7 @@ Organisation Details | Safe Roads For Us
             </h2>
 
             <p>
-                Create a draft outreach email for this organisation.
+                Create a draft outreach email for this organisation using AI.
             </p>
 
 
@@ -447,9 +494,42 @@ Organisation Details | Safe Roads For Us
                 <form
                     method="post"
                     action="{% url 'generate_email_draft' content_type_id object_id %}"
+                    id="generate-draft-form"
                 >
 
                     {% csrf_token %}
+
+
+                    <label for="template-id">
+                        Email Template
+                    </label>
+
+                    <select
+                        id="template-id"
+                        name="template_id"
+                        required
+                    >
+
+                        <option value="">
+                            Select an approved template
+                        </option>
+
+                        {% for template in active_templates %}
+
+                            <option value="{{ template.id }}">
+                                {{ template.name }} - {{ template.version }}
+                            </option>
+
+                        {% empty %}
+
+                            <option value="" disabled>
+                                No approved templates are available
+                            </option>
+
+                        {% endfor %}
+
+                    </select>
+
 
                     <label for="outreach-purpose">
                         Outreach Purpose
@@ -462,30 +542,111 @@ Organisation Details | Safe Roads For Us
                         required
                     ></textarea>
 
+
                     <button
                         type="submit"
                         class="generate-draft-button"
+                        id="generate-draft-button"
                     >
                         Generate Draft
                     </button>
 
                 </form>
 
+
             {% else %}
 
                 <div class="draft-warning">
-
                     A public email address must be added before
-                    an email draft can be generated.
-
+                    an AI email draft can be generated.
                 </div>
 
             {% endif %}
 
         </section>
 
+
+
+        <!-- ===================================================== -->
+        <!-- MANUAL EMAIL DRAFT -->
+        <!-- ===================================================== -->
+
+        <section class="draft-card">
+
+            <h2>
+                Create Manual Email Draft
+            </h2>
+
+            <p>
+                Write the outreach email manually if AI generation is
+                unavailable or has failed repeatedly.
+            </p>
+
+
+            <form
+                method="post"
+                action="{% url 'create_manual_email_draft' content_type_id object_id %}"
+            >
+
+                {% csrf_token %}
+
+
+                <label for="manual-outreach-purpose">
+                    Outreach Purpose
+                </label>
+
+                <textarea
+                    id="manual-outreach-purpose"
+                    name="outreach_purpose"
+                    rows="3"
+                    placeholder="For example: Introduce Safe Roads For Us and discuss a possible community partnership."
+                ></textarea>
+
+
+                <label for="manual-subject">
+                    Subject
+                </label>
+
+                <input
+                    type="text"
+                    id="manual-subject"
+                    name="subject"
+                    placeholder="Enter email subject"
+                    required
+                >
+
+
+                <label for="manual-body">
+                    Email Body
+                </label>
+
+                <textarea
+                    id="manual-body"
+                    name="body"
+                    rows="10"
+                    placeholder="Write the outreach email here..."
+                    required
+                ></textarea>
+
+
+                <button
+                    type="submit"
+                    class="save-draft-button"
+                >
+                    Create Manual Draft
+                </button>
+
+            </form>
+
+        </section>
+
     {% endif %}
 
+
+
+    <!-- ===================================================== -->
+    <!-- LATEST EMAIL DRAFT -->
+    <!-- ===================================================== -->
 
     {% if latest_draft %}
 
@@ -503,12 +664,44 @@ Organisation Details | Safe Roads For Us
 
 
             <p>
+                <strong>Version:</strong>
+                {{ latest_draft.version }}
+            </p>
+
+
+            <p>
                 <strong>Outreach Purpose:</strong>
                 {{ latest_draft.outreach_purpose }}
             </p>
 
 
+
+            <!-- =============================== -->
+            <!-- DRAFT -->
+            <!-- =============================== -->
+
             {% if latest_draft.workflow_status == "draft" and perms.outreach.generate_emaildraft %}
+
+
+                {% if latest_draft.is_incomplete %}
+
+                    <div class="draft-warning">
+
+                        <strong>
+                            This draft needs review before it can be submitted.
+                        </strong>
+
+                        {% if latest_draft.validation_issues %}
+
+                            <br>
+                            {{ latest_draft.validation_issues|linebreaksbr }}
+
+                        {% endif %}
+
+                    </div>
+
+                {% endif %}
+
 
                 <form
                     method="post"
@@ -516,6 +709,7 @@ Organisation Details | Safe Roads For Us
                 >
 
                     {% csrf_token %}
+
 
                     <label for="draft-subject">
                         Subject
@@ -569,7 +763,69 @@ Organisation Details | Safe Roads For Us
                 </form>
 
 
-            {% elif latest_draft.workflow_status == "pending_review" %}
+                <!-- ============================================= -->
+                <!-- REGENERATE AI DRAFT -->
+                <!-- ============================================= -->
+
+                {% if latest_draft.template %}
+
+                    <form
+                        method="post"
+                        action="{% url 'generate_email_draft' content_type_id object_id %}"
+                        id="regenerate-draft-form"
+                        style="margin-top: 12px;"
+                    >
+
+                        {% csrf_token %}
+
+
+                        <input
+                            type="hidden"
+                            name="template_id"
+                            value="{{ latest_draft.template.id }}"
+                        >
+
+
+                        <input
+                            type="hidden"
+                            name="outreach_purpose"
+                            value="{{ latest_draft.outreach_purpose }}"
+                        >
+
+
+                        <input
+                            type="hidden"
+                            name="regenerate"
+                            value="1"
+                        >
+
+
+                        <input
+                            type="hidden"
+                            name="confirm_regenerate"
+                            value="1"
+                        >
+
+
+                        <button
+                            type="submit"
+                            class="regenerate-draft-button"
+                            id="regenerate-draft-button"
+                        >
+                            Regenerate Draft
+                        </button>
+
+                    </form>
+
+                {% endif %}
+
+
+
+            <!-- =============================== -->
+            <!-- NEEDS APPROVING -->
+            <!-- =============================== -->
+
+            {% elif latest_draft.workflow_status == "needs_approving" %}
 
                 <p>
                     <strong>Subject:</strong>
@@ -590,6 +846,7 @@ Organisation Details | Safe Roads For Us
                 {% if perms.outreach.change_emaildraft %}
 
                     <div class="review-actions">
+
 
                         <form
                             method="post"
@@ -615,6 +872,19 @@ Organisation Details | Safe Roads For Us
 
                             {% csrf_token %}
 
+                            <label for="rejection-reason">
+                                Rejection Reason
+                            </label>
+
+                            <textarea
+                                id="rejection-reason"
+                                name="rejection_reason"
+                                rows="3"
+                                placeholder="Enter the reason for rejecting this draft..."
+                                required
+                            ></textarea>
+
+
                             <button
                                 type="submit"
                                 class="reject-draft-button"
@@ -624,12 +894,18 @@ Organisation Details | Safe Roads For Us
 
                         </form>
 
+
                     </div>
 
                 {% endif %}
 
 
-            {% else %}
+
+            <!-- =============================== -->
+            <!-- APPROVED -->
+            <!-- =============================== -->
+
+            {% elif latest_draft.workflow_status == "approved" %}
 
                 <p>
                     <strong>Subject:</strong>
@@ -646,12 +922,82 @@ Organisation Details | Safe Roads For Us
                     readonly
                 >{{ latest_draft.body }}</textarea>
 
+
+                {% if perms.outreach.change_emaildraft %}
+
+                    <form
+                        method="post"
+                        action="{% url 'mark_email_draft_sent' latest_draft.draft_id %}"
+                        style="margin-top: 12px;"
+                    >
+
+                        {% csrf_token %}
+
+                        <button
+                            type="submit"
+                            class="sent-draft-button"
+                        >
+                            Mark as Sent
+                        </button>
+
+                    </form>
+
+                {% endif %}
+
+
+
+            <!-- =============================== -->
+            <!-- REJECTED / SENT -->
+            <!-- =============================== -->
+
+            {% else %}
+
+
+                {% if latest_draft.workflow_status == "rejected" and latest_draft.rejection_reason %}
+
+                    <div class="draft-warning">
+
+                        <strong>
+                            Rejection Reason:
+                        </strong>
+
+                        <br>
+
+                        {{ latest_draft.rejection_reason }}
+
+                    </div>
+
+                {% endif %}
+
+
+                <p>
+                    <strong>Subject:</strong>
+                    {{ latest_draft.subject }}
+                </p>
+
+
+                <label for="latest-draft-body">
+                    Email Body
+                </label>
+
+                <textarea
+                    id="latest-draft-body"
+                    readonly
+                >{{ latest_draft.body }}</textarea>
+
+
             {% endif %}
+
 
         </section>
 
     {% endif %}
 
+
+
+    <!-- ===================================================== -->
+    <!-- OUTREACH HISTORY -->
+    <!-- ===================================================== -->
 
     <section>
 
@@ -668,6 +1014,7 @@ Organisation Details | Safe Roads For Us
                     <strong>Status:</strong>
                     {{ opp.get_status_display }}
                 </p>
+
 
                 <p>
                     <strong>Created:</strong>
@@ -725,6 +1072,88 @@ Organisation Details | Safe Roads For Us
 
     </section>
 
+
 </div>
+
+
+<script>
+
+    document.addEventListener(
+        "DOMContentLoaded",
+        function () {
+
+            // ---------------------------------------------
+            // Normal AI generation
+            // ---------------------------------------------
+
+            const generateForm = document.getElementById(
+                "generate-draft-form"
+            );
+
+            const generateButton = document.getElementById(
+                "generate-draft-button"
+            );
+
+            if (generateForm && generateButton) {
+
+                generateForm.addEventListener(
+                    "submit",
+                    function () {
+
+                        if (!generateForm.checkValidity()) {
+                            return;
+                        }
+
+                        generateButton.disabled = true;
+                        generateButton.textContent =
+                            "Generating draft...";
+                    }
+                );
+
+            }
+
+
+            // ---------------------------------------------
+            // AI regeneration
+            // ---------------------------------------------
+
+            const regenerateForm = document.getElementById(
+                "regenerate-draft-form"
+            );
+
+            const regenerateButton = document.getElementById(
+                "regenerate-draft-button"
+            );
+
+            if (regenerateForm && regenerateButton) {
+
+                regenerateForm.addEventListener(
+                    "submit",
+                    function (event) {
+
+                        const confirmed = window.confirm(
+                            "A new draft version will be created. " +
+                            "The current version will be preserved. " +
+                            "Do you want to continue?"
+                        );
+
+                        if (!confirmed) {
+                            event.preventDefault();
+                            return;
+                        }
+
+                        regenerateButton.disabled = true;
+
+                        regenerateButton.textContent =
+                            "Regenerating draft...";
+                    }
+                );
+
+            }
+
+        }
+    );
+
+</script>
 
 {% endblock %}

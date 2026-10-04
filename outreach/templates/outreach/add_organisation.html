@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -68,11 +67,9 @@
             line-height: 1.5;
         }
 
-        /* Success / error / warning banners */
-
         .ux-banner {
             width: fit-content;
-            max-width: 450px;
+            max-width: 500px;
             margin: 0 auto 20px;
             padding: 12px 18px;
             border-radius: 6px;
@@ -200,18 +197,6 @@
             color: #991b1b;
         }
 
-        /*
-         * Organisation preview.
-         */
-
-        .preview-heading {
-            margin-top: 25px;
-            margin-bottom: 8px;
-            text-align: center;
-            font-weight: 700;
-            font-size: 14px;
-        }
-
         .organisation-preview {
             margin-bottom: 8px;
             padding: 14px 16px;
@@ -220,6 +205,14 @@
             border-left: 5px solid #ef4444;
             border-radius: 6px;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+        }
+
+        .preview-heading {
+            margin-top: 25px;
+            margin-bottom: 8px;
+            text-align: center;
+            font-weight: 700;
+            font-size: 14px;
         }
 
         .organisation-preview-name {
@@ -231,7 +224,7 @@
         .preview-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 5px 20px;
+            gap: 7px 20px;
             font-size: 13px;
         }
 
@@ -250,11 +243,19 @@
 
         .button {
             min-width: 130px;
+            min-height: 42px;
             padding: 11px 18px;
             border-radius: 7px;
             font-size: 15px;
             font-weight: 600;
             cursor: pointer;
+
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+
+            text-decoration: none;
+            text-align: center;
         }
 
         .button-primary {
@@ -322,17 +323,12 @@
 
             <h1>Add Organisation</h1>
 
-
-            <!-- Permission error -->
-
             {% if permission_error %}
                 <div class="ux-banner ux-banner-error">
                     You don't have permission to add an organisation.
                 </div>
             {% endif %}
 
-
-            <!-- Exact duplicate -->
 
             {% if duplicate_organisation %}
                 <div class="ux-banner ux-banner-error">
@@ -341,16 +337,12 @@
             {% endif %}
 
 
-            <!-- Likely duplicate -->
-
             {% if likely_duplicate_organisation %}
                 <div class="ux-banner ux-banner-warning">
                     Possible duplicate found. Please review the matching organisation.
                 </div>
             {% endif %}
 
-
-            <!-- Successful creation -->
 
             {% if created_organisation %}
                 <div class="ux-banner ux-banner-success">
@@ -364,18 +356,20 @@
             </p>
 
 
-            <!-- Django system errors -->
-
             {% if messages %}
+
                 {% for message in messages %}
 
                     {% if message.tags == "error" %}
+
                         <div class="message error">
                             {{ message }}
                         </div>
+
                     {% endif %}
 
                 {% endfor %}
+
             {% endif %}
 
 
@@ -458,6 +452,13 @@
                 >
 
 
+                <!-- Hidden Django form fields -->
+
+                {% for hidden_field in form.hidden_fields %}
+                    {{ hidden_field }}
+                {% endfor %}
+
+
                 <!-- General validation errors -->
 
                 {% if form.non_field_errors %}
@@ -465,11 +466,9 @@
                     <div class="non-field-errors">
 
                         {% for error in form.non_field_errors %}
-
                             <div>
                                 {{ error }}
                             </div>
-
                         {% endfor %}
 
                     </div>
@@ -477,9 +476,9 @@
                 {% endif %}
 
 
-                <!-- Form fields -->
+                <!-- Visible form fields -->
 
-                {% for field in form %}
+                {% for field in form.visible_fields %}
 
                     <div class="form-group">
 
@@ -496,17 +495,22 @@
                         {{ field }}
 
                         {% if field.help_text %}
+
                             <span class="help-text">
                                 {{ field.help_text }}
                             </span>
+
                         {% endif %}
+
 
                         {% if field.errors %}
 
                             {% for error in field.errors %}
+
                                 <div class="field-error">
                                     {{ error }}
                                 </div>
+
                             {% endfor %}
 
                         {% endif %}
@@ -529,21 +533,17 @@
                         <div class="organisation-preview-name">
 
                             {% if organisation_type == "bank" %}
-
                                 {{ duplicate_organisation.bank_name }}
 
                             {% elif organisation_type == "branch" %}
-
                                 {{ duplicate_organisation.branch_name }}
 
                             {% elif organisation_type == "club" %}
-
                                 {{ duplicate_organisation.club_name }}
 
                             {% endif %}
 
                         </div>
-
 
                         <div class="preview-grid">
 
@@ -565,10 +565,10 @@
 
                             <div>
                                 <span class="preview-label">
-                                    Region:
+                                    State:
                                 </span>
 
-                                {{ duplicate_organisation.region|default:"-" }}
+                                {{ duplicate_organisation.state|default:"-" }}
                             </div>
 
                             <div>
@@ -588,213 +588,222 @@
 
                 <!-- Likely duplicate preview -->
 
-                <!-- Likely duplicate preview -->
+                {% if likely_duplicate_organisation %}
 
-{% if likely_duplicate_organisation %}
+                    <div class="preview-heading">
+                        Possible Matching Organisation
+                    </div>
 
-    <div class="preview-heading">
-        Possible Matching Organisation
-    </div>
+                    <div class="organisation-preview">
 
-    <div class="organisation-preview">
+                        <div class="organisation-preview-name">
 
-        <div class="organisation-preview-name">
+                            {% if organisation_type == "bank" %}
+                                {{ likely_duplicate_organisation.bank_name }}
 
-            {% if organisation_type == "bank" %}
-                {{ likely_duplicate_organisation.bank_name }}
+                            {% elif organisation_type == "branch" %}
+                                {{ likely_duplicate_organisation.branch_name }}
 
-            {% elif organisation_type == "branch" %}
-                {{ likely_duplicate_organisation.branch_name }}
+                            {% elif organisation_type == "club" %}
+                                {{ likely_duplicate_organisation.club_name }}
 
-            {% elif organisation_type == "club" %}
-                {{ likely_duplicate_organisation.club_name }}
+                            {% endif %}
 
-            {% endif %}
+                        </div>
+
+                        <div class="preview-grid">
+
+                            <div>
+                                <span class="preview-label">
+                                    Type:
+                                </span>
+
+                                {{ organisation_type|title }}
+                            </div>
+
+                            <div>
+                                <span class="preview-label">
+                                    Email:
+                                </span>
+
+                                {{ likely_duplicate_organisation.public_email|default:"-" }}
+                            </div>
+
+                            <div>
+                                <span class="preview-label">
+                                    State:
+                                </span>
+
+                                {{ likely_duplicate_organisation.state|default:"-" }}
+                            </div>
+
+                            <div>
+                                <span class="preview-label">
+                                    Contact Number:
+                                </span>
+
+                                {{ likely_duplicate_organisation.public_phone|default:"-" }}
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- Duplicate override reason -->
+
+                    <div
+                        class="form-group"
+                        style="margin-top: 25px;"
+                    >
+
+                        <label for="duplicate_override_reason">
+                            Reason for continuing
+                            <span class="required-mark">*</span>
+                        </label>
+
+                        <textarea
+                            id="duplicate_override_reason"
+                            name="duplicate_override_reason"
+                            placeholder="Explain why these are different organisations."
+                        >{{ duplicate_override_reason }}</textarea>
+
+                        <span class="help-text">
+                            Please explain why you believe this is a different organisation.
+                        </span>
+
+                        {% if override_reason_error %}
+
+                            <div class="field-error">
+                                {{ override_reason_error }}
+                            </div>
+
+                        {% endif %}
+
+                    </div>
+
+                {% endif %}
+
+
+                <!-- Newly created organisation preview -->
+
+                {% if created_organisation %}
+
+                    <div class="preview-heading">
+                        Added Organisation
+                    </div>
+
+                    <div class="organisation-preview">
+
+                        <div class="organisation-preview-name">
+
+                            {% if organisation_type == "bank" %}
+                                {{ created_organisation.bank_name }}
+
+                            {% elif organisation_type == "branch" %}
+                                {{ created_organisation.branch_name }}
+
+                            {% elif organisation_type == "club" %}
+                                {{ created_organisation.club_name }}
+
+                            {% endif %}
+
+                        </div>
+
+                        <div class="preview-grid">
+
+                            <div>
+                                <span class="preview-label">
+                                    Type:
+                                </span>
+
+                                {{ organisation_type|title }}
+                            </div>
+
+                            <div>
+                                <span class="preview-label">
+                                    Email:
+                                </span>
+
+                                {{ created_organisation.public_email|default:"-" }}
+                            </div>
+
+                            <div>
+                                <span class="preview-label">
+                                    State:
+                                </span>
+
+                                {{ created_organisation.state|default:"-" }}
+                            </div>
+
+                            <div>
+                                <span class="preview-label">
+                                    Contact Number:
+                                </span>
+
+                                {{ created_organisation.public_phone|default:"-" }}
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                {% endif %}
+
+
+                <!-- Buttons -->
+
+                {% if likely_duplicate_organisation %}
+
+                    <div class="button-row">
+
+                        <a
+                            href="{% url 'add_organisation' %}?type={{ organisation_type }}"
+                            class="button button-secondary"
+                        >
+                            Cancel
+                        </a>
+
+                        <button
+                            type="submit"
+                            name="confirm_likely_duplicate"
+                            value="1"
+                            class="button button-primary"
+                        >
+                            Continue Anyway
+                        </button>
+
+                    </div>
+
+                {% else %}
+
+                    <div class="button-row">
+
+                        <a
+                            href="{% url 'add_organisation' %}?type={{ organisation_type }}"
+                            class="button button-secondary"
+                        >
+                            Clear
+                        </a>
+
+                        <button
+                            type="submit"
+                            class="button button-primary"
+                        >
+                            Submit
+                        </button>
+
+                    </div>
+
+                {% endif %}
+
+            </form>
 
         </div>
 
-        <div class="preview-grid">
-
-            <div>
-                <span class="preview-label">
-                    Type:
-                </span>
-
-                {{ organisation_type|title }}
-            </div>
-
-            <div>
-                <span class="preview-label">
-                    Email:
-                </span>
-
-                {{ likely_duplicate_organisation.public_email|default:"-" }}
-            </div>
-
-            <div>
-                <span class="preview-label">
-                    Region:
-                </span>
-
-                {{ likely_duplicate_organisation.region|default:"-" }}
-            </div>
-
-            <div>
-                <span class="preview-label">
-                    Contact Number:
-                </span>
-
-                {{ likely_duplicate_organisation.public_phone|default:"-" }}
-            </div>
-
-        </div>
-
     </div>
 
+</div>
 
-    <!-- Duplicate override reason -->
-
-    <div class="form-group" style="margin-top: 25px;">
-
-        <label for="duplicate_override_reason">
-            Reason for continuing
-            <span class="required-mark">*</span>
-        </label>
-
-        <textarea
-            id="duplicate_override_reason"
-            name="duplicate_override_reason"
-            placeholder="Explain why these are different organisations."
-        >{{ duplicate_override_reason }}</textarea>
-
-        <span class="help-text">
-            Please explain why you believe this is a different organisation.
-        </span>
-
-        {% if override_reason_error %}
-
-            <div class="field-error">
-                {{ override_reason_error }}
-            </div>
-
-        {% endif %}
-
-    </div>
-
-{% endif %}
-
-
-<!-- Newly-created organisation preview -->
-
-{% if created_organisation %}
-
-    <div class="preview-heading">
-        Added Organisation
-    </div>
-
-    <div class="organisation-preview">
-
-        <div class="organisation-preview-name">
-
-            {% if organisation_type == "bank" %}
-
-                {{ created_organisation.bank_name }}
-
-            {% elif organisation_type == "branch" %}
-
-                {{ created_organisation.branch_name }}
-
-            {% elif organisation_type == "club" %}
-
-                {{ created_organisation.club_name }}
-
-            {% endif %}
-
-        </div>
-
-        <div class="preview-grid">
-
-            <div>
-                <span class="preview-label">
-                    Type:
-                </span>
-
-                {{ organisation_type|title }}
-            </div>
-
-            <div>
-                <span class="preview-label">
-                    Email:
-                </span>
-
-                {{ created_organisation.public_email|default:"-" }}
-            </div>
-
-            <div>
-                <span class="preview-label">
-                    Region:
-                </span>
-
-                {{ created_organisation.region|default:"-" }}
-            </div>
-
-            <div>
-                <span class="preview-label">
-                    Contact Number:
-                </span>
-
-                {{ created_organisation.public_phone|default:"-" }}
-            </div>
-
-        </div>
-
-    </div>
-
-{% endif %}
-
-
-<!-- Buttons -->
-
-{% if likely_duplicate_organisation %}
-
-    <div class="button-row">
-
-        <button
-            type="reset"
-            class="button button-secondary"
-        >
-            Cancel
-        </button>
-
-        <button
-            type="submit"
-            name="confirm_likely_duplicate"
-            value="1"
-            class="button button-primary"
-        >
-            Continue Anyway
-        </button>
-
-    </div>
-
-{% else %}
-
-    <div class="button-row">
-
-        <button
-            type="reset"
-            class="button button-secondary"
-        >
-            Clear
-        </button>
-
-        <button
-            type="submit"
-            class="button button-primary"
-        >
-            Submit
-        </button>
-
-    </div>
-
-{% endif %}
+</body>
+</html>
