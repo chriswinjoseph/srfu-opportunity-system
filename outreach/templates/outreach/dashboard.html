@@ -122,14 +122,24 @@
         </section>
 
         <div class="sidebar-actions">
-            <button
-                class="secondary-button sidebar-button"
-                type="button"
-                disabled
-                title="Organisation scraping will be added in a future task."
-            >
-                Scrape Organisations
-            </button>
+            {% if perms.outreach.add_bank %}
+<form
+    method="post"
+    action="{% url 'scrape_organisations' %}"
+>
+    {% csrf_token %}
+
+    <button
+        class="secondary-button sidebar-button"
+        type="submit"
+        onclick="return confirm(
+            'Collect new organisations from the approved public sources?'
+        );"
+    >
+        Scrape Organisations
+    </button>
+</form>
+{% endif %}
 
             <a
                 class="primary-button sidebar-button"

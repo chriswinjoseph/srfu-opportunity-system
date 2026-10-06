@@ -6,6 +6,13 @@ import re
 
 
 from datetime import timedelta
+from io import StringIO
+
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required, permission_required
+from django.core.management import call_command
+from django.core.management.base import CommandError
+from django.shortcuts import redirect
 
 
 from difflib import SequenceMatcher
@@ -5446,3 +5453,59 @@ def record_external_outreach(
         content_type_id=content_type_id,
         object_id=object_id,
     )
+@login_required
+@permission_required(
+    "outreach.add_bank",
+    raise_exception=True,
+)
+def scrape_organisations(request):
+    """
+    Run the approved public-data organisation collectors.
+
+    Only runs from a POST request.
+    Existing organisations are skipped by the management commands.
+    """
+
+    if request.method != "POST":
+        return redirect("dashboard")
+
+    output = StringIO()
+
+    try:
+        # Community Banks - Victoria
+        call_command(
+            "scrape_banks",
+            region="Victoria",
+            stdout=output,
+        )
+
+        # Public sports clubs
+        call_command(
+            "scrape_clubs",
+            stdout=output,
+        )
+
+    except CommandError as exc:
+        messages.error(
+            request,
+            f"Organisation scraping failed: {exc}",
+        )
+
+        return redirect("dashboard")
+
+    except Exception as exc:
+        messages.error(
+            request,
+            f"Unable to complete organisation scraping: {exc}",
+        )
+
+        return redirect("dashboard")
+
+    messages.success(
+        request,
+        "Organisation scraping completed successfully. "
+        "New public organisations have been added and "
+        "existing records were skipped.",
+    )
+
+    return redirect("dashboard")

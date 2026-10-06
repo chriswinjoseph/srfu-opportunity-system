@@ -97,4 +97,9 @@ path(
     views.record_response_view,
     name="record_response_view",
 ),
+path(
+    "organisations/scrape/",
+    views.scrape_organisations,
+    name="scrape_organisations",
+),
 ]
