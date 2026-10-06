@@ -80,4 +80,21 @@ path(
     views.record_positive_response_api,
     name="record_positive_response_api",
 ),
+
+path(
+    "opportunities/<int:opportunity_id>/positive-response/view/",
+    views.record_positive_response_view,
+    name="record_positive_response_view",
+),
+
+path(
+    "organisations/<int:content_type_id>/<int:object_id>/record-external-outreach/",
+    views.record_external_outreach,
+    name="record_external_outreach",
+),
+path(
+    "opportunities/<int:opportunity_id>/response/",
+    views.record_response_view,
+    name="record_response_view",
+),
 ]

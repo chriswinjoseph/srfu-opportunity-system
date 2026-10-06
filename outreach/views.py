@@ -69,14 +69,9 @@ from .models import (
 
 
 from .status_transitions import (
-
-
     InvalidStatusTransition,
-
-
     record_positive_response,
-
-
+    record_response,
 )
 
 
@@ -84,16 +79,9 @@ logger = logging.getLogger(__name__)
 
 
 CONTACT_STATUS_LABELS = {
-
-
     "not_yet_contacted": "Not Yet Contacted",
-
-
     "contacted": "Contacted",
-
-
 }
-
 
 OPPORTUNITY_OUTCOME_LABELS = {
 
@@ -111,16 +99,9 @@ OPPORTUNITY_OUTCOME_LABELS = {
 
 
 CONTACT_STATUS_CHOICES_API = {
-
-
     "not_yet_contacted",
-
-
     "contacted",
-
-
 }
-
 
 ORGANISATION_API_SORT_FIELDS = {
 
@@ -434,8 +415,12 @@ def _org_to_row(org, org_type):
         "type": org_type,
 
 
-        "state": getattr(org, "state", "") or "",
-        "region": getattr(org, "region", "") or "",
+        "state": (
+    getattr(org, "state", "")
+    or getattr(org, "region", "")
+    or ""
+),
+"region": getattr(org, "region", "") or "",
 
 
         "email": getattr(org, "public_email", "") or "",
@@ -665,6 +650,109 @@ def _get_all_organisations(
 
 
     return rows
+@login_required
+@require_POST
+def record_response_view(request, opportunity_id):
+    opportunity = get_object_or_404(
+        Opportunity,
+        pk=opportunity_id,
+    )
+
+    response_status = request.POST.get(
+        "response_status",
+        "",
+    ).strip()
+
+    if response_status not in {
+        "not_interested",
+        "do_not_contact",
+    }:
+        messages.error(
+            request,
+            "Please select a valid response.",
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=opportunity.content_type_id,
+            object_id=opportunity.object_id,
+        )
+
+    try:
+        record_response(
+            opportunity,
+            response_status,
+            actor=request.user.pk,
+        )
+
+    except InvalidStatusTransition as error:
+        messages.error(
+            request,
+            str(error),
+        )
+
+    else:
+        if response_status == "not_interested":
+            messages.success(
+                request,
+                "Response recorded as Not Interested.",
+            )
+        else:
+            messages.success(
+                request,
+                "Response recorded as Do Not Contact.",
+            )
+
+    return redirect(
+        "organisation_detail",
+        content_type_id=opportunity.content_type_id,
+        object_id=opportunity.object_id,
+    )
+@login_required
+@require_POST
+def record_positive_response_view(request, opportunity_id):
+    """
+    Record a positive response from the organisation and display
+    the supported clubs in a user-friendly page.
+    """
+
+    opportunity = get_object_or_404(
+        Opportunity,
+        pk=opportunity_id,
+    )
+
+    organisation = opportunity.organisation
+
+    try:
+        opportunity, supported_clubs = record_positive_response(
+            opportunity,
+            actor=request.user.pk,
+        )
+
+    except InvalidStatusTransition as error:
+        return render(
+            request,
+            "outreach/positive_response_result.html",
+            {
+                "success": False,
+                "error": str(error),
+                "organisation": organisation,
+                "opportunity": opportunity,
+                "supported_clubs": [],
+            },
+            status=409,
+        )
+
+    return render(
+        request,
+        "outreach/positive_response_result.html",
+        {
+            "success": True,
+            "organisation": organisation,
+            "opportunity": opportunity,
+            "supported_clubs": supported_clubs,
+        },
+    )
+
 
 
 @login_required
@@ -1639,19 +1727,10 @@ def dashboard_view(request):
 
 
     contacted = [
-
-
-        row
-
-
-        for row in all_rows
-
-
-        if row["status"] == "contacted"
-
-
-    ]
-
+    row
+    for row in all_rows
+    if row["status"] == "contacted"
+]
 
     not_yet_page = Paginator(
 
@@ -1732,55 +1811,31 @@ def dashboard_view(request):
 
 
     status_breakdown = {
-
-
-        label: len(
-
-
-            [
-
-
-                row
-
-
-                for row in all_rows
-
-
-                if (
-
-
-                    row["outcome_status"]
-
-
-                    == status
-
-
-                    and not row[
-
-
-                        "status_conflict"
-
-
-                    ]
-
-
-                )
-
-
-            ]
-
-
-        )
-
-
-        for status, label
-
-
-        in OPPORTUNITY_OUTCOME_LABELS.items()
-
-
-    }
-
+    "Interested": len(
+        [
+            row
+            for row in all_rows
+            if row["outcome_status"] == "interested"
+            and not row["status_conflict"]
+        ]
+    ),
+    "Not Interested": len(
+        [
+            row
+            for row in all_rows
+            if row["outcome_status"] == "not_interested"
+            and not row["status_conflict"]
+        ]
+    ),
+    "Do Not Contact": len(
+        [
+            row
+            for row in all_rows
+            if row["outcome_status"] == "do_not_contact"
+            and not row["status_conflict"]
+        ]
+    ),
+}
 
     status_breakdown[
 
@@ -1910,6 +1965,12 @@ def organisation_detail(
         .order_by("-date_created")
     )
 
+    latest_opportunity = opportunities.first()
+
+    has_do_not_contact = opportunities.filter(
+        status="do_not_contact"
+    ).exists()
+
     latest_draft = (
         EmailDraft.objects.filter(
             opportunity__content_type=content_type,
@@ -1931,6 +1992,8 @@ def organisation_detail(
         "org": org,
         "org_type": content_type.model,
         "opportunities": opportunities,
+        "latest_opportunity": latest_opportunity,
+        "has_do_not_contact": has_do_not_contact,
         "content_type_id": content_type_id,
         "object_id": object_id,
         "latest_draft": latest_draft,
@@ -1942,8 +2005,6 @@ def organisation_detail(
         "outreach/organisation_detail.html",
         context,
     )
-
-
 # ---------------------------------------------------------
 
 
@@ -3249,9 +3310,9 @@ def generate_email_draft(
     # ---------------------------------------------------------
 
     if (
-        latest_opportunity
-        and latest_opportunity.status == "do_not_contact"
-    ):
+    latest_opportunity
+    and latest_opportunity.status == "do_not_contact"
+):
         messages.error(
             request,
             (
@@ -4139,9 +4200,9 @@ def create_manual_email_draft(
     )
 
     if (
-        latest_opportunity
-        and latest_opportunity.status == "do_not_contact"
-    ):
+    latest_opportunity
+    and latest_opportunity.status == "do_not_contact"
+):
         messages.error(
             request,
             (
@@ -4300,7 +4361,6 @@ def submit_email_draft_for_review(request, draft_id):
             request,
             "You do not have permission to submit email drafts.",
         )
-
         return redirect(
             "outreach_dashboard"
         )
@@ -4313,6 +4373,8 @@ def submit_email_draft_for_review(request, draft_id):
     # ---------------------------------------------------------
     # Do Not Contact check
     # ---------------------------------------------------------
+    organisation = draft.opportunity.organisation
+
     if draft.opportunity.status == "do_not_contact":
         messages.error(
             request,
@@ -4398,7 +4460,6 @@ def submit_email_draft_for_review(request, draft_id):
         content_type_id=draft.opportunity.content_type_id,
         object_id=draft.opportunity.object_id,
     )
-
 @login_required
 
 
@@ -4444,68 +4505,33 @@ def approve_email_draft(request, draft_id):
     )
 
 
+    organisation = draft.opportunity.organisation
+
     if draft.opportunity.status == "do_not_contact":
-
-
         messages.error(
-
-
             request,
-
-
-            "This organisation is marked Do Not Contact."
-
-
+            "This organisation is marked Do Not Contact.",
         )
-
 
         return redirect(
-
-
             "organisation_detail",
-
-
             content_type_id=draft.opportunity.content_type_id,
-
-
             object_id=draft.opportunity.object_id,
-
-
         )
-
 
     if draft.workflow_status != "needs_approving":
-
-
         messages.error(
-
-
             request,
-
-
-            "Only drafts awaiting approval can be approved."
-
-
+            "Only drafts awaiting approval can be approved.",
         )
-
 
         return redirect(
-
-
             "organisation_detail",
-
-
             content_type_id=draft.opportunity.content_type_id,
-
-
             object_id=draft.opportunity.object_id,
-
-
         )
 
-
     draft.workflow_status = "approved"
-
 
     draft.save(
 
@@ -4631,10 +4657,7 @@ def mark_email_draft_sent(request, draft_id):
             request,
             "You do not have permission to mark email drafts as sent.",
         )
-
-        return redirect(
-            "outreach_dashboard"
-        )
+        return redirect("outreach_dashboard")
 
     draft = get_object_or_404(
         EmailDraft,
@@ -4643,48 +4666,7 @@ def mark_email_draft_sent(request, draft_id):
 
     opportunity = draft.opportunity
 
-    # ---------------------------------------------------------
-    # Do Not Contact check
-    # ---------------------------------------------------------
-
-    if opportunity.status == "do_not_contact":
-        messages.error(
-            request,
-            (
-                "This organisation is marked Do Not Contact. "
-                "The email cannot be marked as sent."
-            ),
-        )
-
-        return redirect(
-            "organisation_detail",
-            content_type_id=opportunity.content_type_id,
-            object_id=opportunity.object_id,
-        )
-
-    # ---------------------------------------------------------
-    # Only an approved draft can be marked as sent
-    # ---------------------------------------------------------
-
-    if draft.workflow_status != "approved":
-        messages.error(
-            request,
-            "Only approved drafts can be marked as sent.",
-        )
-
-        return redirect(
-            "organisation_detail",
-            content_type_id=opportunity.content_type_id,
-            object_id=opportunity.object_id,
-        )
-
-    # ---------------------------------------------------------
-    # Find the organisation
-    # ---------------------------------------------------------
-
-    model_class = (
-        opportunity.content_type.model_class()
-    )
+    model_class = opportunity.content_type.model_class()
 
     if model_class not in (
         Bank,
@@ -4700,15 +4682,34 @@ def mark_email_draft_sent(request, draft_id):
         pk=opportunity.object_id,
     )
 
-    # ---------------------------------------------------------
-    # Mark sent + update contact status
-    # Keep all related updates together
-    # ---------------------------------------------------------
+    if opportunity.status == "do_not_contact":
+        messages.error(
+            request,
+            (
+                "This organisation is marked Do Not Contact. "
+                "The email cannot be marked as sent."
+            ),
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=opportunity.content_type_id,
+            object_id=opportunity.object_id,
+        )
+
+    if draft.workflow_status != "approved":
+        messages.error(
+            request,
+            "Only approved drafts can be marked as sent.",
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=opportunity.content_type_id,
+            object_id=opportunity.object_id,
+        )
 
     with transaction.atomic():
 
         draft.workflow_status = "sent"
-
         draft.save(
             update_fields=[
                 "workflow_status",
@@ -4717,7 +4718,6 @@ def mark_email_draft_sent(request, draft_id):
         )
 
         organisation.contact_status = "contacted"
-
         organisation.save(
             update_fields=[
                 "contact_status",
@@ -4725,10 +4725,14 @@ def mark_email_draft_sent(request, draft_id):
         )
 
         opportunity.status = "contacted"
+        opportunity.date_contacted = timezone.now()
+        opportunity.outreach_method = "email"
 
         opportunity.save(
             update_fields=[
                 "status",
+                "date_contacted",
+                "outreach_method",
             ]
         )
 
@@ -4745,6 +4749,7 @@ def mark_email_draft_sent(request, draft_id):
         content_type_id=opportunity.content_type_id,
         object_id=opportunity.object_id,
     )
+
 @login_required
 
 
@@ -5301,6 +5306,143 @@ def add_organisation(request):
 
 
         context,
+    )
+@login_required
+@require_POST
+def record_external_outreach(
+    request,
+    content_type_id,
+    object_id,
+):
 
+    if not request.user.has_perm(
+        "outreach.change_opportunity"
+    ):
+        messages.error(
+            request,
+            "You do not have permission to record external outreach.",
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=content_type_id,
+            object_id=object_id,
+        )
 
+    content_type = get_object_or_404(
+        ContentType,
+        pk=content_type_id,
+    )
+
+    model_class = content_type.model_class()
+
+    if model_class not in (
+        Bank,
+        Branch,
+        Club,
+    ):
+        raise Http404("Organisation not found.")
+
+    organisation = get_object_or_404(
+        model_class,
+        pk=object_id,
+    )
+
+    outreach_method = request.POST.get(
+        "outreach_method",
+        "",
+    ).strip()
+
+    allowed_methods = {
+        "phone",
+        "manual_email",
+    }
+
+    if outreach_method not in allowed_methods:
+        messages.error(
+            request,
+            "Please select a valid outreach method.",
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=content_type_id,
+            object_id=object_id,
+        )
+
+    latest_opportunity = (
+        Opportunity.objects.filter(
+            content_type=content_type,
+            object_id=object_id,
+        )
+        .order_by("-date_created")
+        .first()
+    )
+
+    if (
+        latest_opportunity
+        and latest_opportunity.status == "do_not_contact"
+    ):
+        messages.error(
+            request,
+            "This organisation is marked Do Not Contact.",
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=content_type_id,
+            object_id=object_id,
+        )
+
+    with transaction.atomic():
+
+        if organisation.contact_status == "contacted":
+
+            latest_opportunity = Opportunity.objects.create(
+                content_type=content_type,
+                object_id=object_id,
+                status="contacted",
+                date_contacted=timezone.now(),
+                outreach_method=outreach_method,
+                notes="Follow-up outreach recorded.",
+            )
+
+        elif latest_opportunity is None:
+
+            latest_opportunity = Opportunity.objects.create(
+                content_type=content_type,
+                object_id=object_id,
+                status="contacted",
+                date_contacted=timezone.now(),
+                outreach_method=outreach_method,
+            )
+
+        else:
+
+            latest_opportunity.status = "contacted"
+            latest_opportunity.date_contacted = timezone.now()
+            latest_opportunity.outreach_method = outreach_method
+
+            latest_opportunity.save(
+                update_fields=[
+                    "status",
+                    "date_contacted",
+                    "outreach_method",
+                ]
+            )
+
+        organisation.contact_status = "contacted"
+
+        organisation.save(
+            update_fields=[
+                "contact_status",
+            ]
+        )
+
+    messages.success(
+        request,
+        "External outreach recorded successfully.",
+    )
+
+    return redirect(
+        "organisation_detail",
+        content_type_id=content_type_id,
+        object_id=object_id,
     )

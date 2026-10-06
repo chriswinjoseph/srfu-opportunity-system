@@ -23,13 +23,9 @@ from django.contrib.contenttypes.models import ContentType
 # Whether direct outreach has occurred for an organisation.
 
 ORGANISATION_CONTACT_STATUS_CHOICES = [
-
     ("not_yet_contacted", "Not Yet Contacted"),
-
     ("contacted", "Contacted"),
-
 ]
-
 
 
 
@@ -269,13 +265,9 @@ class Bank(models.Model):
                 condition=models.Q(
 
                     contact_status__in=(
-
-                        "not_yet_contacted",
-
-                        "contacted",
-
-                    )
-
+    "not_yet_contacted",
+    "contacted",
+)
                 ),
 
                 name="bank_valid_contact_status",
@@ -523,13 +515,9 @@ class Branch(models.Model):
                 condition=models.Q(
 
                     contact_status__in=(
-
-                        "not_yet_contacted",
-
-                        "contacted",
-
-                    )
-
+    "not_yet_contacted",
+    "contacted",
+)
                 ),
 
                 name="branch_valid_contact_status",
@@ -793,12 +781,9 @@ class Club(models.Model):
                 condition=models.Q(
 
                     contact_status__in=(
-
-                        "not_yet_contacted",
-
-                        "contacted",
-
-                    )
+    "not_yet_contacted",
+    "contacted",
+)
 
                 ),
 
@@ -1109,15 +1094,10 @@ class Opportunity(models.Model):
                     status__in=(
 
                         "not_yet_contacted",
-
-                        "contacted",
-
-                        "interested",
-
-                        "not_interested",
-
-                        "do_not_contact",
-
+            "contacted",
+            "interested",
+            "not_interested",
+            "do_not_contact",
                     )
 
                 ),

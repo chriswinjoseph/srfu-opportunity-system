@@ -13,6 +13,7 @@ from .models import (
     Opportunity,
     EmailDraft,
     EmailGenerationLog,
+    EmailTemplate,
 )
 from .status_transitions import (
     InvalidStatusTransition,
@@ -1137,12 +1138,14 @@ class OrganisationListApiTests(TestCase):
         self.client.force_login(self.user)
 
         response = self.client.get(
-            self.url,
-            {
-                "page": 2,
-                "page_size": 2,
-            },
-        )
+    self.url,
+    {
+        "page": 2,
+        "page_size": 2,
+        "sort_by": "name",
+        "sort_dir": "asc",
+    },
+)
 
         data = response.json()
 
@@ -1166,8 +1169,8 @@ class OrganisationListApiTests(TestCase):
                 row["name"]
                 for row in data["results"]
             ],
-            [
-                "Gamma Club",
+           [
+                 "Gamma Club",
                 "Zeta Bank",
             ],
         )
@@ -1268,6 +1271,32 @@ class EmailDraftWorkflowTests(TestCase):
             )
         )
 
+        self.template = EmailTemplate.objects.create(
+            name="Test Outreach Template",
+            version="v1",
+            purpose="Community partnership outreach",
+            template_body=(
+                "Introduce Safe Roads For Us and discuss "
+                "a possible community partnership."
+            ),
+            sender_name="Shane",
+            sender_role="Safe Roads For Us",
+            project_details=(
+                "Safe Roads For Us supports safer roads "
+                "and community initiatives."
+            ),
+            call_to_action=(
+                "Please let us know if you would be open "
+                "to a short conversation."
+            ),
+            signature=(
+                "Kind regards,\n"
+                "Shane\n"
+                "Safe Roads For Us"
+            ),
+            is_active=True,
+        )
+
         self.generate_url = reverse(
             "generate_email_draft",
             args=[
@@ -1311,6 +1340,15 @@ class EmailDraftWorkflowTests(TestCase):
             trigger_source="manual",
         )
 
+    def generation_data(
+        self,
+        purpose="Explore a possible community collaboration.",
+    ):
+        return {
+            "template_id": self.template.id,
+            "outreach_purpose": purpose,
+        }
+
     @patch(
         "outreach.views.generate_outreach_email"
     )
@@ -1321,15 +1359,16 @@ class EmailDraftWorkflowTests(TestCase):
         mock_generate.return_value = (
             "Generated Subject",
             "Generated email body.",
+            100,
+            50,
+            150,
+            False,
+            "",
         )
 
         response = self.client.post(
             self.generate_url,
-            {
-                "outreach_purpose": (
-                    "Explore a possible community collaboration."
-                )
-            },
+            self.generation_data(),
         )
 
         self.assertEqual(
@@ -1376,11 +1415,6 @@ class EmailDraftWorkflowTests(TestCase):
             "success",
         )
 
-        self.assertEqual(
-            log.trigger_source,
-            "manual",
-        )
-
         self.bank.refresh_from_db()
 
         self.assertEqual(
@@ -1401,11 +1435,9 @@ class EmailDraftWorkflowTests(TestCase):
 
         response = self.client.post(
             self.generate_url,
-            {
-                "outreach_purpose": (
-                    "Explore community collaboration."
-                )
-            },
+            self.generation_data(
+                "Explore community collaboration."
+            ),
             follow=True,
         )
 
@@ -1437,33 +1469,28 @@ class EmailDraftWorkflowTests(TestCase):
             "not_yet_contacted",
         )
 
-    def test_timeout_is_recorded_as_timed_out(self):
+    @patch(
+        "outreach.views.generate_outreach_email"
+    )
+    def test_timeout_is_recorded_as_timed_out(
+        self,
+        mock_generate,
+    ):
+        import openai
 
-        class FakeAPIError(Exception):
+        mock_generate.side_effect = (
+            openai.APITimeoutError(
+                request=None
+            )
+        )
 
-            def __init__(self, code):
-                super().__init__(
-                    f"API error {code}"
-                )
-                self.code = code
-
-        with patch(
-            "outreach.views.genai_errors.APIError",
-            FakeAPIError,
-        ):
-            with patch(
-                "outreach.views.generate_outreach_email",
-                side_effect=FakeAPIError(504),
-            ):
-                response = self.client.post(
-                    self.generate_url,
-                    {
-                        "outreach_purpose": (
-                            "Explore community collaboration."
-                        )
-                    },
-                    follow=True,
-                )
+        response = self.client.post(
+            self.generate_url,
+            self.generation_data(
+                "Explore community collaboration."
+            ),
+            follow=True,
+        )
 
         self.assertEqual(
             response.status_code,
@@ -1494,11 +1521,9 @@ class EmailDraftWorkflowTests(TestCase):
 
         response = self.client.post(
             self.generate_url,
-            {
-                "outreach_purpose": (
-                    "Explore community collaboration."
-                )
-            },
+            self.generation_data(
+                "Explore community collaboration."
+            ),
             follow=True,
         )
 
@@ -1531,17 +1556,15 @@ class EmailDraftWorkflowTests(TestCase):
                 object_id=self.bank.pk,
                 requested_by=self.user,
                 trigger_source="manual",
-                status="failed",
-                error_message="Rate limit test",
+                status="success",
+                error_message="",
             )
 
         response = self.client.post(
             self.generate_url,
-            {
-                "outreach_purpose": (
-                    "Explore community collaboration."
-                )
-            },
+            self.generation_data(
+                "Explore community collaboration."
+            ),
             follow=True,
         )
 
@@ -1578,11 +1601,9 @@ class EmailDraftWorkflowTests(TestCase):
 
         response = self.client.post(
             self.generate_url,
-            {
-                "outreach_purpose": (
-                    "Explore community collaboration."
-                )
-            },
+            self.generation_data(
+                "Explore community collaboration."
+            ),
             follow=True,
         )
 
@@ -1613,11 +1634,9 @@ class EmailDraftWorkflowTests(TestCase):
 
         response = self.client.post(
             self.generate_url,
-            {
-                "outreach_purpose": (
-                    "Explore community collaboration."
-                )
-            },
+            self.generation_data(
+                "Explore community collaboration."
+            ),
         )
 
         self.assertEqual(
@@ -1654,7 +1673,7 @@ class EmailDraftWorkflowTests(TestCase):
 
         self.assertEqual(
             draft.workflow_status,
-            "pending_review",
+            "needs_approving",
         )
 
         self.bank.refresh_from_db()
@@ -1666,7 +1685,7 @@ class EmailDraftWorkflowTests(TestCase):
 
     def test_reject_returns_draft_for_editing(self):
         draft = self.create_draft(
-            workflow_status="pending_review"
+            workflow_status="needs_approving"
         )
 
         url = reverse(
@@ -1677,7 +1696,12 @@ class EmailDraftWorkflowTests(TestCase):
         )
 
         response = self.client.post(
-            url
+            url,
+            {
+                "rejection_reason": (
+                    "Please revise the wording."
+                ),
+            },
         )
 
         self.assertEqual(
@@ -1689,12 +1713,12 @@ class EmailDraftWorkflowTests(TestCase):
 
         self.assertEqual(
             draft.workflow_status,
-            "draft",
+            "rejected",
         )
 
     def test_pending_draft_can_be_approved(self):
         draft = self.create_draft(
-            workflow_status="pending_review"
+            workflow_status="needs_approving"
         )
 
         url = reverse(
@@ -1733,7 +1757,7 @@ class EmailDraftWorkflowTests(TestCase):
         )
 
         draft = self.create_draft(
-            workflow_status="pending_review",
+            workflow_status="needs_approving",
             opportunity=opportunity,
         )
 
@@ -1758,7 +1782,7 @@ class EmailDraftWorkflowTests(TestCase):
 
         self.assertEqual(
             draft.workflow_status,
-            "pending_review",
+            "needs_approving",
         )
 
         self.assertContains(

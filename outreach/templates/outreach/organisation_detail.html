@@ -133,7 +133,59 @@ Organisation Details | Safe Roads For Us
         line-height: 1.6;
         resize: vertical;
     }
+    .external-outreach-button {
+    margin-top: 16px;
+    background: #0f766e;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    padding: 12px 22px;
+    font-size: 17px;
+    font-weight: 600;
+    cursor: pointer;
+}
 
+.external-outreach-button:hover {
+    opacity: 0.92;
+}
+
+.external-outreach-card {
+    background: #ffffff;
+    border: 1px solid #dbe2ea;
+    border-radius: 12px;
+    padding: 34px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    margin-bottom: 32px;
+}
+
+.external-outreach-card h2 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 28px;
+}
+
+.external-outreach-card p {
+    font-size: 17px;
+    line-height: 1.5;
+}
+
+.external-outreach-card label {
+    display: block;
+    margin-top: 18px;
+    margin-bottom: 8px;
+    font-size: 17px;
+    font-weight: 700;
+}
+
+.external-outreach-card select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 17px;
+    background: #ffffff;
+}
 
     .generate-draft-button,
     .save-draft-button,
@@ -340,7 +392,6 @@ Organisation Details | Safe Roads For Us
 {% block content %}
 
 <div class="detail-page">
-
     {% if messages %}
 
         {% for message in messages %}
@@ -468,6 +519,73 @@ Organisation Details | Safe Roads For Us
         </div>
 
     </section>
+    <!-- ===================================================== -->
+<!-- RECORD EXTERNAL OUTREACH -->
+<!-- ===================================================== -->
+
+{% if perms.outreach.change_opportunity and not has_do_not_contact %}
+<section class="external-outreach-card">
+
+    <h2>
+    {% if org.contact_status == "contacted" %}
+        Record Follow-Up Outreach
+    {% else %}
+        Record External Outreach
+    {% endif %}
+</h2>
+
+    <p>
+    {% if org.contact_status == "contacted" %}
+        Record another outreach attempt for this organisation.
+        The organisation will remain Contacted and the follow-up
+        will be added to its outreach history.
+    {% else %}
+        Use this when this organisation was contacted outside the system,
+        such as by phone or by a manually sent email.
+    {% endif %}
+</p>
+
+    <form
+        method="post"
+        action="{% url 'record_external_outreach' content_type_id object_id %}"
+    >
+
+        {% csrf_token %}
+
+        <label for="external-outreach-method">
+            Outreach Method
+        </label>
+
+        <select
+            id="external-outreach-method"
+            name="outreach_method"
+            required
+        >
+            <option value="">
+                Select outreach method
+            </option>
+
+            <option value="phone">
+                Phone Call
+            </option>
+
+            <option value="manual_email">
+                Manually Sent Email
+            </option>
+        </select>
+
+        <button
+            type="submit"
+            class="external-outreach-button"
+        >
+            Record Contact
+        </button>
+
+    </form>
+
+</section>
+
+{% endif %}
 
 
 
@@ -995,51 +1113,46 @@ Organisation Details | Safe Roads For Us
 
 
 
-    <!-- ===================================================== -->
-    <!-- OUTREACH HISTORY -->
-    <!-- ===================================================== -->
+<!-- ===================================================== -->
+<!-- OUTREACH HISTORY -->
+<!-- ===================================================== -->
 
-    <section>
+<section>
 
-        <h2 class="section-heading">
-            Outreach History
-        </h2>
+    <h2 class="section-heading">
+        Outreach History
+    </h2>
 
+    {% for opp in opportunities %}
 
-        {% for opp in opportunities %}
+        <div class="history-card">
 
-            <div class="history-card">
+            <p>
+                <strong>Status:</strong>
+                {{ opp.get_status_display }}
+            </p>
 
+            <p>
+                <strong>Created:</strong>
+                {{ opp.date_created }}
+            </p>
+
+            {% if opp.notes %}
                 <p>
-                    <strong>Status:</strong>
-                    {{ opp.get_status_display }}
+                    <strong>Notes:</strong>
+                    {{ opp.notes }}
                 </p>
+            {% endif %}
 
 
-                <p>
-                    <strong>Created:</strong>
-                    {{ opp.date_created }}
-                </p>
+            {% if opp.status == "contacted" %}
 
-
-                {% if opp.notes %}
-
-                    <p>
-                        <strong>Notes:</strong>
-                        {{ opp.notes }}
-                    </p>
-
-                {% endif %}
-
-
-                {% if opp.status == "contacted" and org_type != "club" %}
+                {% if org_type != "club" %}
 
                     <form
                         method="post"
-                        action="{% url 'record_positive_response_api' opp.id %}"
-                        target="_blank"
+                        action="{% url 'record_positive_response_view' opp.id %}"
                     >
-
                         {% csrf_token %}
 
                         <button
@@ -1048,29 +1161,69 @@ Organisation Details | Safe Roads For Us
                         >
                             Record Positive Response
                         </button>
-
                     </form>
 
                 {% endif %}
 
-            </div>
+
+                <form
+                    method="post"
+                    action="{% url 'record_response_view' opp.id %}"
+                    style="margin-top: 10px;"
+                >
+                    {% csrf_token %}
+
+                    <input
+                        type="hidden"
+                        name="response_status"
+                        value="not_interested"
+                    >
+
+                    <button
+                        type="submit"
+                        class="reject-draft-button"
+                    >
+                        Record Not Interested
+                    </button>
+                </form>
 
 
-        {% empty %}
+                <form
+                    method="post"
+                    action="{% url 'record_response_view' opp.id %}"
+                    style="margin-top: 10px;"
+                >
+                    {% csrf_token %}
 
-            <div class="empty-history">
+                    <input
+                        type="hidden"
+                        name="response_status"
+                        value="do_not_contact"
+                    >
 
-                No outreach activity yet.
-                This organisation has not been contacted.
+                    <button
+                        type="submit"
+                        class="sent-draft-button"
+                    >
+                        Record Do Not Contact
+                    </button>
+                </form>
 
-                Outreach history will appear here once
-                contact activity begins.
+            {% endif %}
 
-            </div>
+        </div>
 
-        {% endfor %}
+    {% empty %}
 
-    </section>
+        <div class="empty-history">
+            No outreach activity yet.
+            This organisation has not been contacted.
+            Outreach history will appear here once contact activity begins.
+        </div>
+
+    {% endfor %}
+
+</section>
 
 
 </div>

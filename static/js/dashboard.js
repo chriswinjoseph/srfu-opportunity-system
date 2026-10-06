@@ -204,7 +204,9 @@
             status: contactStatus,
             sort_by: sortBy,
             sort_dir: sortDirection,
-            page: state.pages[contactStatus],
+            page: contactStatus === "not_yet_contacted"
+    ? state.pages.not_yet_contacted
+    : state.pages.contacted,
             page_size: pageSize,
         });
 
@@ -591,7 +593,9 @@ if (stateField) {
                     fetchOrganisations(
                         "not_yet_contacted"
                     ),
-                    fetchOrganisations("contacted"),
+                    fetchOrganisations(
+    "contacted"
+),
                 ]);
 
             renderColumn(

@@ -1,146 +1,407 @@
 """
-Scrape public bank data by region and add new banks to the database.
+Collect publicly available Community Bank information
+from confirmed Bendigo Bank public branch pages.
 
 Usage:
-    python manage.py scrape_banks --region Victoria
+    python manage.py scrape_banks --region Victoria --dry-run
 
-THIS IS A PLACEHOLDER IMPLEMENTATION.
-The fetch_banks_for_region() function below returns fake/mock data instead
-of actually scraping a real website, because the target site(s) have not
-yet been confirmed by Savio/Shane (open question on FR-8).
+Optional:
+    python manage.py scrape_banks --region Victoria --limit 5 --dry-run
 
-Once a real target site is confirmed, only fetch_banks_for_region() needs
-to change — everything else (duplicate detection, re-run safety, status
-defaulting, CLI interface) is already built and tested against this
-mock version, so swapping in real scraping logic later is a small,
-contained change, not a rewrite.
+This collector only uses public organisation information:
+    - bank name
+    - state / region
+    - public phone
+    - branch website URL
+    - source URL
 
-Design decisions baked in here, matching open questions raised with Savio:
-  - Re-runnable: running this twice for the same region does NOT create
-    duplicates or crash — it just reports what's already there.
-  - Duplicate detection reuses the exact same logic as import_seed
-    (case-insensitive match on bank_name) — same rule, one source of truth.
-  - Failure handling: if fetching a given region fails, it's reported and
-    skipped, not allowed to crash the whole run.
+It does not collect private or sensitive information.
 """
+
+import re
+import time
+
+import requests
+from bs4 import BeautifulSoup
 
 from django.core.management.base import BaseCommand, CommandError
 
 from outreach.models import Bank
 
 
-def fetch_banks_for_region(region):
-    """
-    PLACEHOLDER — returns fake bank data instead of real scraped data.
+HEADERS = {
+    "User-Agent": (
+        "SafeRoadsForUsStudentProject/1.0 "
+        "(public organisation data only)"
+    )
+}
 
-    Replace this function's body with real scraping logic once a target
-    website is confirmed. It should return a list of dicts shaped like:
-        [{"bank_name": ..., "website_url": ..., "public_email": ...,
-          "public_phone": ..., "source_url": ...}, ...]
 
-    Raising an exception here is treated as a fetch failure by the
-    calling code below, and is reported without crashing the whole run.
-    """
-    mock_data = {
-        "Victoria": [
-            {
-                "bank_name": "Example Community Bank - Geelong",
-                "website_url": "https://example.com/geelong",
-                "public_email": "geelong@example.com",
-                "public_phone": "0352000000",
-                "source_url": "https://example.com/geelong",
-            },
-            {
-                "bank_name": "Example Community Bank - Ballarat",
-                "website_url": "https://example.com/ballarat",
-                "public_email": "ballarat@example.com",
-                "public_phone": "0353000000",
-                "source_url": "https://example.com/ballarat",
-            },
-        ],
-        "New South Wales": [
-            {
-                "bank_name": "Example Community Bank - Newcastle",
-                "website_url": "https://example.com/newcastle",
-                "public_email": "newcastle@example.com",
-                "public_phone": "0249000000",
-                "source_url": "https://example.com/newcastle",
-            },
-        ],
+PUBLIC_BRANCH_URLS = {
+    "Victoria": [
+        "https://www.bendigobank.com.au/branch/vic/community-bank-monbulk-district/",
+        "https://www.bendigobank.com.au/branch/vic/community-bank-bright/",
+        "https://www.bendigobank.com.au/branch/vic/community-bank-donald-district/",
+        "https://www.bendigobank.com.au/branch/vic/community-bank-seddon/",
+        "https://www.bendigobank.com.au/branch/vic/community-bank-mt-eliza/",
+        "https://www.bendigobank.com.au/branch/vic/community-bank-balwyn/",
+        "https://www.bendigobank.com.au/branch/vic/community-bank-heyfield-district/",
+        "https://www.bendigobank.com.au/branch/vic/community-bank-upwey-district/",
+        "https://www.bendigobank.com.au/branch/vic/community-bank-trafalgar-district/",
+        "https://www.bendigobank.com.au/branch/vic/community-bank-doreen-mernda/",
+        "https://www.bendigobank.com.au/branch/vic/community-bank-ballan-district/",
+    ]
+}
+
+
+def clean_text(value):
+    if value is None:
+        return ""
+
+    return " ".join(str(value).split()).strip()
+
+
+def extract_phone(text):
+    patterns = [
+        r"\(0\d\)\s*\d{4}\s*\d{4}",
+        r"0\d\s*\d{4}\s*\d{4}",
+        r"1[38]00\s*\d{3}\s*\d{3}",
+    ]
+
+    for pattern in patterns:
+        match = re.search(
+            pattern,
+            text,
+            flags=re.IGNORECASE,
+        )
+
+        if match:
+            return clean_text(match.group(0))
+
+    return ""
+
+
+def extract_state(text):
+    match = re.search(
+        r"\b(VIC|NSW|QLD|SA|WA|TAS|ACT|NT)\b",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    if match:
+        return match.group(1).upper()
+
+    return ""
+
+
+def scrape_branch_page(session, url):
+    response = session.get(
+        url,
+        headers=HEADERS,
+        timeout=15,
+    )
+
+    response.raise_for_status()
+
+    soup = BeautifulSoup(
+        response.text,
+        "html.parser",
+    )
+
+    for tag in soup(
+        ["script", "style", "noscript"]
+    ):
+        tag.decompose()
+
+    page_text = clean_text(
+        soup.get_text(
+            " ",
+            strip=True,
+        )
+    )
+
+    # Try to find the main branch name
+    bank_name = ""
+
+    heading = soup.find("h1")
+
+    if heading:
+        bank_name = clean_text(
+            heading.get_text(
+                " ",
+                strip=True,
+            )
+        )
+
+    # Fallback to page title
+    if not bank_name and soup.title:
+        title = clean_text(
+            soup.title.get_text(
+                " ",
+                strip=True,
+            )
+        )
+
+        if "|" in title:
+            title = title.split("|", 1)[0].strip()
+
+        bank_name = title
+
+    if not bank_name:
+        raise ValueError(
+            "Could not determine bank name."
+        )
+
+    if "community bank" not in bank_name.lower():
+        raise ValueError(
+            "Page is not recognised as a Community Bank page."
+        )
+
+    public_phone = extract_phone(
+        page_text
+    )
+
+    state = extract_state(
+        page_text
+    )
+
+    return {
+        "bank_name": bank_name,
+        "state": state,
+        "website_url": url,
+        "public_email": "",
+        "public_phone": public_phone,
+        "source_url": url,
     }
 
-    if region not in mock_data:
-        raise ValueError(f"No mock data configured for region '{region}'.")
 
-    return mock_data[region]
+def fetch_banks_for_region(
+    region,
+    limit=None,
+):
+    urls = PUBLIC_BRANCH_URLS.get(
+        region,
+        [],
+    )
+
+    if not urls:
+        raise ValueError(
+            f"No public branch URLs configured for '{region}'."
+        )
+
+    if limit:
+        urls = urls[:limit]
+
+    session = requests.Session()
+
+    results = []
+
+    for index, url in enumerate(
+        urls,
+        start=1,
+    ):
+        try:
+            bank = scrape_branch_page(
+                session,
+                url,
+            )
+
+            results.append(bank)
+
+        except requests.RequestException as exc:
+            print(
+                f"Fetch failed for {url}: {exc}"
+            )
+
+        except ValueError as exc:
+            print(
+                f"Skipped {url}: {exc}"
+            )
+
+        if index < len(urls):
+            time.sleep(0.5)
+
+    return results
 
 
 class Command(BaseCommand):
-    help = "Scrape (currently: mock-fetch) public bank data for a region."
+    help = (
+        "Collect public Community Bank information "
+        "from confirmed Bendigo Bank branch pages."
+    )
 
-    def add_arguments(self, parser):
+    def add_arguments(
+        self,
+        parser,
+    ):
         parser.add_argument(
             "--region",
             type=str,
             required=True,
-            help="Region to scrape banks for, e.g. 'Victoria'.",
+            help="Region/state to collect, e.g. Victoria.",
         )
+
         parser.add_argument(
             "--dry-run",
             action="store_true",
-            help="Fetch and validate without writing to the database.",
+            help=(
+                "Collect and validate without writing "
+                "to the database."
+            ),
         )
 
-    def handle(self, *args, **options):
+        parser.add_argument(
+            "--limit",
+            type=int,
+            default=None,
+            help="Optional number of branch pages to test.",
+        )
+
+    def handle(
+        self,
+        *args,
+        **options,
+    ):
         region = options["region"]
         dry_run = options["dry_run"]
+        limit = options["limit"]
+
+        if region not in PUBLIC_BRANCH_URLS:
+            raise CommandError(
+                f"No configured public source list for '{region}'."
+            )
+
+        if limit is not None and limit < 1:
+            raise CommandError(
+                "--limit must be greater than 0."
+            )
+
+        self.stdout.write(
+            f"Collecting public Community Bank data "
+            f"for {region}..."
+        )
 
         try:
-            fetched_banks = fetch_banks_for_region(region)
-        except Exception as e:
-            raise CommandError(f"Fetch failed for region '{region}': {e}")
+            fetched_banks = fetch_banks_for_region(
+                region,
+                limit=limit,
+            )
+
+        except Exception as exc:
+            raise CommandError(
+                f"Collection failed: {exc}"
+            )
 
         created_count = 0
         duplicate_count = 0
+        skipped_count = 0
 
         for entry in fetched_banks:
-            bank_name = entry.get("bank_name", "").strip()
+            bank_name = clean_text(
+                entry.get("bank_name")
+            )
 
             if not bank_name:
+                skipped_count += 1
+
                 self.stdout.write(
-                    self.style.ERROR("Skipped a record with no bank_name.")
+                    self.style.ERROR(
+                        "Skipped record with no bank name."
+                    )
                 )
+
                 continue
 
-            # Same duplicate rule as import_seed — one source of truth.
-            if Bank.objects.filter(bank_name__iexact=bank_name).exists():
-                duplicate_count += 1
-                self.stdout.write(
-                    self.style.WARNING(f"'{bank_name}' already exists — skipped.")
+            existing_bank = (
+                Bank.objects
+                .filter(
+                    bank_name__iexact=bank_name
                 )
+                .first()
+            )
+
+            if existing_bank:
+                duplicate_count += 1
+
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"'{bank_name}' already exists — skipped."
+                    )
+                )
+
                 continue
+
+            state = clean_text(
+                entry.get("state")
+            )
+
+            if not state:
+                state = "VIC"
 
             if dry_run:
                 created_count += 1
-                self.stdout.write(f"Would create '{bank_name}'")
+
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"Would create: "
+                        f"{bank_name} | "
+                        f"{state} | "
+                        f"{entry.get('public_phone', '')}"
+                    )
+                )
+
                 continue
 
             Bank.objects.create(
                 bank_name=bank_name,
                 region=region,
-                website_url=entry.get("website_url", ""),
-                public_email=entry.get("public_email", ""),
-                public_phone=entry.get("public_phone", ""),
-                source_url=entry.get("source_url", ""),
+                state=state,
+                website_url=clean_text(
+                    entry.get("website_url")
+                ),
+                public_email=clean_text(
+                    entry.get("public_email")
+                ),
+                public_phone=clean_text(
+                    entry.get("public_phone")
+                ),
+                source_url=clean_text(
+                    entry.get("source_url")
+                ),
                 contact_status="not_yet_contacted",
+                record_source="Public Web - Bendigo Bank",
             )
+
             created_count += 1
-            self.stdout.write(self.style.SUCCESS(f"Created '{bank_name}'"))
+
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Created '{bank_name}'"
+                )
+            )
 
         self.stdout.write("")
-        self.stdout.write(self.style.SUCCESS(f"Created: {created_count}"))
-        self.stdout.write(self.style.WARNING(f"Duplicates skipped: {duplicate_count}"))
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"New records: {created_count}"
+            )
+        )
+
+        self.stdout.write(
+            self.style.WARNING(
+                f"Duplicates skipped: {duplicate_count}"
+            )
+        )
+
+        self.stdout.write(
+            f"Invalid/skipped records: {skipped_count}"
+        )
+
         if dry_run:
             self.stdout.write(
-                self.style.NOTICE("Dry run only — nothing was written to the database.")
+                self.style.NOTICE(
+                    "Dry run only — nothing was written "
+                    "to the database."
+                )
             )

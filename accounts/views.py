@@ -1,4 +1,4 @@
-import requests
+from django.core.mail import send_mail
 
 from django.conf import settings
 from django.contrib.auth import login, logout
@@ -115,47 +115,20 @@ def _send_password_reset_email(request, user):
     )
 
     try:
-        response = requests.post(
-            "https://api.elasticemail.com/v2/email/send",
-            data={
-                "apikey": settings.ELASTIC_EMAIL_API_KEY,
-                "from": settings.DEFAULT_FROM_EMAIL,
-                "to": user.email,
-                "subject": subject,
-                "bodyText": message,
-            },
-            timeout=10,
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=False,
         )
 
-    except requests.RequestException as exc:
         print(
-            "[password reset] Request to Elastic Email failed "
+            f"[password reset] Sent successfully to {user.email}"
+        )
+
+    except Exception as exc:
+        print(
+            "[password reset] Email sending failed "
             f"for {user.email}: {exc}"
-        )
-        return
-
-    # Elastic Email may return HTTP 200 even when sending fails.
-    # The JSON success field contains the actual result.
-    try:
-        result = response.json()
-
-    except ValueError:
-        print(
-            "[password reset] Non-JSON response for "
-            f"{user.email}: {response.status_code} "
-            f"{response.text[:200]}"
-        )
-        return
-
-    if result.get("success"):
-        message_id = result.get("data", {}).get("messageid")
-
-        print(
-            f"[password reset] Sent to {user.email}, "
-            f"messageid={message_id}"
-        )
-    else:
-        print(
-            "[password reset] Elastic Email rejected send to "
-            f"{user.email}: {result.get('error')}"
         )
