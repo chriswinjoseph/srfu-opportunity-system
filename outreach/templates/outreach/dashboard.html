@@ -122,6 +122,14 @@
         </section>
 
         <div class="sidebar-actions">
+            {% if can_review_approvals %}
+            <a
+                class="secondary-button sidebar-button"
+                href="{% url 'pending_approvals' %}"
+            >
+                Pending Approvals{% if pending_approval_count %} ({{ pending_approval_count }}){% endif %}
+            </a>
+            {% endif %}
             {% if perms.outreach.add_bank %}
 <form
     method="post"

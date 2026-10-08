@@ -1,4 +1,5 @@
 import json
+import re
 
 from openai import OpenAI
 from pydantic import BaseModel
@@ -7,6 +8,33 @@ from pydantic import BaseModel
 class GeneratedEmail(BaseModel):
     subject: str
     body: str
+
+
+# Placeholder forms used by the templates / AI prompt:
+# [Name], {name}, {{ name }}, <name>, %(name)s, ${name}, __NAME__
+_PLACEHOLDER_REGEXES = [
+    re.compile(r"\[[^\]\n]*[A-Za-z][^\]\n]*\]"),
+    re.compile(r"\{\{[^}\n]*\}\}"),
+    re.compile(r"\{[A-Za-z_][A-Za-z0-9_ ]*\}"),
+    re.compile(r"<[A-Za-z_][A-Za-z0-9_ ]*>"),
+    re.compile(r"%\([A-Za-z_][A-Za-z0-9_]*\)s"),
+    re.compile(r"\$\{[^}\n]*\}"),
+    re.compile(r"__[A-Z][A-Z0-9_]*__"),
+]
+
+
+def find_unresolved_placeholders(subject, body):
+    """Return the distinct unresolved placeholders in subject/body."""
+    found = []
+
+    for text in (subject or "", body or ""):
+        for regex in _PLACEHOLDER_REGEXES:
+            for match in regex.finditer(text):
+                value = match.group(0)
+                if value not in found:
+                    found.append(value)
+
+    return found
 
 
 def validate_generated_email(

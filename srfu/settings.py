@@ -168,12 +168,47 @@ EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
 EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
-EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True").lower() == "true"
 
-EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
-EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+# Finite SMTP socket timeout (seconds) so a hung server cannot block a
+# request indefinitely. A timeout leaves delivery status unknown.
+EMAIL_TIMEOUT = int(os.environ.get("EMAIL_TIMEOUT", "30"))
+EMAIL_USE_TLS = os.environ.get(
+    "EMAIL_USE_TLS",
+    "True",
+).lower() == "true"
+
+EMAIL_HOST_USER = os.environ.get(
+    "EMAIL_HOST_USER",
+    "",
+)
+
+EMAIL_HOST_PASSWORD = os.environ.get(
+    "EMAIL_HOST_PASSWORD",
+    "",
+)
 
 DEFAULT_FROM_EMAIL = os.environ.get(
     "DEFAULT_FROM_EMAIL",
     EMAIL_HOST_USER,
+)
+
+
+# OpenAI
+
+OPENAI_API_KEY = os.environ.get(
+    "OPENAI_API_KEY"
+)
+
+if not OPENAI_API_KEY:
+    raise RuntimeError(
+        "OPENAI_API_KEY is not configured."
+    )
+
+
+# Outreach approval workflow
+
+# Hours a draft may stay in Awaiting Approval before it is flagged
+# as overdue. Overdue drafts are never auto-approved/rejected/sent.
+EMAIL_APPROVAL_OVERDUE_HOURS = int(
+    os.environ.get("EMAIL_APPROVAL_OVERDUE_HOURS", "48")
 )

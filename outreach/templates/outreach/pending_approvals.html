@@ -1,0 +1,103 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pending Approvals | Safe Roads For Us</title>
+
+    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+
+    <style>
+        body { margin: 0; background: var(--soft-background, #f6f8fb); color: var(--text, #111827); }
+        .pa-wrapper { max-width: 1100px; margin: 0 auto; padding: 24px 16px 40px; }
+        .pa-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+        .pa-top h1 { margin: 0; font-size: 26px; }
+        .pa-back { color: var(--sidebar-blue, #123f9b); font-weight: 600; text-decoration: none; }
+        .pa-back:hover, .pa-back:focus { text-decoration: underline; }
+        .pa-note { margin: 0 0 16px; color: var(--muted, #5f6878); }
+
+        .pa-table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid var(--border, #cfd4dc); border-radius: 8px; overflow: hidden; }
+        .pa-table th, .pa-table td { padding: 10px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border, #cfd4dc); }
+        .pa-table th { background: #eef2f8; font-size: 13px; text-transform: uppercase; letter-spacing: .03em; }
+        .pa-table tr:last-child td { border-bottom: 0; }
+        .pa-subject { word-break: break-word; }
+
+        .pa-badge { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: #fef2f2; border: 1px solid #b91c1c; color: #7f1d1d; font-size: 12px; font-weight: 700; }
+
+        .pa-review { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 8px 16px; border-radius: 6px; background: var(--button-blue, #2474d8); color: #fff; font-weight: 700; text-decoration: none; }
+        .pa-review:hover, .pa-review:focus { background: var(--button-blue-hover, #185fb8); }
+        a:focus { outline: 3px solid #2563eb; outline-offset: 2px; }
+
+        .pa-empty { padding: 28px 20px; text-align: center; background: #fff; border: 1px dashed var(--border, #cfd4dc); border-radius: 8px; }
+        .pa-empty strong { display: block; margin-bottom: 4px; font-size: 18px; }
+
+        @media (max-width: 720px) {
+            .pa-table, .pa-table tbody, .pa-table tr, .pa-table td { display: block; width: 100%; }
+            .pa-table thead { position: absolute; left: -9999px; }
+            .pa-table tr { padding: 10px 12px; border-bottom: 1px solid var(--border, #cfd4dc); }
+            .pa-table td { padding: 4px 0; border: 0; }
+            .pa-table td::before { content: attr(data-label); display: block; font-size: 12px; font-weight: 700; color: var(--muted, #5f6878); text-transform: uppercase; }
+            .pa-review { width: 100%; margin-top: 6px; }
+        }
+    </style>
+</head>
+<body>
+<main class="pa-wrapper" aria-labelledby="pa-title">
+    <div class="pa-top">
+        <h1 id="pa-title">Pending Approvals</h1>
+        <a class="pa-back" href="{% url 'outreach_dashboard' %}">&larr; Back to dashboard</a>
+    </div>
+
+    <p class="pa-note">
+        Email drafts awaiting a decision. Opening this list does not change anything;
+        use Review to open the draft and approve it or request changes.
+    </p>
+
+    {% if rows %}
+        <table class="pa-table">
+            <thead>
+                <tr>
+                    <th scope="col">Organisation</th>
+                    <th scope="col">Subject</th>
+                    <th scope="col">Submitted</th>
+                    <th scope="col">Submitted by</th>
+                    <th scope="col"><span class="visually-hidden">Action</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                    <tr>
+                        <td data-label="Organisation">{{ row.organisation_name }}</td>
+                        <td data-label="Subject" class="pa-subject">
+                            {{ row.draft.subject|default:"(no subject)" }}
+                            {% if row.draft.is_approval_overdue %}<span class="pa-badge">Overdue</span>{% endif %}
+                        </td>
+                        <td data-label="Submitted">
+                            {% if row.submitted_at %}{{ row.submitted_at|date:"j M Y H:i" }}{% else %}Not recorded{% endif %}
+                        </td>
+                        <td data-label="Submitted by">
+                            {% if row.submitted_by %}
+                                {% firstof row.submitted_by.get_full_name row.submitted_by.email %}
+                            {% else %}
+                                Not recorded
+                            {% endif %}
+                        </td>
+                        <td data-label="">
+                            <a class="pa-review" href="{% url 'organisation_detail' content_type_id=row.content_type_id object_id=row.object_id %}">
+                                Review<span class="visually-hidden"> {{ row.organisation_name }}</span>
+                            </a>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div class="pa-empty">
+            <strong>No drafts are awaiting approval.</strong>
+            New submissions will appear here.
+        </div>
+    {% endif %}
+</main>
+</body>
+</html>

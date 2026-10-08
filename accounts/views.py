@@ -1,5 +1,4 @@
 from django.core.mail import send_mail
-
 from django.conf import settings
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
@@ -55,7 +54,7 @@ def logout_view(request):
 @login_required
 def dashboard_view(request):
     """
-    Redirect the old account dashboard URL to the new Sprint 2 dashboard.
+    Redirect the old account dashboard URL to the Sprint 2 dashboard.
     """
     return redirect("outreach_dashboard")
 
@@ -70,8 +69,7 @@ def forgot_password_view(request):
             email = form.cleaned_data["email"].lower().strip()
             user = User.objects.filter(email=email).first()
 
-            # Always show the same confirmation whether or not the account
-            # exists. This prevents leaking registered email addresses.
+            # Use the same confirmation for registered and unknown emails.
             if user is not None:
                 _send_password_reset_email(request, user)
 
@@ -114,21 +112,10 @@ def _send_password_reset_email(request, user):
         },
     )
 
-    try:
-        send_mail(
-            subject=subject,
-            message=message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
-            fail_silently=False,
-        )
-
-        print(
-            f"[password reset] Sent successfully to {user.email}"
-        )
-
-    except Exception as exc:
-        print(
-            "[password reset] Email sending failed "
-            f"for {user.email}: {exc}"
-        )
+    send_mail(
+        subject=subject,
+        message=message,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[user.email],
+        fail_silently=False,
+    )

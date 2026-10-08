@@ -23,6 +23,11 @@ urlpatterns = [
     ),
 
     path(
+        "approvals/pending/",
+        views.pending_approvals,
+        name="pending_approvals",
+    ),
+    path(
         "organisations/add/",
         views.add_organisation,
         name="add_organisation",
@@ -70,6 +75,12 @@ path(
 ),
 
 path(
+    "email-draft/<uuid:draft_id>/withdraw/",
+    views.withdraw_email_draft,
+    name="withdraw_email_draft",
+),
+
+path(
     "email-draft/<uuid:draft_id>/sent/",
     views.mark_email_draft_sent,
     name="mark_email_draft_sent",
@@ -101,5 +112,10 @@ path(
     "organisations/scrape/",
     views.scrape_organisations,
     name="scrape_organisations",
+),
+path(
+    "email-drafts/<uuid:draft_id>/cancel/",
+    views.cancel_email_draft,
+    name="cancel_email_draft",
 ),
 ]

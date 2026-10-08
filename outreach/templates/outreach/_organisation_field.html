@@ -1,0 +1,20 @@
+<div class="form-group" data-field="{{ field.html_name }}">
+    <label for="{{ field.id_for_label }}">
+        {{ field.label }}
+        {% if field.field.required %}
+            <span class="required-mark" aria-hidden="true">*</span>
+            <span class="visually-hidden">(required)</span>
+        {% endif %}
+    </label>
+    {{ field }}
+    {% if field.help_text and field.name != "region" %}
+        <span class="help-text" id="help-{{ field.html_name }}">{{ field.help_text }}</span>
+    {% endif %}
+    {% if field.errors %}
+        <div class="field-error" id="error-{{ field.html_name }}" role="alert">
+            {% for error in field.errors %}
+                <div><span aria-hidden="true">&#9888;</span> <span class="visually-hidden">Error:</span> {{ error }}</div>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>

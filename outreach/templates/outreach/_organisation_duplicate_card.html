@@ -1,0 +1,36 @@
+<div class="match-card" role="group" aria-label="{{ card_label }}">
+    <div class="match-card-main">
+        <div class="match-card-name">
+            {% firstof org.bank_name org.branch_name org.club_name "Unnamed organisation" %}
+        </div>
+        <dl class="match-card-grid">
+            <div>
+                <dt>Type</dt>
+                <dd>{{ org_type_label }}</dd>
+            </div>
+            <div>
+                <dt>Location</dt>
+                <dd class="match-card-location">
+                    {% if org.suburb %}<span>{{ org.suburb }}</span>{% endif %}
+                    {% if org.region %}<span>{{ org.region }}</span>{% endif %}
+                    {% if org.state %}<span>{{ org.state }}</span>{% endif %}
+                    {% if not org.suburb and not org.region and not org.state %}-{% endif %}
+                </dd>
+            </div>
+            <div>
+                <dt>Email</dt>
+                <dd>{{ org.public_email|default:"-" }}</dd>
+            </div>
+            <div>
+                <dt>Contact number</dt>
+                <dd>{{ org.public_phone|default:"-" }}</dd>
+            </div>
+        </dl>
+    </div>
+    <a
+        class="btn btn-secondary match-card-link"
+        href="{% url 'organisation_detail' content_type_id=content_type_id object_id=org.pk %}"
+        target="_blank"
+        rel="noopener"
+    >View Details</a>
+</div>

@@ -1,8 +1,14 @@
 import logging
+import smtplib
+import socket
+import ssl
+from functools import wraps
 import hashlib
 
 
 import re
+import requests
+from django.core.mail import send_mail
 
 
 from datetime import timedelta
@@ -13,7 +19,7 @@ from django.contrib.auth.decorators import login_required, permission_required
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.shortcuts import redirect
-
+from django.core.mail import EmailMessage
 
 from difflib import SequenceMatcher
 
@@ -40,7 +46,7 @@ from django.core.exceptions import ValidationError
 
 from django.db import transaction
 
-from django.db.models import Q
+from django.db.models import F, Prefetch, Q
 
 
 from django.http import Http404, JsonResponse
@@ -56,24 +62,29 @@ from django.views.decorators.http import require_GET, require_POST
 
 
 from .services import (
+    find_unresolved_placeholders,
     generate_outreach_email,
     validate_generated_email,
 )
 
+from .approvals import get_available_approvers, notify_admins
 
-from .forms import BankForm, BranchForm, ClubForm
+
+from .forms import AUSTRALIAN_STATES, BankForm, BranchForm, ClubForm
 
 
 from .models import (
     Bank,
     Branch,
     Club,
+    Contact,
     Opportunity,
+    OrganisationCreationLock,
     EmailDraft,
-    EmailGenerationLog,
+    EmailDraftHistory,
     EmailTemplate,
+    EmailGenerationLog,
 )
-
 
 from .status_transitions import (
     InvalidStatusTransition,
@@ -759,7 +770,6 @@ def record_positive_response_view(request, opportunity_id):
             "supported_clubs": supported_clubs,
         },
     )
-
 
 
 @login_required
@@ -1919,6 +1929,17 @@ def dashboard_view(request):
         "region": region,
 
 
+    
+        "can_review_approvals": request.user.has_perm(
+            "outreach.approve_emaildraft"
+        ),
+        "pending_approval_count": (
+            EmailDraft.objects.filter(
+                workflow_status="awaiting_approval",
+            ).count()
+            if request.user.has_perm("outreach.approve_emaildraft")
+            else 0
+        ),
     }
 
 
@@ -1934,6 +1955,71 @@ def dashboard_view(request):
         context,
 
 
+    )
+
+
+@login_required
+def pending_approvals(request):
+    """
+    Read-only queue of drafts currently Awaiting Approval, for users
+    holding the approval permission. Viewing it never changes state.
+    """
+    if not request.user.has_perm("outreach.approve_emaildraft"):
+        raise PermissionDenied
+
+    drafts = (
+        EmailDraft.objects
+        .filter(workflow_status="awaiting_approval")
+        .select_related("opportunity", "opportunity__content_type")
+        .prefetch_related(
+            Prefetch(
+                "workflow_history",
+                queryset=(
+                    EmailDraftHistory.objects
+                    .filter(action="submitted")
+                    .select_related("performed_by")
+                    .order_by("-created_at")
+                ),
+                to_attr="submission_events",
+            )
+        )
+        .order_by("submitted_at", "created_at")
+    )
+
+    rows = []
+
+    for draft in drafts:
+        organisation = draft.opportunity.organisation
+        event = (
+            draft.submission_events[0]
+            if draft.submission_events
+            else None
+        )
+
+        rows.append(
+            {
+                "draft": draft,
+                "organisation_name": (
+                    _organisation_name(organisation)
+                    if organisation is not None
+                    else "Unknown organisation"
+                ),
+                "content_type_id": draft.opportunity.content_type_id,
+                "object_id": draft.opportunity.object_id,
+                "submitted_at": (
+                    draft.submitted_at
+                    or (event.created_at if event else None)
+                ),
+                "submitted_by": (
+                    event.performed_by if event else None
+                ),
+            }
+        )
+
+    return render(
+        request,
+        "outreach/pending_approvals.html",
+        {"rows": rows},
     )
 
 
@@ -1986,6 +2072,14 @@ def organisation_detail(
         .order_by("-created_at")
         .first()
     )
+    email_workflow_history = []
+
+    if latest_draft:
+        email_workflow_history = (
+        latest_draft.workflow_history
+        .select_related("performed_by")
+        .all()
+    )
 
     # Only active/approved templates can be used.
     active_templates = (
@@ -2005,6 +2099,7 @@ def organisation_detail(
         "object_id": object_id,
         "latest_draft": latest_draft,
         "active_templates": active_templates,
+        "email_workflow_history": email_workflow_history,
     }
 
     return render(
@@ -2096,6 +2191,41 @@ def _normalise_duplicate_value(value):
     return value
 
 
+def _normalise_phone(value):
+    """Digits only, with +61 treated as a leading 0."""
+    digits = re.sub(r"[^\d+]", "", str(value or ""))
+
+    if digits.startswith("+61"):
+        digits = "0" + digits[3:]
+
+    return digits
+
+
+def _normalise_website(value):
+    """Ignore scheme, www., case and trailing slashes."""
+    value = str(value or "").strip().lower()
+    value = re.sub(r"^[a-z][a-z0-9+.-]*://", "", value)
+    value = re.sub(r"^www\.", "", value)
+
+    return value.rstrip("/")
+
+
+_STATE_CODES = {code for code, _ in AUSTRALIAN_STATES if code}
+
+
+def _organisation_state(organisation):
+    """State code of an existing record ('' when not a known code)."""
+    for attribute in ("state", "region"):
+        value = str(
+            getattr(organisation, attribute, "") or ""
+        ).strip().upper()
+
+        if value in _STATE_CODES:
+            return value
+
+    return ""
+
+
 def _organisation_name(organisation):
 
 
@@ -2163,952 +2293,331 @@ def _organisation_name(organisation):
 
 
 def _find_exact_duplicate(
-
-
     organisation_type,
-
-
     cleaned_data,
-
-
 ):
-
-
     """
+    Find an exact organisation duplicate.
 
+    Exact duplicate:
+    - same normalised organisation name
+    - same organisation type
+    - same suburb OR same postcode
 
-    Look for an exact organisation duplicate using
-
-
-    normalised name and location details.
-
-
+    Suburb is optional, so postcode can be used as the
+    location match when suburb is not available.
     """
-
 
     if organisation_type == "bank":
-
-
         queryset = Bank.objects.all()
-
-
-        submitted_name = (
-
-
-            cleaned_data.get(
-
-
-                "bank_name",
-
-
-                "",
-
-
-            )
-
-
+        submitted_name = cleaned_data.get(
+            "bank_name",
+            "",
         )
-
 
     elif organisation_type == "branch":
-
-
         queryset = Branch.objects.all()
-
-
-        submitted_name = (
-
-
-            cleaned_data.get(
-
-
-                "branch_name",
-
-
-                "",
-
-
-            )
-
-
+        submitted_name = cleaned_data.get(
+            "branch_name",
+            "",
         )
-
 
     elif organisation_type == "club":
-
-
         queryset = Club.objects.all()
-
-
-        submitted_name = (
-
-
-            cleaned_data.get(
-
-
-                "club_name",
-
-
-                "",
-
-
-            )
-
-
+        submitted_name = cleaned_data.get(
+            "club_name",
+            "",
         )
-
 
     else:
-
-
         return None
 
-
-    submitted_name = (
-
-
-        _normalise_duplicate_value(
-
-
-            submitted_name
-
-
-        )
-
-
+    submitted_name = _normalise_duplicate_value(
+        submitted_name
     )
 
-
-    submitted_state = (
-
-
-        _normalise_duplicate_value(
-
-
-            cleaned_data.get(
-
-
-                "state",
-
-
-                "",
-
-
-            )
-
-
+    submitted_suburb = _normalise_duplicate_value(
+        cleaned_data.get(
+            "suburb",
+            "",
         )
-
-
     )
 
-
-    submitted_region = (
-
-
-        _normalise_duplicate_value(
-
-
-            cleaned_data.get(
-
-
-                "region",
-
-
-                "",
-
-
-            )
-
-
+    submitted_postcode = _normalise_duplicate_value(
+        cleaned_data.get(
+            "postcode",
+            "",
         )
-
-
     )
 
-
-    submitted_suburb = (
-
-
-        _normalise_duplicate_value(
-
-
-            cleaned_data.get(
-
-
-                "suburb",
-
-
-                "",
-
-
-            )
-
-
-        )
-
-
-    )
-
-
-    submitted_postcode = (
-
-
-        _normalise_duplicate_value(
-
-
-            cleaned_data.get(
-
-
-                "postcode",
-
-
-                "",
-
-
-            )
-
-
-        )
-
-
-    )
-
+    submitted_state = str(
+        cleaned_data.get("state", "") or ""
+    ).strip().upper()
 
     for organisation in queryset:
-
-
-        existing_name = (
-
-
-            _normalise_duplicate_value(
-
-
-                _organisation_name(
-
-
-                    organisation
-
-
-                )
-
-
+        existing_name = _normalise_duplicate_value(
+            _organisation_name(
+                organisation
             )
-
-
         )
 
+        existing_state = _organisation_state(organisation)
 
-        existing_state = (
+        # Different known states are different organisations.
+        if (
+            submitted_state
+            and existing_state
+            and submitted_state != existing_state
+        ):
+            continue
 
-
-            _normalise_duplicate_value(
-
-
-                getattr(
-
-
-                    organisation,
-
-
-                    "state",
-
-
-                    "",
-
-
-                )
-
-
+        existing_suburb = _normalise_duplicate_value(
+            getattr(
+                organisation,
+                "suburb",
+                "",
             )
-
-
         )
 
-
-        existing_region = (
-
-
-            _normalise_duplicate_value(
-
-
-                getattr(
-
-
-                    organisation,
-
-
-                    "region",
-
-
-                    "",
-
-
-                )
-
-
+        existing_postcode = _normalise_duplicate_value(
+            getattr(
+                organisation,
+                "postcode",
+                "",
             )
-
-
         )
-
-
-        existing_suburb = (
-
-
-            _normalise_duplicate_value(
-
-
-                getattr(
-
-
-                    organisation,
-
-
-                    "suburb",
-
-
-                    "",
-
-
-                )
-
-
-            )
-
-
-        )
-
-
-        existing_postcode = (
-
-
-            _normalise_duplicate_value(
-
-
-                getattr(
-
-
-                    organisation,
-
-
-                    "postcode",
-
-
-                    "",
-
-
-                )
-
-
-            )
-
-
-        )
-
 
         name_matches = (
-
-
-            existing_name
-
-
-            == submitted_name
-
-
+            submitted_name
+            and submitted_name == existing_name
         )
-
-
-        state_matches = (
-
-
-            existing_state
-
-
-            == submitted_state
-
-
-        )
-
-
-        region_matches = (
-
-
-            existing_region
-
-
-            == submitted_region
-
-
-            if submitted_region
-
-
-            else True
-
-
-        )
-
 
         suburb_matches = (
-
-
-            existing_suburb
-
-
-            == submitted_suburb
-
-
-            if submitted_suburb
-
-
-            else True
-
-
+            bool(submitted_suburb)
+            and submitted_suburb == existing_suburb
         )
-
 
         postcode_matches = (
-
-
-            existing_postcode
-
-
-            == submitted_postcode
-
-
-            if submitted_postcode
-
-
-            else True
-
-
+            bool(submitted_postcode)
+            and submitted_postcode == existing_postcode
         )
 
+        location_matches = (
+            suburb_matches
+            or postcode_matches
+        )
 
         if (
-
-
             name_matches
-
-
-            and state_matches
-
-
-            and region_matches
-
-
-            and suburb_matches
-
-
-            and postcode_matches
-
-
+            and location_matches
         ):
-
-
             return organisation
-
 
     return None
 
 
 def _find_likely_duplicate(
-
-
     organisation_type,
-
-
     cleaned_data,
-
-
 ):
-
-
     """
-
-
     Find an organisation that may be a duplicate.
 
-
-    A possible duplicate is detected when:
-
-
-    - the same public email is used, or
-
-
-    - the same phone number is used, or
-
-
-    - the same website is used, or
-
-
-    - the name is very similar and the location matches.
-
-
+    Possible duplicate:
+    - same public email
+    - same phone number
+    - same website
+    - very similar name with matching location
     """
 
-
     if organisation_type == "bank":
-
-
         queryset = Bank.objects.all()
 
-
         submitted_name = cleaned_data.get(
-
-
             "bank_name",
-
-
             "",
-
-
         )
-
 
     elif organisation_type == "branch":
-
-
         queryset = Branch.objects.all()
 
-
         submitted_name = cleaned_data.get(
-
-
             "branch_name",
-
-
             "",
-
-
         )
-
 
     elif organisation_type == "club":
-
-
         queryset = Club.objects.all()
 
-
         submitted_name = cleaned_data.get(
-
-
             "club_name",
-
-
             "",
-
-
         )
-
 
     else:
-
-
         return None
 
-
     submitted_name = _normalise_duplicate_value(
-
-
         submitted_name
-
-
     )
-
 
     submitted_email = _normalise_duplicate_value(
-
-
         cleaned_data.get(
-
-
             "public_email",
-
-
             "",
-
-
         )
-
-
     )
 
-
-    submitted_phone = _normalise_duplicate_value(
-
-
+    submitted_phone = _normalise_phone(
         cleaned_data.get(
-
-
             "public_phone",
-
-
             "",
-
-
         )
-
-
     )
 
-
-    submitted_website = _normalise_duplicate_value(
-
-
+    submitted_website = _normalise_website(
         cleaned_data.get(
-
-
             "website_url",
-
-
             "",
-
-
         )
-
-
     )
-
 
     submitted_region = _normalise_duplicate_value(
-
-
         cleaned_data.get(
-
-
             "region",
-
-
             "",
-
-
         )
-
-
     )
-
 
     submitted_suburb = _normalise_duplicate_value(
-
-
         cleaned_data.get(
-
-
             "suburb",
-
-
             "",
-
-
         )
-
-
     )
-
 
     submitted_postcode = _normalise_duplicate_value(
-
-
         cleaned_data.get(
-
-
             "postcode",
-
-
             "",
-
-
         )
-
-
     )
 
-
     for organisation in queryset:
-
-
         existing_name = _normalise_duplicate_value(
-
-
             _organisation_name(
-
-
                 organisation
-
-
             )
-
-
         )
-
 
         existing_email = _normalise_duplicate_value(
-
-
             getattr(
-
-
                 organisation,
-
-
                 "public_email",
-
-
                 "",
-
-
             )
-
-
         )
 
-
-        existing_phone = _normalise_duplicate_value(
-
-
+        existing_phone = _normalise_phone(
             getattr(
-
-
                 organisation,
-
-
                 "public_phone",
-
-
                 "",
-
-
             )
-
-
         )
 
-
-        existing_website = _normalise_duplicate_value(
-
-
+        existing_website = _normalise_website(
             getattr(
-
-
                 organisation,
-
-
                 "website_url",
-
-
                 "",
-
-
             )
-
-
         )
-
 
         existing_region = _normalise_duplicate_value(
-
-
             getattr(
-
-
                 organisation,
-
-
                 "region",
-
-
                 "",
-
-
             )
-
-
         )
-
 
         existing_suburb = _normalise_duplicate_value(
-
-
             getattr(
-
-
                 organisation,
-
-
                 "suburb",
-
-
                 "",
-
-
             )
-
-
         )
-
 
         existing_postcode = _normalise_duplicate_value(
-
-
             getattr(
-
-
                 organisation,
-
-
                 "postcode",
-
-
                 "",
-
-
             )
-
-
         )
-
 
         same_email = (
-
-
             bool(submitted_email)
-
-
             and submitted_email == existing_email
-
-
         )
-
 
         same_phone = (
-
-
             bool(submitted_phone)
-
-
             and submitted_phone == existing_phone
-
-
         )
-
 
         same_website = (
-
-
             bool(submitted_website)
-
-
             and submitted_website == existing_website
-
-
         )
-
 
         name_similarity = SequenceMatcher(
-
-
             None,
-
-
             submitted_name,
-
-
             existing_name,
-
-
         ).ratio()
 
-
         similar_name = (
-
-
-            name_similarity >= 0.80
-
-
+            bool(submitted_name)
+            and bool(existing_name)
+            and name_similarity >= 0.80
         )
 
-
+        # A shared state alone is too broad to count as "same
+        # location"; require the suburb or postcode to match (the
+        # region is only used when neither is known).
         same_location = (
-
-
             (
-
-
-                bool(submitted_region)
-
-
+                not submitted_suburb
+                and not submitted_postcode
+                and bool(submitted_region)
                 and submitted_region
-
-
                 == existing_region
-
-
             )
-
-
             or (
-
-
                 bool(submitted_suburb)
-
-
                 and submitted_suburb
-
-
                 == existing_suburb
-
-
             )
-
-
             or (
-
-
                 bool(submitted_postcode)
-
-
                 and submitted_postcode
-
-
                 == existing_postcode
-
-
             )
-
-
         )
-
 
         if (
-
-
             same_email
-
-
             or same_phone
-
-
             or same_website
-
-
             or (
-
-
                 similar_name
-
-
                 and same_location
-
-
             )
-
-
         ):
-
-
             return organisation
-
 
     return None
 
@@ -3178,6 +2687,20 @@ def generate_email_draft(
         model_class,
         pk=object_id,
     )
+
+    if organisation.contact_status != "not_yet_contacted":
+        messages.error(
+            request,
+            (
+                "A new initial outreach draft cannot be created because "
+                "this organisation has already been contacted."
+            ),
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=content_type_id,
+            object_id=object_id,
+        )
 
     # ---------------------------------------------------------
     # 3. Get generation inputs
@@ -3316,10 +2839,13 @@ def generate_email_draft(
     # 8. Do Not Contact eligibility
     # ---------------------------------------------------------
 
-    if (
-    latest_opportunity
-    and latest_opportunity.status == "do_not_contact"
-):
+    has_do_not_contact = Opportunity.objects.filter(
+        content_type=content_type,
+        object_id=object_id,
+        status="do_not_contact",
+    ).exists()
+
+    if has_do_not_contact:
         messages.error(
             request,
             (
@@ -3327,7 +2853,6 @@ def generate_email_draft(
                 "this organisation is marked Do Not Contact."
             ),
         )
-
         return redirect(
             "organisation_detail",
             content_type_id=content_type_id,
@@ -3348,17 +2873,33 @@ def generate_email_draft(
         .first()
     )
 
-    # If an AI-generated draft already exists,
-    # another normal Generate Draft request is blocked.
+    active_existing_draft = (
+        EmailDraft.objects.filter(
+            opportunity__content_type=content_type,
+            opportunity__object_id=object_id,
+            workflow_status__in=[
+                "draft",
+                "awaiting_approval",
+                "changes_requested",
+                "approved",
+                "sending",
+                "send_failed",
+            ],
+        )
+        .order_by("-created_at")
+        .first()
+    )
+
+    # A normal Generate action must not create a second active initial draft.
     if (
-        latest_existing_draft
+        active_existing_draft
         and not is_regeneration
     ):
         messages.warning(
             request,
             (
-                "An AI draft already exists for this organisation. "
-                "Please use Regenerate Draft if you want a new version."
+                "An active email draft already exists for this organisation. "
+                "Please review the existing draft instead of creating another."
             ),
         )
 
@@ -4042,6 +3583,7 @@ def generate_email_draft(
             opportunity=latest_opportunity,
             template=template,
             template_version=template.version,
+            recipient_email=recipient_email,
             subject=subject,
             body=body,
             outreach_purpose=outreach_purpose,
@@ -4052,9 +3594,7 @@ def generate_email_draft(
             version=draft_version,
             regeneration_attempts=regeneration_attempts,
             is_incomplete=is_incomplete,
-            validation_issues="\n".join(
-                validation_issues
-            ),
+            validation_issues="\n".join(validation_issues),
         )
 
         if is_incomplete:
@@ -4132,13 +3672,11 @@ def generate_email_draft(
 @login_required
 @require_POST
 def create_manual_email_draft(
-    request, 
+    request,
     content_type_id,
     object_id,
 ):
-    if not request.user.has_perm(
-        "outreach.generate_emaildraft"
-    ):
+    if not request.user.has_perm("outreach.generate_emaildraft"):
         messages.error(
             request,
             "You do not have permission to create email drafts.",
@@ -4149,48 +3687,100 @@ def create_manual_email_draft(
             object_id=object_id,
         )
 
-    content_type = get_object_or_404(
-        ContentType,
-        pk=content_type_id,
-    )
-
+    content_type = get_object_or_404(ContentType, pk=content_type_id)
     model_class = content_type.model_class()
 
-    if model_class not in (
-        Bank,
-        Branch,
-        Club,
-    ):
-        raise Http404(
-            "Organisation not found."
-        )
+    if model_class not in (Bank, Branch, Club):
+        raise Http404("Organisation not found.")
 
-    organisation = get_object_or_404(
-        model_class,
-        pk=object_id,
-    )
+    organisation = get_object_or_404(model_class, pk=object_id)
 
-    subject = request.POST.get(
-        "subject",
-        "",
-    ).strip()
-
-    body = request.POST.get(
-        "body",
-        "",
-    ).strip()
-
-    outreach_purpose = request.POST.get(
-        "outreach_purpose",
-        "",
-    ).strip()
-
-    if not subject or not body:
+    if organisation.contact_status != "not_yet_contacted":
         messages.error(
             request,
-            "Subject and email body are required.",
+            (
+                "A new initial outreach draft cannot be created because "
+                "this organisation has already been contacted."
+            ),
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=content_type_id,
+            object_id=object_id,
         )
 
+    recipient_email = (organisation.public_email or "").strip()
+    try:
+        validate_email(recipient_email)
+    except ValidationError:
+        messages.error(
+            request,
+            "A valid recipient email is required before a draft can be created.",
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=content_type_id,
+            object_id=object_id,
+        )
+
+    if Opportunity.objects.filter(
+        content_type=content_type,
+        object_id=object_id,
+        status="do_not_contact",
+    ).exists():
+        messages.error(
+            request,
+            (
+                "A manual email draft cannot be created because "
+                "this organisation is marked Do Not Contact."
+            ),
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=content_type_id,
+            object_id=object_id,
+        )
+
+    active_draft = (
+        EmailDraft.objects.filter(
+            opportunity__content_type=content_type,
+            opportunity__object_id=object_id,
+            workflow_status__in=[
+                "draft",
+                "awaiting_approval",
+                "changes_requested",
+                "approved",
+                "sending",
+                "send_failed",
+            ],
+        )
+        .order_by("-created_at")
+        .first()
+    )
+
+    if active_draft:
+        messages.warning(
+            request,
+            (
+                "An active email draft already exists for this organisation. "
+                "Please review the existing draft instead of creating another."
+            ),
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=content_type_id,
+            object_id=object_id,
+        )
+
+    subject = request.POST.get("subject", "").strip()
+    body = request.POST.get("body", "").strip()
+    outreach_purpose = request.POST.get("outreach_purpose", "").strip()
+
+    if not subject or not body or not outreach_purpose:
+        messages.error(
+            request,
+            "Subject, email body, and outreach purpose are required.",
+        )
         return redirect(
             "organisation_detail",
             content_type_id=content_type_id,
@@ -4206,24 +3796,6 @@ def create_manual_email_draft(
         .first()
     )
 
-    if (
-    latest_opportunity
-    and latest_opportunity.status == "do_not_contact"
-):
-        messages.error(
-            request,
-            (
-                "A manual email draft cannot be created because "
-                "this organisation is marked Do Not Contact."
-            ),
-        )
-
-        return redirect(
-            "organisation_detail",
-            content_type_id=content_type_id,
-            object_id=object_id,
-        )
-
     if latest_opportunity is None:
         latest_opportunity = Opportunity.objects.create(
             content_type=content_type,
@@ -4233,6 +3805,7 @@ def create_manual_email_draft(
 
     EmailDraft.objects.create(
         opportunity=latest_opportunity,
+        recipient_email=recipient_email,
         subject=subject,
         body=body,
         outreach_purpose=outreach_purpose,
@@ -4249,7 +3822,6 @@ def create_manual_email_draft(
             "Review it before submitting for approval."
         ),
     )
-
     return redirect(
         "organisation_detail",
         content_type_id=content_type_id,
@@ -4269,21 +3841,40 @@ def update_email_draft(request, draft_id):
         )
         return redirect("outreach_dashboard")
 
+    # Used initially so we have a safe redirect target.
     draft = get_object_or_404(
         EmailDraft,
         draft_id=draft_id,
     )
 
-    if draft.workflow_status != "draft":
+    redirect_kwargs = {
+        "content_type_id": draft.opportunity.content_type_id,
+        "object_id": draft.opportunity.object_id,
+    }
+
+    # ---------------------------------------------------------
+    # Version supplied by the page the user originally opened.
+    # ---------------------------------------------------------
+    posted_version = request.POST.get(
+        "version",
+        "",
+    ).strip()
+
+    try:
+        posted_version = int(posted_version)
+
+    except (TypeError, ValueError):
         messages.error(
             request,
-            "Only drafts can be edited.",
+            (
+                "The draft version could not be verified. "
+                "Please reload the page and try again."
+            ),
         )
 
         return redirect(
             "organisation_detail",
-            content_type_id=draft.opportunity.content_type_id,
-            object_id=draft.opportunity.object_id,
+            **redirect_kwargs,
         )
 
     subject = request.POST.get(
@@ -4304,47 +3895,229 @@ def update_email_draft(request, draft_id):
 
         return redirect(
             "organisation_detail",
-            content_type_id=draft.opportunity.content_type_id,
-            object_id=draft.opportunity.object_id,
+            **redirect_kwargs,
         )
 
-    signature = ""
+    # ---------------------------------------------------------
+    # Lock the draft while checking and saving.
+    # This prevents two saves being processed simultaneously.
+    # ---------------------------------------------------------
+    with transaction.atomic():
 
-    if draft.template:
-        signature = draft.template.signature or ""
+        # Take the write lock first (effective on SQLite, where
+        # select_for_update is a no-op), so an edit cannot interleave
+        # with a send claim and overwrite the Sending status.
+        EmailDraft.objects.filter(
+            pk=draft.pk,
+        ).update(version=F("version"))
 
-    is_incomplete, validation_issues = validate_generated_email(
-        subject,
-        body,
-        signature,
-    )
+        locked_draft = (
+            EmailDraft.objects
+            .select_for_update()
+            .select_related(
+                "opportunity",
+                "opportunity__content_type",
+                "template",
+            )
+            .get(pk=draft.pk)
+        )
 
-    draft.subject = subject
-    draft.body = body
-    draft.is_incomplete = is_incomplete
-    draft.validation_issues = "\n".join(
-        validation_issues
-    )
+        opportunity = locked_draft.opportunity
+        organisation = opportunity.organisation
 
-    draft.save(
-        update_fields=[
-            "subject",
-            "body",
-            "is_incomplete",
-            "validation_issues",
-            "updated_at",
-        ]
-    )
+        if organisation is None:
+            raise Http404("Organisation not found.")
 
-    if draft.is_incomplete:
+        # -----------------------------------------------------
+        # Concurrent edit protection
+        # -----------------------------------------------------
+        if posted_version != locked_draft.version:
+
+            messages.error(
+                request,
+                (
+                    "This draft has been changed by another user "
+                    "since you opened it. Your changes were not saved. "
+                    "The latest version has been loaded; please review "
+                    "it before editing again."
+                ),
+            )
+
+            return redirect(
+                "organisation_detail",
+                content_type_id=opportunity.content_type_id,
+                object_id=opportunity.object_id,
+            )
+
+        # -----------------------------------------------------
+        # Current recipient email must still be valid
+        # -----------------------------------------------------
+        current_recipient_email = (
+            getattr(
+                organisation,
+                "public_email",
+                "",
+            )
+            or ""
+        ).strip()
+
+        try:
+            validate_email(
+                current_recipient_email
+            )
+
+        except ValidationError:
+            messages.error(
+                request,
+                (
+                    "The organisation does not currently have "
+                    "a valid public email address."
+                ),
+            )
+
+            return redirect(
+                "organisation_detail",
+                content_type_id=opportunity.content_type_id,
+                object_id=opportunity.object_id,
+            )
+
+        # -----------------------------------------------------
+        # Editable workflow states
+        # -----------------------------------------------------
+        if locked_draft.workflow_status not in {
+            "draft",
+            "changes_requested",
+            "approved",
+        }:
+            messages.error(
+                request,
+                (
+                    "This email draft cannot be edited "
+                    "in its current status."
+                ),
+            )
+
+            return redirect(
+                "organisation_detail",
+                content_type_id=opportunity.content_type_id,
+                object_id=opportunity.object_id,
+            )
+
+        signature = (
+            locked_draft.template.signature
+            if locked_draft.template
+            else ""
+        )
+
+        is_incomplete, validation_issues = (
+            validate_generated_email(
+                subject,
+                body,
+                signature or "",
+            )
+        )
+
+        # -----------------------------------------------------
+        # Preserve current workflow state for audit history
+        # -----------------------------------------------------
+        old_status = locked_draft.workflow_status
+
+        # Changes Requested and Approved drafts return to Draft
+        # when edited.
+        if locked_draft.workflow_status in {
+            "changes_requested",
+            "approved",
+        }:
+            locked_draft.workflow_status = "draft"
+
+        # Any previous approval becomes invalid after editing.
+        locked_draft.approved_by = None
+        locked_draft.approved_at = None
+        locked_draft.approved_version = None
+
+        # -----------------------------------------------------
+        # Save current recipient snapshot and edited content
+        # -----------------------------------------------------
+        locked_draft.recipient_email = (
+            current_recipient_email
+        )
+
+        locked_draft.subject = subject
+        locked_draft.body = body
+        locked_draft.is_incomplete = is_incomplete
+
+        locked_draft.validation_issues = "\n".join(
+            validation_issues
+        )
+
+        locked_draft.last_edited_by = request.user
+
+        # Increment only after the concurrency check succeeds.
+        locked_draft.version += 1
+
+        locked_draft.save(
+            update_fields=[
+                "recipient_email",
+                "subject",
+                "body",
+                "is_incomplete",
+                "validation_issues",
+                "workflow_status",
+                "approved_by",
+                "approved_at",
+                "approved_version",
+                "last_edited_by",
+                "version",
+                "updated_at",
+            ]
+        )
+
+        # -----------------------------------------------------
+        # Permanent workflow history
+        # -----------------------------------------------------
+        if old_status == "approved":
+
+            record_email_draft_history(
+                draft=locked_draft,
+                action="approval_invalidated",
+                performed_by=request.user,
+                from_status="approved",
+                to_status="draft",
+                reason=(
+                    "Approved draft was edited and "
+                    "requires reapproval."
+                ),
+            )
+
+        else:
+
+            record_email_draft_history(
+                draft=locked_draft,
+                action="edited",
+                performed_by=request.user,
+                from_status=old_status,
+                to_status=locked_draft.workflow_status,
+            )
+
+        saved_is_incomplete = (
+            locked_draft.is_incomplete
+        )
+
+    # Transaction/row lock released here.
+
+    if saved_is_incomplete:
+
         messages.warning(
             request,
             (
-                "Draft changes were saved, but validation issues "
-                "still remain. Please review the draft again."
+                "Draft changes were saved, but validation "
+                "issues still remain. Please review the "
+                "draft again."
             ),
         )
+
     else:
+
         messages.success(
             request,
             "Draft changes saved successfully.",
@@ -4352,249 +4125,510 @@ def update_email_draft(request, draft_id):
 
     return redirect(
         "organisation_detail",
-        content_type_id=draft.opportunity.content_type_id,
-        object_id=draft.opportunity.object_id,
+        **redirect_kwargs,
     )
+def record_email_draft_history(
+    draft,
+    action,
+    performed_by=None,
+    from_status="",
+    to_status="",
+    reason="",
+):
+    EmailDraftHistory.objects.create(
+        draft=draft,
+        action=action,
+        from_status=from_status,
+        to_status=to_status,
+        version=draft.version,
+        performed_by=performed_by,
+        reason=reason,
+        recipient_email_snapshot=draft.recipient_email,
+        subject_snapshot=draft.subject,
+        body_snapshot=draft.body,
+    )
+
+def serialised_draft_transition(view):
+    """
+    Run a workflow transition inside one transaction, holding a write
+    lock on the draft first, so competing transitions are serialised.
+
+    The no-op write (version = version) takes SQLite's database write
+    lock and a row lock on PostgreSQL/MySQL; select_for_update then
+    adds the explicit row lock where the database supports it. State
+    checks, the state change and its history record all happen inside
+    this transaction. Never wrap an SMTP call in this decorator.
+    """
+
+    @wraps(view)
+    def wrapper(request, draft_id, *args, **kwargs):
+        with transaction.atomic():
+            locked = EmailDraft.objects.filter(
+                draft_id=draft_id,
+            ).update(version=F("version"))
+
+            if locked:
+                (
+                    EmailDraft.objects
+                    .select_for_update()
+                    .get(draft_id=draft_id)
+                )
+
+            return view(request, draft_id, *args, **kwargs)
+
+    return wrapper
+
+
+def _viewed_version_error(request, draft):
+    """
+    The approver must decide on the version they actually saw.
+    Returns an error message, or None when the version matches.
+    """
+    posted = request.POST.get("version", "").strip()
+
+    try:
+        posted_version = int(posted)
+    except (TypeError, ValueError):
+        return (
+            "The draft version could not be verified. Please reload "
+            "the page and review the latest version."
+        )
+
+    if posted_version != draft.version:
+        return (
+            "This draft has changed since you opened it. Please reload "
+            "the page and review the latest version before deciding."
+        )
+
+    return None
+
+
+def _record_blocked_do_not_contact(draft, user, stage):
+    record_email_draft_history(
+        draft=draft,
+        action="blocked_do_not_contact",
+        performed_by=user,
+        from_status=draft.workflow_status,
+        to_status=draft.workflow_status,
+        reason=(
+            f"{stage} blocked: the organisation is marked "
+            "Do Not Contact."
+        ),
+    )
+
+
+# Only these outcomes establish that the message was NOT delivered
+# (refused before or at submission, or never connected). Anything
+# else - timeouts, dropped connections, TLS faults mid-stream and any
+# unclassified exception - may have been delivered, so it is held in
+# Sending for manual reconciliation and can never be retried
+# automatically.
+#
+# A bare RuntimeError is NOT in this list: only EmailNotSentError,
+# raised below when the backend explicitly reports it sent nothing
+# (sent_count == 0), is a confirmed non-delivery.
+class EmailNotSentError(Exception):
+    """The mail backend explicitly reported that nothing was sent."""
+
+
+KNOWN_NON_DELIVERY_EXCEPTIONS = (
+    smtplib.SMTPAuthenticationError,
+    smtplib.SMTPConnectError,
+    smtplib.SMTPHeloError,
+    smtplib.SMTPNotSupportedError,
+    smtplib.SMTPSenderRefused,
+    smtplib.SMTPRecipientsRefused,
+    smtplib.SMTPDataError,
+    ssl.SSLCertVerificationError,
+    ConnectionRefusedError,
+    socket.gaierror,
+    EmailNotSentError,
+)
 
 
 @login_required
 @require_POST
+@serialised_draft_transition
 def submit_email_draft_for_review(request, draft_id):
-
-    if not request.user.has_perm(
-        "outreach.generate_emaildraft"
-    ):
+    if not request.user.has_perm("outreach.generate_emaildraft"):
         messages.error(
             request,
             "You do not have permission to submit email drafts.",
         )
+        return redirect("outreach_dashboard")
+
+    draft = get_object_or_404(EmailDraft, draft_id=draft_id)
+    opportunity = draft.opportunity
+    organisation = opportunity.organisation
+
+    if organisation is None:
+        raise Http404("Organisation not found.")
+
+    if organisation.contact_status != "not_yet_contacted":
+        messages.error(
+            request,
+            "This organisation has already been contacted.",
+        )
         return redirect(
-            "outreach_dashboard"
+            "organisation_detail",
+            content_type_id=opportunity.content_type_id,
+            object_id=opportunity.object_id,
         )
 
-    draft = get_object_or_404(
-        EmailDraft,
-        draft_id=draft_id,
-    )
-
-    # ---------------------------------------------------------
-    # Do Not Contact check
-    # ---------------------------------------------------------
-    organisation = draft.opportunity.organisation
-
-    if draft.opportunity.status == "do_not_contact":
+    if Opportunity.objects.filter(
+        content_type=opportunity.content_type,
+        object_id=opportunity.object_id,
+        status="do_not_contact",
+    ).exists():
+        _record_blocked_do_not_contact(
+            draft,
+            request.user,
+            "Submission",
+        )
         messages.error(
             request,
             "This organisation is marked Do Not Contact.",
         )
-
         return redirect(
             "organisation_detail",
-            content_type_id=draft.opportunity.content_type_id,
-            object_id=draft.opportunity.object_id,
+            content_type_id=opportunity.content_type_id,
+            object_id=opportunity.object_id,
         )
 
-    # ---------------------------------------------------------
-    # Only normal drafts can be submitted
-    # ---------------------------------------------------------
     if draft.workflow_status != "draft":
         messages.error(
             request,
             "Only drafts can be submitted for approval.",
         )
-
         return redirect(
             "organisation_detail",
-            content_type_id=draft.opportunity.content_type_id,
-            object_id=draft.opportunity.object_id,
+            content_type_id=opportunity.content_type_id,
+            object_id=opportunity.object_id,
         )
 
-    # ---------------------------------------------------------
-    # Block incomplete AI drafts
-    # ---------------------------------------------------------
     if draft.is_incomplete:
         messages.error(
             request,
             (
-                "This draft has validation issues and cannot be "
-                "submitted for approval yet. Please review and edit it first."
+                "This draft has validation issues and cannot be submitted for "
+                "approval yet. Please review and edit it first."
             ),
         )
-
         return redirect(
             "organisation_detail",
-            content_type_id=draft.opportunity.content_type_id,
-            object_id=draft.opportunity.object_id,
+            content_type_id=opportunity.content_type_id,
+            object_id=opportunity.object_id,
         )
 
-    # ---------------------------------------------------------
-    # Subject and body must exist
-    # ---------------------------------------------------------
-    if (
-        not draft.subject.strip()
-        or not draft.body.strip()
-    ):
+    if not draft.subject.strip() or not draft.body.strip():
         messages.error(
             request,
             "Subject and email body are required before submission.",
         )
-
         return redirect(
             "organisation_detail",
-            content_type_id=draft.opportunity.content_type_id,
-            object_id=draft.opportunity.object_id,
+            content_type_id=opportunity.content_type_id,
+            object_id=opportunity.object_id,
         )
 
-    # ---------------------------------------------------------
-    # Submit for approval
-    # ---------------------------------------------------------
-    draft.workflow_status = "needs_approving"
+    unresolved_placeholders = find_unresolved_placeholders(
+        draft.subject,
+        draft.body,
+    )
+
+    if unresolved_placeholders:
+        messages.error(
+            request,
+            (
+                "This draft still contains unresolved placeholders: "
+                + ", ".join(unresolved_placeholders)
+                + ". Please replace them before submitting for approval."
+            ),
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=opportunity.content_type_id,
+            object_id=opportunity.object_id,
+        )
+
+    recipient_email = (draft.recipient_email or "").strip()
+    current_email = (getattr(organisation, "public_email", "") or "").strip()
+
+    try:
+        validate_email(recipient_email)
+    except ValidationError:
+        messages.error(
+            request,
+            "A valid recipient email is required before submission.",
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=opportunity.content_type_id,
+            object_id=opportunity.object_id,
+        )
+
+    if not current_email or recipient_email.lower() != current_email.lower():
+        messages.error(
+            request,
+            (
+                "The organisation email address has changed since this draft "
+                "was created. Please create or update the draft before submission."
+            ),
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=opportunity.content_type_id,
+            object_id=opportunity.object_id,
+        )
+
+    old_status = draft.workflow_status
+
+    approver_unavailable = not get_available_approvers().exists()
+
+    draft.workflow_status = "awaiting_approval"
+    draft.submitted_at = timezone.now()
+    draft.overdue_flagged_at = None
+    draft.approver_unavailable = approver_unavailable
 
     draft.save(
         update_fields=[
             "workflow_status",
+            "submitted_at",
+            "overdue_flagged_at",
+            "approver_unavailable",
             "updated_at",
         ]
     )
 
-    messages.success(
-        request,
-        "Draft submitted for approval successfully.",
-    )
+    record_email_draft_history(
+    draft=draft,
+    action="submitted",
+    performed_by=request.user,
+    from_status=old_status,
+    to_status="awaiting_approval",
+)
 
+    if approver_unavailable:
+        # Stay in Awaiting Approval: never auto-approve or reject.
+        record_email_draft_history(
+            draft=draft,
+            action="no_approver_available",
+            performed_by=request.user,
+            from_status="awaiting_approval",
+            to_status="awaiting_approval",
+            reason=(
+                "No active user with approval permission is "
+                "available. An approver must be assigned."
+            ),
+        )
+
+        notify_admins(
+            "Email draft needs an approver",
+            (
+                f"Draft {draft.draft_id} was submitted for approval "
+                "but no active user holds the approve email draft "
+                "permission. Please assign an approver."
+            ),
+        )
+
+        messages.warning(
+            request,
+            (
+                "Draft submitted, but no approver is currently "
+                "available. An administrator has been flagged to "
+                "assign one. The draft remains Awaiting Approval."
+            ),
+        )
+
+    else:
+        messages.success(
+            request,
+            "Draft submitted for approval successfully.",
+        )
     return redirect(
         "organisation_detail",
-        content_type_id=draft.opportunity.content_type_id,
-        object_id=draft.opportunity.object_id,
+        content_type_id=opportunity.content_type_id,
+        object_id=opportunity.object_id,
     )
+
 @login_required
-
-
 @require_POST
-
-
+@serialised_draft_transition
 def approve_email_draft(request, draft_id):
-
-
-    if not request.user.has_perm(
-
-
-        "outreach.change_emaildraft"
-
-
-    ):
-
-
+    if not request.user.has_perm("outreach.approve_emaildraft"):
         messages.error(
-
-
             request,
-
-
-            "You do not have permission to approve email drafts."
-
-
+            "You do not have permission to approve email drafts.",
         )
-
-
         return redirect("outreach_dashboard")
 
+    draft = get_object_or_404(EmailDraft, draft_id=draft_id)
+    opportunity = draft.opportunity
+    organisation = opportunity.organisation
 
-    draft = get_object_or_404(
+    if organisation is None:
+        raise Http404("Organisation not found.")
 
-
-        EmailDraft,
-
-
-        draft_id=draft_id,
-
-
-    )
-
-
-    organisation = draft.opportunity.organisation
-
-    if draft.opportunity.status == "do_not_contact":
-        messages.error(
-            request,
-            "This organisation is marked Do Not Contact.",
-        )
-
-        return redirect(
-            "organisation_detail",
-            content_type_id=draft.opportunity.content_type_id,
-            object_id=draft.opportunity.object_id,
-        )
-
-    if draft.workflow_status != "needs_approving":
+    if draft.workflow_status != "awaiting_approval":
         messages.error(
             request,
             "Only drafts awaiting approval can be approved.",
         )
-
         return redirect(
             "organisation_detail",
-            content_type_id=draft.opportunity.content_type_id,
-            object_id=draft.opportunity.object_id,
+            content_type_id=opportunity.content_type_id,
+            object_id=opportunity.object_id,
         )
 
-    draft.workflow_status = "approved"
+    version_error = _viewed_version_error(request, draft)
 
-    draft.save(
+    if version_error:
+        messages.error(request, version_error)
+        return redirect(
+            "organisation_detail",
+            content_type_id=opportunity.content_type_id,
+            object_id=opportunity.object_id,
+        )
 
+    content_problems = []
 
-        update_fields=[
+    if not (draft.subject or "").strip():
+        content_problems.append("the subject is missing")
 
+    if not (draft.body or "").strip():
+        content_problems.append("the email body is missing")
 
-            "workflow_status",
+    unresolved = find_unresolved_placeholders(draft.subject, draft.body)
 
+    if unresolved:
+        content_problems.append(
+            "it contains unresolved placeholders ("
+            + ", ".join(unresolved)
+            + ")"
+        )
 
-            "updated_at",
+    if draft.is_incomplete:
+        content_problems.append(
+            "it has unresolved validation issues"
+        )
 
-
-        ]
-
-
-    )
-
-
-    messages.success(
-
-
-        request,
-
-
-        "Draft approved successfully."
-
-
-    )
-
-
-    return redirect(
-
-
-        "organisation_detail",
-
-
-        content_type_id=draft.opportunity.content_type_id,
-
-
-        object_id=draft.opportunity.object_id,
-
-
-    )
-
-
-@login_required
-@require_POST
-def reject_email_draft(request, draft_id):
-
-    if not request.user.has_perm(
-        "outreach.change_emaildraft"
-    ):
+    if content_problems:
         messages.error(
             request,
-            "You do not have permission to reject email drafts.",
+            (
+                "This draft cannot be approved: "
+                + "; ".join(content_problems)
+                + ". Request changes so it can be corrected."
+            ),
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=opportunity.content_type_id,
+            object_id=opportunity.object_id,
+        )
+
+    if organisation.contact_status != "not_yet_contacted":
+        messages.error(
+            request,
+            "This organisation has already been contacted.",
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=opportunity.content_type_id,
+            object_id=opportunity.object_id,
+        )
+
+    if Opportunity.objects.filter(
+        content_type=opportunity.content_type,
+        object_id=opportunity.object_id,
+        status="do_not_contact",
+    ).exists():
+        _record_blocked_do_not_contact(
+            draft,
+            request.user,
+            "Approval",
+        )
+        messages.error(
+            request,
+            "This organisation is marked Do Not Contact.",
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=opportunity.content_type_id,
+            object_id=opportunity.object_id,
+        )
+
+    recipient_email = (draft.recipient_email or "").strip()
+    current_email = (getattr(organisation, "public_email", "") or "").strip()
+
+    try:
+        validate_email(recipient_email)
+    except ValidationError:
+        messages.error(
+            request,
+            "The draft recipient email is no longer valid.",
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=opportunity.content_type_id,
+            object_id=opportunity.object_id,
+        )
+
+    if not current_email or recipient_email.lower() != current_email.lower():
+        messages.error(
+            request,
+            (
+                "The organisation email address has changed since this draft "
+                "was created. It cannot be approved until the draft is updated."
+            ),
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=opportunity.content_type_id,
+            object_id=opportunity.object_id,
+        )
+
+    old_status = draft.workflow_status
+
+    draft.workflow_status = "approved"
+    draft.approver_unavailable = False
+    draft.approved_by = request.user
+    draft.approved_at = timezone.now()
+    draft.approved_version = draft.version
+
+    draft.save(
+    update_fields=[
+        "workflow_status",
+        "approver_unavailable",
+        "approved_by",
+        "approved_at",
+        "approved_version",
+        "updated_at",
+    ]
+)
+
+    record_email_draft_history(
+    draft=draft,
+    action="approved",
+    performed_by=request.user,
+    from_status=old_status,
+    to_status="approved",
+    )
+
+    messages.success(request, "Draft approved successfully.")
+    return redirect(
+        "organisation_detail",
+        content_type_id=opportunity.content_type_id,
+        object_id=opportunity.object_id,
+    )
+@login_required
+@require_POST
+@serialised_draft_transition
+def withdraw_email_draft(request, draft_id):
+    if not request.user.has_perm("outreach.generate_emaildraft"):
+        messages.error(
+            request,
+            "You do not have permission to withdraw email drafts.",
         )
         return redirect("outreach_dashboard")
 
@@ -4603,49 +4637,142 @@ def reject_email_draft(request, draft_id):
         draft_id=draft_id,
     )
 
-    if draft.workflow_status != "needs_approving":
+    if draft.workflow_status != "awaiting_approval":
         messages.error(
             request,
-            "Only drafts awaiting approval can be rejected.",
+            "Only drafts awaiting approval can be withdrawn for editing.",
         )
-
         return redirect(
             "organisation_detail",
             content_type_id=draft.opportunity.content_type_id,
             object_id=draft.opportunity.object_id,
         )
 
-    rejection_reason = (
-        request.POST.get("rejection_reason", "")
-        .strip()
+    old_status = draft.workflow_status
+
+    draft.workflow_status = "draft"
+    draft.approver_unavailable = False
+    draft.approved_by = None
+    draft.approved_at = None
+    draft.approved_version = None
+
+    draft.save(
+        update_fields=[
+            "workflow_status",
+            "approver_unavailable",
+            "approved_by",
+            "approved_at",
+            "approved_version",
+            "updated_at",
+        ]
     )
+
+    record_email_draft_history(
+        draft=draft,
+        action="withdrawn",
+        performed_by=request.user,
+        from_status=old_status,
+        to_status="draft",
+        reason="Draft withdrawn from approval for further editing.",
+    )
+
+    messages.success(
+        request,
+        "Email draft withdrawn for editing.",
+    )
+
+    return redirect(
+        "organisation_detail",
+        content_type_id=draft.opportunity.content_type_id,
+        object_id=draft.opportunity.object_id,
+    )
+
+@login_required
+@require_POST
+@serialised_draft_transition
+def reject_email_draft(request, draft_id):
+    if not request.user.has_perm("outreach.approve_emaildraft"):
+        messages.error(
+                request,
+    "You do not have permission to request changes to email drafts.",
+)
+        return redirect("outreach_dashboard")
+
+    draft = get_object_or_404(
+        EmailDraft,
+        draft_id=draft_id,
+    )
+
+    if draft.workflow_status != "awaiting_approval":
+        messages.error(
+            request,
+            "Only drafts awaiting approval can have changes requested.",
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=draft.opportunity.content_type_id,
+            object_id=draft.opportunity.object_id,
+        )
+
+    version_error = _viewed_version_error(request, draft)
+
+    if version_error:
+        messages.error(request, version_error)
+        return redirect(
+            "organisation_detail",
+            content_type_id=draft.opportunity.content_type_id,
+            object_id=draft.opportunity.object_id,
+        )
+
+    rejection_reason = request.POST.get(
+        "rejection_reason",
+        "",
+    ).strip()
 
     if not rejection_reason:
         messages.error(
             request,
-            "Please provide a reason for rejecting this draft.",
+            "Please provide a reason for requesting changes.",
         )
-
         return redirect(
             "organisation_detail",
             content_type_id=draft.opportunity.content_type_id,
             object_id=draft.opportunity.object_id,
         )
 
-    draft.workflow_status = "rejected"
+    old_status = draft.workflow_status
+
+    draft.workflow_status = "changes_requested"
     draft.rejection_reason = rejection_reason
+    draft.approver_unavailable = False
+    draft.approved_by = None
+    draft.approved_at = None
+    draft.approved_version = None
 
     draft.save(
         update_fields=[
             "workflow_status",
             "rejection_reason",
+            "approver_unavailable",
+            "approved_by",
+            "approved_at",
+            "approved_version",
             "updated_at",
         ]
     )
 
+    record_email_draft_history(
+        draft=draft,
+        action="changes_requested",
+        performed_by=request.user,
+        from_status=old_status,
+        to_status="changes_requested",
+        reason=rejection_reason,
+    )
+
     messages.success(
         request,
-        "Draft rejected successfully.",
+        "Changes requested successfully.",
     )
 
     return redirect(
@@ -4655,14 +4782,108 @@ def reject_email_draft(request, draft_id):
     )
 @login_required
 @require_POST
-def mark_email_draft_sent(request, draft_id):
-
+@serialised_draft_transition
+def cancel_email_draft(request, draft_id):
     if not request.user.has_perm(
-        "outreach.change_emaildraft"
+        "outreach.generate_emaildraft"
     ):
         messages.error(
             request,
-            "You do not have permission to mark email drafts as sent.",
+            "You do not have permission to cancel email drafts.",
+        )
+        return redirect("outreach_dashboard")
+
+    draft = get_object_or_404(
+        EmailDraft,
+        draft_id=draft_id,
+    )
+
+    if draft.workflow_status in {
+        "sent",
+        "sending",
+        "cancelled",
+    }:
+        messages.error(
+            request,
+            (
+                "This email draft cannot be cancelled "
+                "in its current status."
+            ),
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=draft.opportunity.content_type_id,
+            object_id=draft.opportunity.object_id,
+        )
+
+    cancellation_reason = request.POST.get(
+        "cancellation_reason",
+        "",
+    ).strip()
+
+    if not cancellation_reason:
+        messages.error(
+            request,
+            "Please provide a reason for cancelling the draft.",
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=draft.opportunity.content_type_id,
+            object_id=draft.opportunity.object_id,
+        )
+    old_status = draft.workflow_status
+
+    draft.workflow_status = "cancelled"
+    draft.cancelled_by = request.user
+    draft.cancelled_at = timezone.now()
+    draft.cancellation_reason = cancellation_reason
+    draft.approver_unavailable = False
+
+    # Any previous approval is no longer valid.
+    draft.approved_by = None
+    draft.approved_at = None
+    draft.approved_version = None
+
+    draft.save(
+        update_fields=[
+            "workflow_status",
+            "cancelled_by",
+            "cancelled_at",
+            "cancellation_reason",
+            "approver_unavailable",
+            "approved_by",
+            "approved_at",
+            "approved_version",
+            "updated_at",
+        ]
+    )
+    record_email_draft_history(
+    draft=draft,
+    action="cancelled",
+    performed_by=request.user,
+    from_status=old_status,
+    to_status="cancelled",
+    reason=cancellation_reason,
+)
+
+    messages.success(
+        request,
+        "Email draft cancelled successfully.",
+    )
+
+    return redirect(
+        "organisation_detail",
+        content_type_id=draft.opportunity.content_type_id,
+        object_id=draft.opportunity.object_id,
+    )
+
+@login_required
+@require_POST
+def mark_email_draft_sent(request, draft_id):
+    if not request.user.has_perm("outreach.send_emaildraft"):
+        messages.error(
+            request,
+            "You do not have permission to send email drafts.",
         )
         return redirect("outreach_dashboard")
 
@@ -4672,648 +4893,686 @@ def mark_email_draft_sent(request, draft_id):
     )
 
     opportunity = draft.opportunity
-
     model_class = opportunity.content_type.model_class()
 
-    if model_class not in (
-        Bank,
-        Branch,
-        Club,
-    ):
-        raise Http404(
-            "Organisation not found."
-        )
+    if model_class not in (Bank, Branch, Club):
+        raise Http404("Organisation not found.")
 
     organisation = get_object_or_404(
         model_class,
         pk=opportunity.object_id,
     )
 
-    if opportunity.status == "do_not_contact":
+    redirect_kwargs = {
+        "content_type_id": opportunity.content_type_id,
+        "object_id": opportunity.object_id,
+    }
+
+    if organisation.contact_status != "not_yet_contacted":
+        messages.error(
+            request,
+            "This organisation has already been contacted.",
+        )
+        return redirect(
+            "organisation_detail",
+            **redirect_kwargs,
+        )
+
+    if Opportunity.objects.filter(
+        content_type=opportunity.content_type,
+        object_id=opportunity.object_id,
+        status="do_not_contact",
+    ).exists():
+        _record_blocked_do_not_contact(
+            draft,
+            request.user,
+            "Sending",
+        )
         messages.error(
             request,
             (
                 "This organisation is marked Do Not Contact. "
-                "The email cannot be marked as sent."
+                "The email cannot be sent."
             ),
         )
         return redirect(
             "organisation_detail",
-            content_type_id=opportunity.content_type_id,
-            object_id=opportunity.object_id,
+            **redirect_kwargs,
         )
 
-    if draft.workflow_status != "approved":
+    if draft.reconciliation_required:
         messages.error(
             request,
-            "Only approved drafts can be marked as sent.",
+            (
+                "This email was already sent but its record needs "
+                "reconciliation. It cannot be sent again."
+            ),
         )
         return redirect(
             "organisation_detail",
-            content_type_id=opportunity.content_type_id,
-            object_id=opportunity.object_id,
+            **redirect_kwargs,
         )
 
-    with transaction.atomic():
-
-        draft.workflow_status = "sent"
-        draft.save(
-            update_fields=[
-                "workflow_status",
-                "updated_at",
-            ]
+    if draft.workflow_status not in {
+        "approved",
+        "send_failed",
+    }:
+        messages.error(
+            request,
+            "Only approved or previously failed email drafts can be sent.",
+        )
+        return redirect(
+            "organisation_detail",
+            **redirect_kwargs,
         )
 
-        organisation.contact_status = "contacted"
-        organisation.save(
-            update_fields=[
-                "contact_status",
-            ]
+    if (
+        draft.approved_version is None
+        or draft.approved_version != draft.version
+    ):
+        messages.error(
+            request,
+            (
+                "This draft has changed since approval. "
+                "It must be approved again before sending."
+            ),
+        )
+        return redirect(
+            "organisation_detail",
+            **redirect_kwargs,
         )
 
-        opportunity.status = "contacted"
-        opportunity.date_contacted = timezone.now()
-        opportunity.outreach_method = "email"
+    recipient_email = (
+        draft.recipient_email or ""
+    ).strip()
 
-        opportunity.save(
-            update_fields=[
-                "status",
-                "date_contacted",
-                "outreach_method",
-            ]
+    current_email = (
+        organisation.public_email or ""
+    ).strip()
+
+    try:
+        validate_email(recipient_email)
+        validate_email(current_email)
+    except ValidationError:
+        messages.error(
+            request,
+            "A valid current recipient email is required before sending.",
+        )
+        return redirect(
+            "organisation_detail",
+            **redirect_kwargs,
+        )
+
+    if recipient_email.lower() != current_email.lower():
+        messages.error(
+            request,
+            (
+                "The organisation email address has changed since this draft "
+                "was approved. The draft must be reviewed and approved again."
+            ),
+        )
+        return redirect(
+            "organisation_detail",
+            **redirect_kwargs,
+        )
+
+    if not draft.subject.strip() or not draft.body.strip():
+        messages.error(
+            request,
+            "The email subject and body are required.",
+        )
+        return redirect(
+            "organisation_detail",
+            **redirect_kwargs,
+        )
+
+    old_status = draft.workflow_status
+
+    claimed = EmailDraft.objects.filter(
+        pk=draft.pk,
+        workflow_status__in=[
+            "approved",
+            "send_failed",
+        ],
+        version=draft.approved_version,
+    ).update(
+        workflow_status="sending",
+        send_failure_reason="",
+    )
+
+    if claimed != 1:
+        messages.error(
+            request,
+            (
+                "This email is already being processed or is no longer "
+                "eligible to send."
+            ),
+        )
+        return redirect(
+            "organisation_detail",
+            **redirect_kwargs,
+        )
+
+    draft.workflow_status = "sending"
+    draft.send_failure_reason = ""
+
+    record_email_draft_history(
+        draft=draft,
+        action="send_started",
+        performed_by=request.user,
+        from_status=old_status,
+        to_status="sending",
+    )
+
+    try:
+        email = EmailMessage(
+            subject=draft.subject,
+            body=draft.body,
+            to=[recipient_email],
+        )
+
+        sent_count = email.send(
+            fail_silently=False,
+        )
+
+        if sent_count == 0:
+            raise EmailNotSentError(
+                "Email backend reported that no message was sent."
+            )
+
+        if sent_count != 1:
+            # Any other count is not understood: delivery is unknown.
+            raise RuntimeError(
+                "Email backend returned an unexpected send count "
+                f"({sent_count})."
+            )
+
+    except KNOWN_NON_DELIVERY_EXCEPTIONS as exc:
+        logger.exception(
+            "Email send failed for draft %s.",
+            draft.draft_id,
+        )
+
+        EmailDraft.objects.filter(
+            pk=draft.pk,
+            workflow_status="sending",
+        ).update(
+            workflow_status="send_failed",
+            send_failure_reason=str(exc),
+        )
+
+        draft.workflow_status = "send_failed"
+        draft.send_failure_reason = str(exc)
+
+        record_email_draft_history(
+            draft=draft,
+            action="send_failed",
+            performed_by=request.user,
+            from_status="sending",
+            to_status="send_failed",
+            reason=str(exc),
+        )
+
+        messages.error(
+            request,
+            (
+                "The email could not be sent. "
+                "The organisation remains Not Yet Contacted."
+            ),
+        )
+
+        return redirect(
+            "organisation_detail",
+            **redirect_kwargs,
+        )
+
+    except Exception as exc:
+        # Anything not proven to be a non-delivery is treated as
+        # "delivery unknown": the message may have been accepted.
+        logger.exception(
+            "Email delivery status unknown for draft %s.",
+            draft.draft_id,
+        )
+
+        unknown_reason = (
+            "Delivery status is uncertain "
+            f"({type(exc).__name__}). The email may have been "
+            "delivered. Manual reconciliation is required before "
+            "any further send; do not resend automatically."
+        )
+
+        # Stays in "sending" and is flagged, so it can never be
+        # claimed for another send.
+        EmailDraft.objects.filter(
+            pk=draft.pk,
+        ).update(
+            send_failure_reason=unknown_reason,
+            reconciliation_required=True,
+        )
+
+        try:
+            record_email_draft_history(
+                draft=draft,
+                action="reconciliation_required",
+                performed_by=request.user,
+                from_status="sending",
+                to_status="sending",
+                reason=unknown_reason,
+            )
+        except Exception:
+            logger.critical(
+                "Could not record unknown-delivery history for "
+                "draft %s. MANUAL REVIEW REQUIRED.",
+                draft.draft_id,
+                exc_info=True,
+            )
+
+        notify_admins(
+            "Email delivery status unknown",
+            (
+                f"Draft {draft.draft_id}: delivery status is "
+                "uncertain. Do not resend. Reconcile manually."
+            ),
+        )
+
+        messages.error(
+            request,
+            (
+                "The email request timed out. Delivery status is uncertain, "
+                "so the system will not resend it automatically."
+            ),
+        )
+
+        return redirect(
+            "organisation_detail",
+            **redirect_kwargs,
+        )
+
+    sent_time = timezone.now()
+
+    # Durable evidence of delivery, written before anything else so
+    # that a later failure can never lead to an automatic resend.
+    try:
+        EmailDraft.objects.filter(
+            pk=draft.pk,
+        ).update(smtp_confirmed_at=sent_time)
+    except Exception:
+        logger.critical(
+            "Email SENT for draft %s at %s but smtp_confirmed_at "
+            "could not be stored.",
+            draft.draft_id,
+            sent_time.isoformat(),
+            exc_info=True,
+        )
+
+    try:
+        with transaction.atomic():
+            locked_draft = (
+                EmailDraft.objects
+                .select_for_update()
+                .get(pk=draft.pk)
+            )
+
+            if locked_draft.workflow_status != "sending":
+                raise RuntimeError(
+                    "Email workflow changed after the send was confirmed."
+                )
+
+            locked_draft.workflow_status = "sent"
+            locked_draft.sent_by = request.user
+            locked_draft.sent_at = sent_time
+            locked_draft.send_failure_reason = ""
+
+            locked_draft.save(
+                update_fields=[
+                    "workflow_status",
+                    "sent_by",
+                    "sent_at",
+                    "send_failure_reason",
+                    "updated_at",
+                ]
+            )
+
+            organisation.contact_status = "contacted"
+            organisation.save(
+                update_fields=[
+                    "contact_status",
+                ]
+            )
+
+            opportunity.status = "contacted"
+            opportunity.date_contacted = sent_time
+            opportunity.outreach_method = "email"
+
+            opportunity.save(
+                update_fields=[
+                    "status",
+                    "date_contacted",
+                    "outreach_method",
+                ]
+            )
+
+            record_email_draft_history(
+                draft=locked_draft,
+                action="sent",
+                performed_by=request.user,
+                from_status="sending",
+                to_status="sent",
+            )
+
+    except Exception:
+        logger.exception(
+            (
+                "Email was sent for draft %s "
+                "but database finalisation failed."
+            ),
+            draft.draft_id,
+        )
+
+        reconciliation_reason = (
+            "The email backend confirmed a send, but the database could "
+            "not finalise the outreach record. Reconciliation is required; "
+            "do not resend automatically."
+        )
+
+        # The draft stays in "sending" (never eligible for send) and is
+        # flagged for manual review. The organisation is NOT marked
+        # Contacted because the finalisation transaction rolled back.
+        try:
+            EmailDraft.objects.filter(
+                pk=draft.pk,
+            ).update(
+                send_failure_reason=reconciliation_reason,
+                reconciliation_required=True,
+                smtp_confirmed_at=sent_time,
+            )
+
+            record_email_draft_history(
+                draft=draft,
+                action="reconciliation_required",
+                performed_by=request.user,
+                from_status="sending",
+                to_status="sending",
+                reason=reconciliation_reason,
+            )
+        except Exception:
+            logger.critical(
+                "Email SENT for draft %s at %s; reconciliation flag "
+                "could not be stored. MANUAL REVIEW REQUIRED.",
+                draft.draft_id,
+                sent_time.isoformat(),
+                exc_info=True,
+            )
+
+        notify_admins(
+            "Email sent but record needs reconciliation",
+            (
+                f"Draft {draft.draft_id} was sent but the database "
+                "could not be finalised. Do not resend. Reconcile "
+                "the record manually."
+            ),
+        )
+
+        messages.error(
+            request,
+            (
+                "The email was sent, but the outreach record could not be "
+                "finalised. Do not resend this email until an administrator "
+                "has reconciled the record."
+            ),
+        )
+
+        return redirect(
+            "organisation_detail",
+            **redirect_kwargs,
         )
 
     messages.success(
         request,
         (
-            "Email draft marked as sent successfully. "
+            "Email sent successfully. "
             "The organisation is now marked as Contacted."
         ),
     )
 
     return redirect(
         "organisation_detail",
-        content_type_id=opportunity.content_type_id,
-        object_id=opportunity.object_id,
+        **redirect_kwargs,
     )
+
 
 @login_required
-
-
 def add_organisation(request):
-
-
     """
-
-
     Allow an authorised user to manually create a
-
-
     Bank, Branch or Club.
 
-
     New organisations always start as
-
-
     Not Yet Contacted.
-
-
     """
 
-
     organisation_type = (
-
-
         request.POST.get("organisation_type")
-
-
         or request.GET.get("type")
-
-
         or "bank"
-
-
     ).strip().lower()
 
-
-    form_class = ORGANISATION_FORMS.get(
-
-
-        organisation_type
-
-
-    )
-
+    form_class = ORGANISATION_FORMS.get(organisation_type)
 
     if form_class is None:
+        raise Http404("Invalid organisation type.")
 
+    permission_name = f"outreach.add_{organisation_type}"
 
-        raise Http404(
-
-
-            "Invalid organisation type."
-
-
-        )
-
-
-    permission_name = (
-
-
-        f"outreach.add_{organisation_type}"
-
-
-    )
-
-
-    if not request.user.has_perm(
-
-
-        permission_name
-
-
-    ):
-
-
+    if not request.user.has_perm(permission_name):
         form = form_class()
 
-
         context = {
-
-
             "form": form,
-
-
             "organisation_type": organisation_type,
-
-
             "permission_error": True,
-
-
         }
 
-
         return render(
-
-
             request,
-
-
             "outreach/add_organisation.html",
-
-
             context,
-
-
             status=403,
-
-
         )
-
 
     duplicate_organisation = None
-
-
     likely_duplicate_organisation = None
-
-
     created_organisation = None
 
-
-    duplicate_override_reason = (
-
-
-        request.POST.get(
-
-
-            "duplicate_override_reason",
-
-
-            ""
-
-
-        ).strip()
-
-
-    )
-
+    duplicate_override_reason = request.POST.get(
+        "duplicate_override_reason",
+        "",
+    ).strip()
 
     confirm_likely_duplicate = (
-
-
-        request.POST.get(
-
-
-            "confirm_likely_duplicate"
-
-
-        )
-
-
-        == "1"
-
-
+        request.POST.get("confirm_likely_duplicate") == "1"
     )
-
 
     override_reason_error = None
 
-
     if request.method == "POST":
-
-
-        form = form_class(
-
-
-            request.POST
-
-
-        )
-
+        form = form_class(request.POST)
 
         if form.is_valid():
-
-
             # Exact duplicates are always blocked.
-
-
-            duplicate_organisation = (
-
-
-                _find_exact_duplicate(
-
-
-                    organisation_type,
-
-
-                    form.cleaned_data,
-
-
-                )
-
-
+            duplicate_organisation = _find_exact_duplicate(
+                organisation_type,
+                form.cleaned_data,
             )
 
-
             if duplicate_organisation is None:
-
-
-                # Always check for a possible duplicate.
-
-
-                likely_duplicate_organisation = (
-
-
-                    _find_likely_duplicate(
-
-
-                        organisation_type,
-
-
-                        form.cleaned_data,
-
-
-                    )
-
-
+                # Check for a possible duplicate.
+                likely_duplicate_organisation = _find_likely_duplicate(
+                    organisation_type,
+                    form.cleaned_data,
                 )
-
 
                 can_save = True
 
-
-                # Possible duplicate has been found.
-
-
                 if likely_duplicate_organisation is not None:
-
-
-                    # User has not confirmed yet.
-
-
+                    # Possible duplicate found but user has not confirmed yet.
                     if not confirm_likely_duplicate:
-
-
                         can_save = False
 
-
-                    # User clicked Continue Anyway
-
-
-                    # but did not provide a reason.
-
-
+                    # User confirmed but did not provide an override reason.
                     elif not duplicate_override_reason:
-
-
                         can_save = False
-
-
                         override_reason_error = (
-
-
-                            "Please enter a reason for "
-
-
-                            "continuing with this "
-
-
+                            "Please enter a reason for continuing with this "
                             "possible duplicate."
-
-
                         )
-
 
                 if can_save:
-
-
                     try:
-
-
-                        with transaction.atomic():
-
-
-                            # Check again immediately
-
-
-                            # before saving.
-
-
-                            duplicate_organisation = (
-
-
-                                _find_exact_duplicate(
-
-
-                                    organisation_type,
-
-
-                                    form.cleaned_data,
-
-
-                                )
-
-
-                            )
-
-
-                            if duplicate_organisation is None:
-
-
-                                organisation = (
-
-
-                                    form.save(
-
-
-                                        commit=False
-
-
-                                    )
-
-
-                                )
-
-
-                                # Default organisation status.
-
-
-                                organisation.contact_status = (
-
-
-                                    "not_yet_contacted"
-
-
-                                )
-
-
-                                # Creation audit information.
-
-
-                                organisation.created_by = (
-
-
-                                    request.user
-
-
-                                )
-
-
-                                organisation.record_source = (
-
-
-                                    "Manual Entry"
-
-
-                                )
-
-
-                                # Record duplicate override audit
-
-
-                                # only when an actual likely
-
-
-                                # duplicate was found.
-
-
-                                if (
-
-
-                                    likely_duplicate_organisation
-
-
-                                    is not None
-
-
-                                    and confirm_likely_duplicate
-
-
-                                ):
-
-
-                                    organisation.duplicate_override_reason = (
-
-
-                                        duplicate_override_reason
-
-
-                                    )
-
-
-                                    organisation.duplicate_override_at = (
-
-
-                                        timezone.now()
-
-
-                                    )
-
-
-                                    organisation.duplicate_override_by = (
-
-
-                                        request.user
-
-
-                                    )
-
-
-                                organisation.save()
-
-
-                                form.save_m2m()
-
-
-                                created_organisation = (
-
-
-                                    organisation
-
-
-                                )
-
-
-                    except Exception:
-
-
-                        messages.error(
-
-
-                            request,
-
-
-                            (
-
-
-                                "The organisation could not "
-
-
-                                "be saved. Please try again."
-
-
-                            ),
-
-
+                        OrganisationCreationLock.objects.get_or_create(
+                            key="add_organisation",
                         )
 
+                        with transaction.atomic():
+                            # Take the creation lock first (a write), so
+                            # concurrent submissions are serialised and the
+                            # re-check below sees any record they created.
+                            OrganisationCreationLock.objects.filter(
+                                key="add_organisation",
+                            ).update(counter=F("counter") + 1)
 
-                    else:
-
-
-                        if created_organisation is not None:
-
-
-                            messages.success(
-
-
-                                request,
-
-
-                                (
-
-
-                                    "Organisation has been "
-
-
-                                    "added successfully."
-
-
-                                ),
-
-
+                            # Check again immediately before saving.
+                            duplicate_organisation = _find_exact_duplicate(
+                                organisation_type,
+                                form.cleaned_data,
                             )
 
+                            if duplicate_organisation is None:
+                                organisation = form.save(commit=False)
+                                organisation.contact_status = "not_yet_contacted"
+                                organisation.created_by = request.user
+                                organisation.record_source = "Manual Entry"
 
-                            form = form_class()
+                                if (
+                                    likely_duplicate_organisation is not None
+                                    and confirm_likely_duplicate
+                                ):
+                                    organisation.duplicate_override_reason = (
+                                        duplicate_override_reason
+                                    )
+                                    organisation.duplicate_override_at = timezone.now()
+                                    organisation.duplicate_override_by = request.user
+                                    organisation.duplicate_override_match = (
+                                        f"{type(likely_duplicate_organisation).__name__}: "
+                                        f"{_organisation_name(likely_duplicate_organisation)} "
+                                        f"(ID {likely_duplicate_organisation.pk})"
+                                    )
 
+                                organisation.save()
+                                form.save_m2m()
 
-                            # Remove warning after a
+                                organisation_content_type = (
+                                    ContentType.objects.get_for_model(
+                                        organisation
+                                    )
+                                )
 
+                                # "No outcome yet" is represented by an
+                                # Opportunity in Not Yet Contacted.
+                                Opportunity.objects.create(
+                                    content_type=organisation_content_type,
+                                    object_id=organisation.pk,
+                                    status="not_yet_contacted",
+                                    notes=form.cleaned_data.get(
+                                        "notes",
+                                        "",
+                                    ),
+                                )
 
-                            # successful override/save.
+                                contact_name = form.cleaned_data.get(
+                                    "contact_name",
+                                    "",
+                                )
+                                contact_role = form.cleaned_data.get(
+                                    "contact_role",
+                                    "",
+                                )
 
+                                if contact_name or contact_role:
+                                    Contact.objects.create(
+                                        content_type=organisation_content_type,
+                                        object_id=organisation.pk,
+                                        contact_name=contact_name,
+                                        role=contact_role,
+                                        email=organisation.public_email,
+                                        phone=organisation.public_phone,
+                                    )
 
-                            likely_duplicate_organisation = None
+                                created_organisation = organisation
 
+                    except Exception:
+                        logger.exception(
+                            "Manual organisation creation failed."
+                        )
+                        messages.error(
+                            request,
+                            "The organisation could not be saved. Please try again.",
+                        )
 
-                            duplicate_override_reason = ""
+                    else:
+                        if created_organisation is not None:
+                            organisation_name = _organisation_name(
+                                created_organisation
+                            )
 
+                            messages.success(
+                                request,
+                                f"{organisation_name} has been added successfully.",
+                            )
+
+                            content_type = ContentType.objects.get_for_model(
+                                created_organisation
+                            )
+
+                            return redirect(
+                                "organisation_detail",
+                                content_type_id=content_type.id,
+                                object_id=created_organisation.pk,
+                            )
 
     else:
-
-
         form = form_class()
 
-
     context = {
-
-
         "form": form,
-
-
         "organisation_type": organisation_type,
-
-
-        "duplicate_organisation": (
-
-
-            duplicate_organisation
-
-
+        "duplicate_organisation": duplicate_organisation,
+        "duplicate_content_type_id": (
+            ContentType.objects.get_for_model(
+                duplicate_organisation
+            ).id
+            if duplicate_organisation is not None
+            else None
         ),
-
-
-        "likely_duplicate_organisation": (
-
-
-            likely_duplicate_organisation
-
-
+        "likely_duplicate_organisation": likely_duplicate_organisation,
+        "likely_duplicate_content_type_id": (
+            ContentType.objects.get_for_model(
+                likely_duplicate_organisation
+            ).id
+            if likely_duplicate_organisation is not None
+            else None
         ),
-
-
-        "created_organisation": (
-
-
-            created_organisation
-
-
-        ),
-
-
-        "duplicate_override_reason": (
-
-
-            duplicate_override_reason
-
-
-        ),
-
-
-        "override_reason_error": (
-
-
-            override_reason_error
-
-
-        ),
-
-
+        "created_organisation": created_organisation,
+        "duplicate_override_reason": duplicate_override_reason,
+        "override_reason_error": override_reason_error,
     }
 
-
     return render(
-
-
         request,
-
-
         "outreach/add_organisation.html",
-
-
         context,
     )
+
 @login_required
 @require_POST
 def record_external_outreach(
@@ -5321,7 +5580,6 @@ def record_external_outreach(
     content_type_id,
     object_id,
 ):
-
     if not request.user.has_perm(
         "outreach.change_opportunity"
     ):
@@ -5329,6 +5587,7 @@ def record_external_outreach(
             request,
             "You do not have permission to record external outreach.",
         )
+
         return redirect(
             "organisation_detail",
             content_type_id=content_type_id,
@@ -5347,7 +5606,9 @@ def record_external_outreach(
         Branch,
         Club,
     ):
-        raise Http404("Organisation not found.")
+        raise Http404(
+            "Organisation not found."
+        )
 
     organisation = get_object_or_404(
         model_class,
@@ -5369,6 +5630,7 @@ def record_external_outreach(
             request,
             "Please select a valid outreach method.",
         )
+
         return redirect(
             "organisation_detail",
             content_type_id=content_type_id,
@@ -5392,6 +5654,7 @@ def record_external_outreach(
             request,
             "This organisation is marked Do Not Contact.",
         )
+
         return redirect(
             "organisation_detail",
             content_type_id=content_type_id,
@@ -5399,9 +5662,7 @@ def record_external_outreach(
         )
 
     with transaction.atomic():
-
         if organisation.contact_status == "contacted":
-
             latest_opportunity = Opportunity.objects.create(
                 content_type=content_type,
                 object_id=object_id,
@@ -5412,7 +5673,6 @@ def record_external_outreach(
             )
 
         elif latest_opportunity is None:
-
             latest_opportunity = Opportunity.objects.create(
                 content_type=content_type,
                 object_id=object_id,
@@ -5422,7 +5682,6 @@ def record_external_outreach(
             )
 
         else:
-
             latest_opportunity.status = "contacted"
             latest_opportunity.date_contacted = timezone.now()
             latest_opportunity.outreach_method = outreach_method
@@ -5453,6 +5712,7 @@ def record_external_outreach(
         content_type_id=content_type_id,
         object_id=object_id,
     )
+                                
 @login_required
 @permission_required(
     "outreach.add_bank",

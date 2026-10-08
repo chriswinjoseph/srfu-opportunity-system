@@ -1,421 +1,776 @@
 {% extends "base.html" %}
+
 {% load static %}
 
 {% block title %}
-Organisation Details | Safe Roads For Us
-{% endblock %}
 
+Organisation Details | Safe Roads For Us
+
+{% endblock %}
 
 {% block extra_css %}
 
 <style>
 
     .detail-page {
+
         max-width: 1100px;
+
         margin: 0 auto;
-        padding: 48px 28px;
+
+        padding: 40px 24px 56px;
+
     }
 
     .back-link {
+
         display: inline-block;
-        margin-bottom: 24px;
+
+        margin-bottom: 20px;
+
         color: #173363;
-        font-size: 18px;
+
+        font-size: 17px;
+
         font-weight: 600;
+
         text-decoration: none;
+
     }
 
     .back-link:hover {
+
         text-decoration: underline;
+
     }
 
     .detail-card,
-    .draft-card {
+
+    .workflow-card,
+
+    .history-section {
+
         background: #ffffff;
+
         border: 1px solid #dbe2ea;
+
         border-radius: 12px;
-        padding: 34px;
+
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-        margin-bottom: 32px;
+
+    }
+
+    .detail-card {
+
+        padding: 32px;
+
+        margin-bottom: 20px;
+
     }
 
     .detail-card h1 {
-        margin-top: 0;
-        margin-bottom: 30px;
-        font-size: 38px;
+
+        margin: 0 0 24px;
+
+        font-size: 34px;
+
         line-height: 1.2;
+
     }
 
     .detail-grid {
+
         display: grid;
+
         grid-template-columns: 1fr 1fr;
-        gap: 22px 36px;
+
+        gap: 18px 32px;
+
     }
 
     .detail-item {
-        padding: 18px 0;
+
+        padding: 12px 0;
+
         border-bottom: 1px solid #e5e7eb;
-        font-size: 18px;
+
     }
 
     .detail-label {
+
         display: block;
-        margin-bottom: 6px;
-        font-size: 18px;
+
+        margin-bottom: 5px;
+
+        color: #4b5563;
+
+        font-size: 15px;
+
         font-weight: 700;
-        color: #374151;
+
     }
 
     .detail-value {
-        font-size: 18px;
+
         color: #111827;
+
+        font-size: 17px;
+
         line-height: 1.5;
+
+        word-break: break-word;
+
     }
 
     .detail-value a {
-        font-size: 18px;
+
         color: #173363;
-        word-break: break-word;
+
     }
 
-    .section-heading {
-        margin-top: 0;
-        margin-bottom: 22px;
-        font-size: 30px;
-    }
+    .action-bar {
 
-    .draft-card h2 {
-        margin-top: 0;
-        margin-bottom: 10px;
-        font-size: 28px;
-    }
-
-    .draft-card p {
-        font-size: 17px;
-        line-height: 1.5;
-    }
-
-    .draft-card label {
-        display: block;
-        margin-top: 18px;
-        margin-bottom: 8px;
-        font-size: 17px;
-        font-weight: 700;
-    }
-
-    .draft-card input[type="text"] {
-        width: 100%;
-        box-sizing: border-box;
-        padding: 12px;
-        border: 1px solid #cbd5e1;
-        border-radius: 6px;
-        font-size: 17px;
-    }
-
-    .draft-card select {
-        width: 100%;
-        box-sizing: border-box;
-        padding: 12px;
-        border: 1px solid #cbd5e1;
-        border-radius: 6px;
-        font-size: 17px;
-        background: #ffffff;
-    }
-
-    .draft-card textarea {
-        width: 100%;
-        min-height: 220px;
-        box-sizing: border-box;
-        padding: 12px;
-        border: 1px solid #cbd5e1;
-        border-radius: 6px;
-        font-size: 17px;
-        line-height: 1.6;
-        resize: vertical;
-    }
-    .external-outreach-button {
-    margin-top: 16px;
-    background: #0f766e;
-    color: #ffffff;
-    border: none;
-    border-radius: 6px;
-    padding: 12px 22px;
-    font-size: 17px;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.external-outreach-button:hover {
-    opacity: 0.92;
-}
-
-.external-outreach-card {
-    background: #ffffff;
-    border: 1px solid #dbe2ea;
-    border-radius: 12px;
-    padding: 34px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-    margin-bottom: 32px;
-}
-
-.external-outreach-card h2 {
-    margin-top: 0;
-    margin-bottom: 10px;
-    font-size: 28px;
-}
-
-.external-outreach-card p {
-    font-size: 17px;
-    line-height: 1.5;
-}
-
-.external-outreach-card label {
-    display: block;
-    margin-top: 18px;
-    margin-bottom: 8px;
-    font-size: 17px;
-    font-weight: 700;
-}
-
-.external-outreach-card select {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 12px;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
-    font-size: 17px;
-    background: #ffffff;
-}
-
-    .generate-draft-button,
-    .save-draft-button,
-    .submit-review-button,
-    .approve-draft-button,
-    .reject-draft-button,
-    .sent-draft-button,
-    .regenerate-draft-button {
-        margin-top: 16px;
-        color: #ffffff;
-        border: none;
-        border-radius: 6px;
-        padding: 12px 22px;
-        font-size: 17px;
-        font-weight: 600;
-        cursor: pointer;
-    }
-
-    .generate-draft-button,
-    .save-draft-button {
-        background: #173363;
-    }
-
-    .submit-review-button {
-        background: #5b3cc4;
-    }
-
-    .approve-draft-button {
-        background: #15803d;
-    }
-
-    .reject-draft-button {
-        background: #b91c1c;
-    }
-
-    .sent-draft-button {
-        background: #2563eb;
-    }
-
-    .regenerate-draft-button {
-        background: #7c3aed;
-    }
-
-    .generate-draft-button:hover,
-    .save-draft-button:hover,
-    .submit-review-button:hover,
-    .approve-draft-button:hover,
-    .reject-draft-button:hover,
-    .sent-draft-button:hover,
-    .regenerate-draft-button:hover {
-        opacity: 0.92;
-    }
-
-    .generate-draft-button:disabled,
-    .regenerate-draft-button:disabled {
-        opacity: 0.65;
-        cursor: not-allowed;
-    }
-
-
-    .review-actions {
-        margin-top: 12px;
         display: flex;
-        gap: 10px;
+
+        gap: 12px;
+
         flex-wrap: wrap;
+
+        margin-bottom: 24px;
+
     }
 
-    .review-actions form {
-        margin: 0;
-    }
+    .action-button,
 
+    .secondary-button,
 
-    .draft-warning {
-        margin-top: 15px;
-        padding: 14px;
-        background: #fff7ed;
-        border: 1px solid #fed7aa;
-        border-radius: 6px;
-        font-size: 16px;
-    }
+    .success-button,
 
+    .danger-button,
 
-    .history-card {
-        background: #ffffff;
-        border: 1px solid #d1d5db;
-        border-left: 5px solid #2563eb;
-        border-radius: 8px;
-        padding: 22px;
-        margin-bottom: 16px;
-        line-height: 1.6;
-    }
+    .warning-button {
 
-    .history-card p {
-        margin: 8px 0;
-        font-size: 18px;
-        line-height: 1.6;
-        word-break: break-word;
-    }
-
-    .history-card strong {
-        font-size: 18px;
-    }
-
-
-    .positive-response-button {
-        margin-top: 16px;
-        background: #5b3cc4;
-        color: white;
         border: none;
-        border-radius: 6px;
+
+        border-radius: 7px;
+
         padding: 12px 20px;
-        font-size: 17px;
-        font-weight: 600;
+
+        font-size: 16px;
+
+        font-weight: 700;
+
         cursor: pointer;
+
+        text-decoration: none;
+
     }
 
-    .positive-response-button:hover {
+    .action-button {
+
+        background: #173363;
+
+        color: #ffffff;
+
+    }
+
+    .secondary-button {
+
+        background: #e8eef7;
+
+        color: #173363;
+
+    }
+
+    .success-button {
+
+        background: #15803d;
+
+        color: #ffffff;
+
+    }
+
+    .danger-button {
+
+        background: #b91c1c;
+
+        color: #ffffff;
+
+    }
+
+    .warning-button {
+
+        background: #7c3aed;
+
+        color: #ffffff;
+
+    }
+
+    .action-button:hover,
+
+    .secondary-button:hover,
+
+    .success-button:hover,
+
+    .danger-button:hover,
+
+    .warning-button:hover {
+
         opacity: 0.92;
+
     }
 
+    button:disabled {
 
-    .empty-history {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
+        opacity: 0.65;
+
+        cursor: not-allowed;
+
+    }
+
+    .notice {
+
+        margin-bottom: 20px;
+
+        padding: 14px 16px;
+
         border-radius: 8px;
-        padding: 22px;
-        font-size: 18px;
-        line-height: 1.6;
+
+        font-size: 16px;
+
+        line-height: 1.5;
+
     }
 
+    .notice.warning {
+
+        background: #fff7ed;
+
+        border: 1px solid #fed7aa;
+
+        color: #9a3412;
+
+    }
+
+    .notice.info {
+
+        background: #eff6ff;
+
+        border: 1px solid #bfdbfe;
+
+        color: #1e3a8a;
+
+    }
+
+    .notice.error {
+
+        background: #fef2f2;
+
+        border: 1px solid #fecaca;
+
+        color: #991b1b;
+
+    }
 
     .message {
-        padding: 14px;
-        margin-bottom: 20px;
+
+        padding: 14px 16px;
+
+        margin-bottom: 18px;
+
         border: 1px solid;
-        border-radius: 6px;
-        font-size: 17px;
+
+        border-radius: 7px;
+
+        font-size: 16px;
+
     }
 
     .message.success {
+
         background: #ecfdf5;
+
         border-color: #86efac;
+
         color: #166534;
+
     }
 
     .message.error {
+
         background: #fef2f2;
+
         border-color: #fca5a5;
+
         color: #991b1b;
+
     }
 
     .message.warning {
+
         background: #fffbeb;
+
         border-color: #fcd34d;
+
         color: #92400e;
+
     }
 
     .message.info {
+
         background: #eff6ff;
+
         border-color: #93c5fd;
+
         color: #1e40af;
+
     }
 
+    .workflow-card {
+
+        display: none;
+
+        margin-bottom: 26px;
+
+        overflow: hidden;
+
+    }
+
+    .workflow-card.is-open {
+
+        display: block;
+
+    }
+
+    .workflow-header {
+
+        padding: 24px 28px 18px;
+
+        border-bottom: 1px solid #e5e7eb;
+
+    }
+
+    .workflow-header h2 {
+
+        margin: 0 0 6px;
+
+        font-size: 26px;
+
+    }
+
+    .workflow-header p {
+
+        margin: 0;
+
+        color: #6b7280;
+
+        font-size: 16px;
+
+        line-height: 1.5;
+
+    }
+
+    .workflow-body {
+
+        padding: 26px 28px 30px;
+
+    }
+
+    .workflow-subsection {
+
+        margin-top: 24px;
+
+        padding-top: 24px;
+
+        border-top: 1px solid #e5e7eb;
+
+    }
+
+    .workflow-subsection:first-child {
+
+        margin-top: 0;
+
+        padding-top: 0;
+
+        border-top: none;
+
+    }
+
+    .workflow-subsection h3 {
+
+        margin: 0 0 8px;
+
+        font-size: 21px;
+
+    }
+
+    .workflow-subsection p {
+
+        margin: 6px 0;
+
+        font-size: 16px;
+
+        line-height: 1.55;
+
+    }
+
+    .form-label {
+
+        display: block;
+
+        margin: 15px 0 7px;
+
+        font-size: 16px;
+
+        font-weight: 700;
+
+    }
+
+    .text-input,
+
+    .select-input,
+
+    .text-area {
+
+        width: 100%;
+
+        box-sizing: border-box;
+
+        border: 1px solid #cbd5e1;
+
+        border-radius: 7px;
+
+        background: #ffffff;
+
+        padding: 12px;
+
+        font-size: 16px;
+
+    }
+
+    .text-area {
+
+        min-height: 150px;
+
+        line-height: 1.55;
+
+        resize: vertical;
+
+    }
+
+    .text-area.email-body {
+
+        min-height: 260px;
+
+    }
+
+    .form-actions {
+
+        display: flex;
+
+        flex-wrap: wrap;
+
+        gap: 10px;
+
+        margin-top: 16px;
+
+    }
+
+    .status-row {
+
+        display: flex;
+
+        gap: 10px;
+
+        align-items: center;
+
+        flex-wrap: wrap;
+
+        margin-bottom: 18px;
+
+    }
+
+    .status-badge {
+
+        display: inline-flex;
+
+        align-items: center;
+
+        border-radius: 999px;
+
+        padding: 6px 11px;
+
+        background: #e5e7eb;
+
+        color: #374151;
+
+        font-size: 14px;
+
+        font-weight: 700;
+
+    }
+
+    .status-badge.draft {
+
+        background: #e0f2fe;
+
+        color: #075985;
+
+    }
+
+    .status-badge.awaiting_approval {
+
+        background: #ede9fe;
+
+        color: #5b21b6;
+
+    }
+
+    .status-badge.changes_requested {
+
+        background: #fff7ed;
+
+        color: #9a3412;
+
+    }
+
+    .status-badge.approved,
+
+    .status-badge.sent {
+
+        background: #dcfce7;
+
+        color: #166534;
+
+    }
+
+    .status-badge.sending {
+
+        background: #fef3c7;
+
+        color: #92400e;
+
+    }
+
+    .status-badge.send_failed {
+
+        background: #fee2e2;
+
+        color: #991b1b;
+
+    }
+
+    .status-badge.cancelled {
+
+        background: #e5e7eb;
+
+        color: #4b5563;
+
+    }
+
+    .meta-grid {
+
+        display: grid;
+
+        grid-template-columns: 1fr 1fr;
+
+        gap: 12px 22px;
+
+        margin-bottom: 18px;
+
+    }
+
+    .meta-item {
+
+        padding: 10px 0;
+
+        border-bottom: 1px solid #eef2f7;
+
+        font-size: 15px;
+
+        line-height: 1.45;
+
+    }
+
+    .manual-draft-panel,
+
+    .external-outreach-panel {
+
+        display: none;
+
+        margin-top: 16px;
+
+        padding: 20px;
+
+        border: 1px solid #dbe2ea;
+
+        border-radius: 9px;
+
+        background: #f8fafc;
+
+    }
+
+    .manual-draft-panel.is-open,
+
+    .external-outreach-panel.is-open {
+
+        display: block;
+
+    }
+
+    .history-section {
+
+        padding: 28px;
+
+        margin-top: 26px;
+
+    }
+
+    .section-heading {
+
+        margin: 0 0 20px;
+
+        font-size: 27px;
+
+    }
+
+    .history-card {
+
+        border: 1px solid #d1d5db;
+
+        border-left: 5px solid #2563eb;
+
+        border-radius: 8px;
+
+        padding: 18px 20px;
+
+        margin-bottom: 14px;
+
+        line-height: 1.55;
+
+    }
+
+    .history-card p {
+
+        margin: 6px 0;
+
+        font-size: 16px;
+
+    }
+
+    .history-actions {
+
+        display: flex;
+
+        flex-wrap: wrap;
+
+        gap: 10px;
+
+        margin-top: 12px;
+
+    }
+
+    .empty-history {
+
+        background: #f8fafc;
+
+        border: 1px solid #e2e8f0;
+
+        border-radius: 8px;
+
+        padding: 20px;
+
+        font-size: 16px;
+
+        line-height: 1.55;
+
+    }
 
     @media (max-width: 700px) {
 
         .detail-page {
-            padding: 26px 16px;
-        }
 
-        .detail-grid {
-            grid-template-columns: 1fr;
+            padding: 24px 14px 40px;
+
         }
 
         .detail-card,
-        .draft-card {
-            padding: 24px;
+
+        .workflow-body,
+
+        .workflow-header,
+
+        .history-section {
+
+            padding-left: 20px;
+
+            padding-right: 20px;
+
+        }
+
+        .detail-grid,
+
+        .meta-grid {
+
+            grid-template-columns: 1fr;
+
         }
 
         .detail-card h1 {
-            font-size: 30px;
+
+            font-size: 29px;
+
         }
 
-        .section-heading {
-            font-size: 26px;
+        .action-bar {
+
+            flex-direction: column;
+
         }
 
-        .detail-item,
-        .detail-label,
-        .detail-value,
-        .detail-value a,
-        .history-card p,
-        .history-card strong,
-        .empty-history {
-            font-size: 17px;
+        .action-button,
+
+        .secondary-button,
+
+        .success-button,
+
+        .danger-button,
+
+        .warning-button {
+
+            width: 100%;
+
         }
+
     }
 
 </style>
 
 {% endblock %}
 
-
 {% block content %}
 
 <div class="detail-page">
+
     {% if messages %}
 
         {% for message in messages %}
 
             <div class="message {{ message.tags }}">
+
                 {{ message }}
+
             </div>
 
         {% endfor %}
 
     {% endif %}
 
+    <a href="{% url 'outreach_dashboard' %}" class="back-link">
 
-    <a
-        href="{% url 'outreach_dashboard' %}"
-        class="back-link"
-    >
         &larr; Back to dashboard
+
     </a>
-
-
-    <!-- ===================================================== -->
-    <!-- ORGANISATION DETAILS -->
-    <!-- ===================================================== -->
 
     <section class="detail-card">
 
@@ -425,85 +780,56 @@ Organisation Details | Safe Roads For Us
 
             <div class="detail-item">
 
-                <span class="detail-label">
-                    Type
-                </span>
+                <span class="detail-label">Type</span>
 
-                <span class="detail-value">
-                    {{ org_type|title }}
-                </span>
+                <span class="detail-value">{{ org_type|title }}</span>
 
             </div>
 
-
             <div class="detail-item">
 
-                <span class="detail-label">
-                    Status
-                </span>
+                <span class="detail-label">Contact Status</span>
 
-                <span class="detail-value">
-                    {{ org.get_contact_status_display }}
-                </span>
+                <span class="detail-value">{{ org.get_contact_status_display }}</span>
 
             </div>
 
-
             <div class="detail-item">
 
-                <span class="detail-label">
-                    Region
-                </span>
+                <span class="detail-label">Region</span>
 
-                <span class="detail-value">
-                    {{ org.region|default:"-" }}
-                </span>
+                <span class="detail-value">{{ org.region|default:"-" }}</span>
 
             </div>
 
-
             <div class="detail-item">
 
-                <span class="detail-label">
-                    Email
-                </span>
+                <span class="detail-label">Email</span>
 
-                <span class="detail-value">
-                    {{ org.public_email|default:"Not provided" }}
-                </span>
+                <span class="detail-value">{{ org.public_email|default:"Not provided" }}</span>
 
             </div>
 
-
             <div class="detail-item">
 
-                <span class="detail-label">
-                    Phone
-                </span>
+                <span class="detail-label">Phone</span>
 
-                <span class="detail-value">
-                    {{ org.public_phone|default:"Not provided" }}
-                </span>
+                <span class="detail-value">{{ org.public_phone|default:"Not provided" }}</span>
 
             </div>
 
-
             <div class="detail-item">
 
-                <span class="detail-label">
-                    Website
-                </span>
+                <span class="detail-label">Website</span>
 
                 <span class="detail-value">
 
                     {% if org.website_url %}
 
-                        <a
-                            href="{{ org.website_url }}"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                        >
+                        <a href="{{ org.website_url }}" target="_blank" rel="noopener noreferrer">
+
                             {{ org.website_url }}
+
                         </a>
 
                     {% else %}
@@ -519,240 +845,134 @@ Organisation Details | Safe Roads For Us
         </div>
 
     </section>
-    <!-- ===================================================== -->
-<!-- RECORD EXTERNAL OUTREACH -->
-<!-- ===================================================== -->
 
-{% if perms.outreach.change_opportunity and not has_do_not_contact %}
-<section class="external-outreach-card">
+    {% if has_do_not_contact %}
 
-    <h2>
-    {% if org.contact_status == "contacted" %}
-        Record Follow-Up Outreach
-    {% else %}
-        Record External Outreach
+        <div class="notice error">
+
+            This organisation is marked <strong>Do Not Contact</strong>.
+
+            New email outreach is unavailable.
+
+        </div>
+
+    {% elif org.contact_status == "contacted" %}
+
+        <div class="notice info">
+
+            This organisation has already been contacted.
+
+            New initial email outreach is unavailable, but follow-up outreach can still be recorded.
+
+        </div>
+
     {% endif %}
-</h2>
 
-    <p>
-    {% if org.contact_status == "contacted" %}
-        Record another outreach attempt for this organisation.
-        The organisation will remain Contacted and the follow-up
-        will be added to its outreach history.
-    {% else %}
-        Use this when this organisation was contacted outside the system,
-        such as by phone or by a manually sent email.
-    {% endif %}
-</p>
+    <div class="action-bar">
 
-    <form
-        method="post"
-        action="{% url 'record_external_outreach' content_type_id object_id %}"
-    >
+        {% if perms.outreach.generate_emaildraft and not has_do_not_contact and org.contact_status == "not_yet_contacted" %}
 
-        {% csrf_token %}
+            <button type="button" class="action-button" id="toggle-email-workflow">
 
-        <label for="external-outreach-method">
-            Outreach Method
-        </label>
+                Email Organisation
 
-        <select
-            id="external-outreach-method"
-            name="outreach_method"
-            required
-        >
-            <option value="">
-                Select outreach method
-            </option>
+            </button>
 
-            <option value="phone">
-                Phone Call
-            </option>
+        {% endif %}
 
-            <option value="manual_email">
-                Manually Sent Email
-            </option>
-        </select>
+        {% if perms.outreach.change_opportunity and not has_do_not_contact %}
 
-        <button
-            type="submit"
-            class="external-outreach-button"
-        >
-            Record Contact
-        </button>
+            <button type="button" class="secondary-button" id="toggle-external-outreach">
 
-    </form>
+                {% if org.contact_status == "contacted" %}
 
-</section>
+                    Record Follow-Up Outreach
 
-{% endif %}
+                {% else %}
 
+                    Record External Outreach
 
+                {% endif %}
 
-    {% if perms.outreach.generate_emaildraft %}
+            </button>
 
+        {% endif %}
 
-        <!-- ===================================================== -->
-        <!-- AI EMAIL DRAFT -->
-        <!-- ===================================================== -->
+    </div>
 
-        <section class="draft-card">
+    {% if perms.outreach.change_opportunity and not has_do_not_contact %}
 
-            <h2>
-                Generate Email Draft
-            </h2>
+        <section class="external-outreach-panel" id="external-outreach-panel">
+
+            <h3>
+
+                {% if org.contact_status == "contacted" %}
+
+                    Record Follow-Up Outreach
+
+                {% else %}
+
+                    Record External Outreach
+
+                {% endif %}
+
+            </h3>
 
             <p>
-                Create a draft outreach email for this organisation using AI.
+
+                {% if org.contact_status == "contacted" %}
+
+                    Record another outreach attempt. The organisation will remain Contacted.
+
+                {% else %}
+
+                    Use this when the organisation was contacted outside the system,
+
+                    such as by phone or by a manually sent email.
+
+                {% endif %}
+
             </p>
 
-
-            {% if org.public_email %}
-
-                <form
-                    method="post"
-                    action="{% url 'generate_email_draft' content_type_id object_id %}"
-                    id="generate-draft-form"
-                >
-
-                    {% csrf_token %}
-
-
-                    <label for="template-id">
-                        Email Template
-                    </label>
-
-                    <select
-                        id="template-id"
-                        name="template_id"
-                        required
-                    >
-
-                        <option value="">
-                            Select an approved template
-                        </option>
-
-                        {% for template in active_templates %}
-
-                            <option value="{{ template.id }}">
-                                {{ template.name }} - {{ template.version }}
-                            </option>
-
-                        {% empty %}
-
-                            <option value="" disabled>
-                                No approved templates are available
-                            </option>
-
-                        {% endfor %}
-
-                    </select>
-
-
-                    <label for="outreach-purpose">
-                        Outreach Purpose
-                    </label>
-
-                    <textarea
-                        id="outreach-purpose"
-                        name="outreach_purpose"
-                        placeholder="For example: Introduce Safe Roads For Us and discuss a possible community partnership."
-                        required
-                    ></textarea>
-
-
-                    <button
-                        type="submit"
-                        class="generate-draft-button"
-                        id="generate-draft-button"
-                    >
-                        Generate Draft
-                    </button>
-
-                </form>
-
-
-            {% else %}
-
-                <div class="draft-warning">
-                    A public email address must be added before
-                    an AI email draft can be generated.
-                </div>
-
-            {% endif %}
-
-        </section>
-
-
-
-        <!-- ===================================================== -->
-        <!-- MANUAL EMAIL DRAFT -->
-        <!-- ===================================================== -->
-
-        <section class="draft-card">
-
-            <h2>
-                Create Manual Email Draft
-            </h2>
-
-            <p>
-                Write the outreach email manually if AI generation is
-                unavailable or has failed repeatedly.
-            </p>
-
-
-            <form
-                method="post"
-                action="{% url 'create_manual_email_draft' content_type_id object_id %}"
-            >
+            <form method="post" action="{% url 'record_external_outreach' content_type_id object_id %}">
 
                 {% csrf_token %}
 
+                <label class="form-label" for="external-outreach-method">
 
-                <label for="manual-outreach-purpose">
-                    Outreach Purpose
+                    Outreach Method
+
                 </label>
 
-                <textarea
-                    id="manual-outreach-purpose"
-                    name="outreach_purpose"
-                    rows="3"
-                    placeholder="For example: Introduce Safe Roads For Us and discuss a possible community partnership."
-                ></textarea>
+                <select
 
+                    class="select-input"
 
-                <label for="manual-subject">
-                    Subject
-                </label>
+                    id="external-outreach-method"
 
-                <input
-                    type="text"
-                    id="manual-subject"
-                    name="subject"
-                    placeholder="Enter email subject"
+                    name="outreach_method"
+
                     required
+
                 >
 
+                    <option value="">Select outreach method</option>
 
-                <label for="manual-body">
-                    Email Body
-                </label>
+                    <option value="phone">Phone Call</option>
 
-                <textarea
-                    id="manual-body"
-                    name="body"
-                    rows="10"
-                    placeholder="Write the outreach email here..."
-                    required
-                ></textarea>
+                    <option value="manual_email">Manually Sent Email</option>
 
+                </select>
 
-                <button
-                    type="submit"
-                    class="save-draft-button"
-                >
-                    Create Manual Draft
-                </button>
+                <div class="form-actions">
+
+                    <button type="submit" class="success-button">
+
+                        Record Contact
+
+                    </button>
+
+                </div>
 
             </form>
 
@@ -760,59 +980,992 @@ Organisation Details | Safe Roads For Us
 
     {% endif %}
 
+    {% if perms.outreach.generate_emaildraft and not has_do_not_contact and org.contact_status == "not_yet_contacted" %}
 
+        <section
 
-    <!-- ===================================================== -->
-    <!-- LATEST EMAIL DRAFT -->
-    <!-- ===================================================== -->
+            class="workflow-card {% if latest_draft %}is-open{% endif %}"
 
-    {% if latest_draft %}
+            id="email-workflow-card"
 
-        <section class="draft-card">
+        >
 
-            <h2>
-                Latest Email Draft
-            </h2>
+            <div class="workflow-header">
 
+                <h2>Email Organisation</h2>
 
-            <p>
-                <strong>Status:</strong>
-                {{ latest_draft.get_workflow_status_display }}
-            </p>
+                <p>
 
+                    Generate, review, edit and submit an outreach email for approval.
 
-            <p>
-                <strong>Version:</strong>
-                {{ latest_draft.version }}
-            </p>
+                    The organisation remains Not Yet Contacted until an email is successfully sent.
 
+                </p>
 
-            <p>
-                <strong>Outreach Purpose:</strong>
-                {{ latest_draft.outreach_purpose }}
-            </p>
+            </div>
 
+            <div class="workflow-body">
 
+                {% if not latest_draft %}
 
-            <!-- =============================== -->
-            <!-- DRAFT -->
-            <!-- =============================== -->
+                    <div class="workflow-subsection">
 
-            {% if latest_draft.workflow_status == "draft" and perms.outreach.generate_emaildraft %}
+                        <h3>Generate AI Draft</h3>
 
+                        {% if org.public_email %}
 
-                {% if latest_draft.is_incomplete %}
+                            <p>
 
-                    <div class="draft-warning">
+                                Recipient:
 
-                        <strong>
-                            This draft needs review before it can be submitted.
-                        </strong>
+                                <strong>{{ org.public_email }}</strong>
 
-                        {% if latest_draft.validation_issues %}
+                            </p>
 
-                            <br>
-                            {{ latest_draft.validation_issues|linebreaksbr }}
+                            <form
+
+                                method="post"
+
+                                action="{% url 'generate_email_draft' content_type_id object_id %}"
+
+                                id="generate-draft-form"
+
+                            >
+
+                                {% csrf_token %}
+
+                                <label class="form-label" for="template-id">
+
+                                    Email Template
+
+                                </label>
+
+                                <select
+
+                                    class="select-input"
+
+                                    id="template-id"
+
+                                    name="template_id"
+
+                                    required
+
+                                >
+
+                                    <option value="">Select an approved template</option>
+
+                                    {% for template in active_templates %}
+
+                                        <option value="{{ template.id }}">
+
+                                            {{ template.name }} - {{ template.version }}
+
+                                        </option>
+
+                                    {% empty %}
+
+                                        <option value="" disabled>
+
+                                            No approved templates are available
+
+                                        </option>
+
+                                    {% endfor %}
+
+                                </select>
+
+                                <label class="form-label" for="outreach-purpose">
+
+                                    Outreach Purpose
+
+                                </label>
+
+                                <textarea
+
+                                    class="text-area"
+
+                                    id="outreach-purpose"
+
+                                    name="outreach_purpose"
+
+                                    placeholder="For example: Introduce Safe Roads For Us and discuss a possible community partnership."
+
+                                    required
+
+                                ></textarea>
+
+                                <div class="form-actions">
+
+                                    <button
+
+                                        type="submit"
+
+                                        class="action-button"
+
+                                        id="generate-draft-button"
+
+                                    >
+
+                                        Generate AI Draft
+
+                                    </button>
+
+                                </div>
+
+                            </form>
+
+                        {% else %}
+
+                            <div class="notice warning">
+
+                                A public email address must be added before an email draft can be generated.
+
+                            </div>
+
+                        {% endif %}
+
+                        <div class="form-actions">
+
+                            <button type="button" class="secondary-button" id="toggle-manual-draft">
+
+                                Create Manually Instead
+
+                            </button>
+
+                        </div>
+
+                        <div class="manual-draft-panel" id="manual-draft-panel">
+
+                            <h3>Create Manual Draft</h3>
+
+                            <form
+
+                                method="post"
+
+                                action="{% url 'create_manual_email_draft' content_type_id object_id %}"
+
+                            >
+
+                                {% csrf_token %}
+
+                                <label class="form-label" for="manual-outreach-purpose">
+
+                                    Outreach Purpose
+
+                                </label>
+
+                                <textarea
+
+                                    class="text-area"
+
+                                    id="manual-outreach-purpose"
+
+                                    name="outreach_purpose"
+
+                                    rows="3"
+
+                                    placeholder="Enter the outreach purpose."
+
+                                ></textarea>
+
+                                <label class="form-label" for="manual-subject">
+
+                                    Subject
+
+                                </label>
+
+                                <input
+
+                                    class="text-input"
+
+                                    type="text"
+
+                                    id="manual-subject"
+
+                                    name="subject"
+
+                                    placeholder="Enter email subject"
+
+                                    required
+
+                                >
+
+                                <label class="form-label" for="manual-body">
+
+                                    Email Body
+
+                                </label>
+
+                                <textarea
+
+                                    class="text-area email-body"
+
+                                    id="manual-body"
+
+                                    name="body"
+
+                                    placeholder="Write the outreach email here..."
+
+                                    required
+
+                                ></textarea>
+
+                                <div class="form-actions">
+
+                                    <button type="submit" class="action-button">
+
+                                        Create Manual Draft
+
+                                    </button>
+
+                                </div>
+
+                            </form>
+
+                        </div>
+
+                    </div>
+
+                {% endif %}
+
+                {% if latest_draft %}
+
+                    <div class="workflow-subsection">
+
+                        <div class="status-row">
+
+                            <span class="status-badge {{ latest_draft.workflow_status }}">
+
+                                {{ latest_draft.get_workflow_status_display }}
+
+                            </span>
+
+                            <span>Version {{ latest_draft.version }}</span>
+
+                        </div>
+
+                        {% if latest_draft.reconciliation_required %}
+                            <p class="draft-alert" style="color:#b91c1c;font-weight:bold;">
+                                Reconciliation required: this email was sent but the outreach record could not be finalised. Do not resend. An administrator must review it.
+                            </p>
+                        {% endif %}
+
+                        {% if latest_draft.workflow_status == "awaiting_approval" %}
+                            {% if latest_draft.approver_unavailable %}
+                                <p class="draft-alert" style="color:#b45309;font-weight:bold;">
+                                    No approver is currently available. A PM/admin must assign a user with approval permission.
+                                </p>
+                            {% endif %}
+                            {% if latest_draft.is_approval_overdue %}
+                                <p class="draft-alert" style="color:#b91c1c;font-weight:bold;">
+                                    Approval overdue: this draft has been awaiting approval since {{ latest_draft.submitted_at|date:"j M Y H:i" }}.
+                                </p>
+                            {% endif %}
+                        {% endif %}
+
+                        <div class="meta-grid">
+
+                            <div class="meta-item">
+
+                                <strong>Recipient:</strong><br>
+
+                                {{ latest_draft.recipient_email|default:org.public_email|default:"Not provided" }}
+
+                            </div>
+
+                            <div class="meta-item">
+
+                                <strong>Outreach Purpose:</strong><br>
+
+                                {{ latest_draft.outreach_purpose|default:"-" }}
+
+                            </div>
+
+                            {% if latest_draft.approved_by %}
+
+                                <div class="meta-item">
+
+                                    <strong>Approved By:</strong><br>
+
+                                    {{ latest_draft.approved_by }}
+
+                                </div>
+
+                            {% endif %}
+
+                            {% if latest_draft.approved_at %}
+
+                                <div class="meta-item">
+
+                                    <strong>Approved At:</strong><br>
+
+                                    {{ latest_draft.approved_at }}
+
+                                </div>
+
+                            {% endif %}
+
+                            {% if latest_draft.sent_by %}
+
+                                <div class="meta-item">
+
+                                    <strong>Sent By:</strong><br>
+
+                                    {{ latest_draft.sent_by }}
+
+                                </div>
+
+                            {% endif %}
+
+                            {% if latest_draft.sent_at %}
+
+                                <div class="meta-item">
+
+                                    <strong>Sent At:</strong><br>
+
+                                    {{ latest_draft.sent_at }}
+
+                                </div>
+
+                            {% endif %}
+
+                        </div>
+
+                        {% if latest_draft.workflow_status == "draft" %}
+
+                            {% if latest_draft.is_incomplete %}
+
+                                <div class="notice warning">
+
+                                    <strong>This draft needs review before submission.</strong>
+
+                                    {% if latest_draft.validation_issues %}
+
+                                        <br>
+
+                                        {{ latest_draft.validation_issues|linebreaksbr }}
+
+                                    {% endif %}
+
+                                </div>
+
+                            {% endif %}
+
+                            <form
+
+                                method="post"
+
+                                action="{% url 'update_email_draft' latest_draft.draft_id %}"
+
+                            >
+
+                                {% csrf_token %}
+                                <input
+    type="hidden"
+    name="version"
+    value="{{ latest_draft.version }}"
+>
+
+                                <label class="form-label" for="draft-subject">Subject</label>
+
+                                <input
+
+                                    class="text-input"
+
+                                    id="draft-subject"
+
+                                    type="text"
+
+                                    name="subject"
+
+                                    value="{{ latest_draft.subject }}"
+
+                                    required
+
+                                >
+
+                                <label class="form-label" for="draft-body">Email Body</label>
+
+                                <textarea
+
+                                    class="text-area email-body"
+
+                                    id="draft-body"
+
+                                    name="body"
+
+                                    required
+
+                                >{{ latest_draft.body }}</textarea>
+
+                                <div class="form-actions">
+
+                                    <button type="submit" class="action-button">Save Draft</button>
+
+                                </div>
+
+                            </form>
+
+                            <form
+
+                                method="post"
+
+                                action="{% url 'submit_email_draft_for_review' latest_draft.draft_id %}"
+
+                            >
+
+                                {% csrf_token %}
+
+                                <div class="form-actions">
+
+                                    <button type="submit" class="warning-button">
+
+                                        Submit for Approval
+
+                                    </button>
+
+                                </div>
+
+                            </form>
+
+                            {% if latest_draft.template %}
+
+                                <form
+
+                                    method="post"
+
+                                    action="{% url 'generate_email_draft' content_type_id object_id %}"
+
+                                    id="regenerate-draft-form"
+
+                                >
+
+                                    {% csrf_token %}
+
+                                    <input type="hidden" name="template_id" value="{{ latest_draft.template.id }}">
+
+                                    <input type="hidden" name="outreach_purpose" value="{{ latest_draft.outreach_purpose }}">
+
+                                    <input type="hidden" name="regenerate" value="1">
+
+                                    <input type="hidden" name="confirm_regenerate" value="1">
+
+                                    <div class="form-actions">
+
+                                        <button
+
+                                            type="submit"
+
+                                            class="secondary-button"
+
+                                            id="regenerate-draft-button"
+
+                                        >
+
+                                            Regenerate Draft
+
+                                        </button>
+
+                                    </div>
+
+                                </form>
+
+                            {% endif %}
+
+                        {% elif latest_draft.workflow_status == "awaiting_approval" %}
+
+                            <p>
+
+                                This draft is waiting for approval and cannot be silently edited.
+
+                            </p>
+
+                            <p><strong>Subject:</strong> {{ latest_draft.subject }}</p>
+
+                            <label class="form-label" for="awaiting-body">Email Body</label>
+
+                            <textarea
+
+                                class="text-area email-body"
+
+                                id="awaiting-body"
+
+                                readonly
+
+                            >{{ latest_draft.body }}</textarea>
+
+                            {% if perms.outreach.approve_emaildraft %}
+
+                                <div class="workflow-subsection">
+
+                                    <h3>Approval Decision</h3>
+
+                                    <form
+
+                                        method="post"
+
+                                        action="{% url 'approve_email_draft' latest_draft.draft_id %}"
+
+                                    >
+
+                                        {% csrf_token %}
+<input type="hidden" name="version" value="{{ latest_draft.version }}">
+
+                                        <div class="form-actions">
+
+                                            <button type="submit" class="success-button">Approve Draft</button>
+
+                                        </div>
+
+                                    </form>
+
+                                    <form
+
+                                        method="post"
+
+                                        action="{% url 'reject_email_draft' latest_draft.draft_id %}"
+
+                                    >
+
+                                        {% csrf_token %}
+<input type="hidden" name="version" value="{{ latest_draft.version }}">
+
+                                        <label class="form-label" for="rejection-reason">
+
+                                            Request Changes Reason
+
+                                        </label>
+
+                                        <textarea
+
+                                            class="text-area"
+
+                                            id="rejection-reason"
+
+                                            name="rejection_reason"
+
+                                            rows="3"
+
+                                            placeholder="Explain what needs to be changed."
+
+                                            required
+
+                                        ></textarea>
+
+                                        <div class="form-actions">
+
+                                            <button type="submit" class="danger-button">Request Changes</button>
+
+                                        </div>
+
+                                    </form>
+
+                                </div>
+
+                            {% endif %}
+
+                        {% elif latest_draft.workflow_status == "changes_requested" %}
+
+                            {% if latest_draft.rejection_reason %}
+
+                                <div class="notice warning">
+
+                                    <strong>Changes Requested:</strong><br>
+
+                                    {{ latest_draft.rejection_reason }}
+
+                                </div>
+
+                            {% endif %}
+
+                            <p>Edit the draft below, save it, and submit it again for approval.</p>
+
+                            <form
+
+                                method="post"
+
+                                action="{% url 'update_email_draft' latest_draft.draft_id %}"
+
+                            >
+
+                                {% csrf_token %}
+                                <input
+    type="hidden"
+    name="version"
+    value="{{ latest_draft.version }}"
+>
+
+                                <label class="form-label" for="changes-subject">Subject</label>
+
+                                <input
+
+                                    class="text-input"
+
+                                    id="changes-subject"
+
+                                    type="text"
+
+                                    name="subject"
+
+                                    value="{{ latest_draft.subject }}"
+
+                                    required
+
+                                >
+
+                                <label class="form-label" for="changes-body">Email Body</label>
+
+                                <textarea
+
+                                    class="text-area email-body"
+
+                                    id="changes-body"
+
+                                    name="body"
+
+                                    required
+
+                                >{{ latest_draft.body }}</textarea>
+
+                                <div class="form-actions">
+
+                                    <button type="submit" class="action-button">Save Changes</button>
+
+                                </div>
+
+                            </form>
+
+                        {% elif latest_draft.workflow_status == "approved" %}
+
+                            <div class="notice info">
+
+                                This version is approved. Sending does not happen automatically.
+
+                            </div>
+
+                            <p><strong>Subject:</strong> {{ latest_draft.subject }}</p>
+
+                            <label class="form-label" for="approved-body">Email Body</label>
+
+                            <textarea
+
+                                class="text-area email-body"
+
+                                id="approved-body"
+
+                                readonly
+
+                            >{{ latest_draft.body }}</textarea>
+
+                            {% if perms.outreach.generate_emaildraft %}
+
+                                <div class="workflow-subsection">
+
+                                    <h3>Edit Approved Draft</h3>
+
+                                    <p>
+
+                                        Editing an approved draft invalidates the approval.
+
+                                        It will return to Draft and must be approved again.
+
+                                    </p>
+
+                                    <form
+
+                                        method="post"
+
+                                        action="{% url 'update_email_draft' latest_draft.draft_id %}"
+
+                                    >
+
+                                        {% csrf_token %}
+                                        <input
+    type="hidden"
+    name="version"
+    value="{{ latest_draft.version }}"
+>
+
+                                        <label class="form-label" for="approved-edit-subject">Subject</label>
+
+                                        <input
+
+                                            class="text-input"
+
+                                            id="approved-edit-subject"
+
+                                            type="text"
+
+                                            name="subject"
+
+                                            value="{{ latest_draft.subject }}"
+
+                                            required
+
+                                        >
+
+                                        <label class="form-label" for="approved-edit-body">Email Body</label>
+
+                                        <textarea
+
+                                            class="text-area email-body"
+
+                                            id="approved-edit-body"
+
+                                            name="body"
+
+                                            required
+
+                                        >{{ latest_draft.body }}</textarea>
+
+                                        <div class="form-actions">
+
+                                            <button type="submit" class="secondary-button">
+
+                                                Edit and Invalidate Approval
+
+                                            </button>
+
+                                        </div>
+
+                                    </form>
+
+                                </div>
+
+                            {% endif %}
+                            
+
+                            {% if perms.outreach.send_emaildraft %}
+
+                                <form
+
+                                    method="post"
+
+                                    action="{% url 'mark_email_draft_sent' latest_draft.draft_id %}"
+
+                                    id="send-email-form"
+
+                                >
+
+                                    {% csrf_token %}
+
+                                    <div class="form-actions">
+
+                                        <button
+
+                                            type="submit"
+
+                                            class="success-button"
+
+                                            id="send-email-button"
+
+                                        >
+
+                                            Send Email
+
+                                        </button>
+
+                                    </div>
+
+                                </form>
+
+                            {% endif %}
+
+                        {% elif latest_draft.workflow_status == "sending" %}
+
+                            <div class="notice warning">
+
+                                This email is currently being processed.
+
+                                Do not resend it until its delivery state has been confirmed.
+
+                            </div>
+
+                            {% if latest_draft.send_failure_reason %}
+
+                                <p><strong>Send information:</strong> {{ latest_draft.send_failure_reason }}</p>
+
+                            {% endif %}
+
+                            <p><strong>Subject:</strong> {{ latest_draft.subject }}</p>
+
+                            <textarea class="text-area email-body" readonly>{{ latest_draft.body }}</textarea>
+
+                        {% elif latest_draft.workflow_status == "send_failed" %}
+
+    <div class="notice error">
+        <strong>Email sending failed.</strong>
+        The organisation remains Not Yet Contacted.
+    </div>
+
+    {% if latest_draft.send_failure_reason %}
+        <p>
+            <strong>Failure Reason:</strong>
+            {{ latest_draft.send_failure_reason }}
+        </p>
+    {% endif %}
+
+    <p>
+        <strong>Subject:</strong>
+        {{ latest_draft.subject }}
+    </p>
+
+    <textarea
+        class="text-area email-body"
+        readonly
+    >{{ latest_draft.body }}</textarea>
+
+    {% if perms.outreach.send_emaildraft %}
+        <form
+            method="post"
+            action="{% url 'mark_email_draft_sent' latest_draft.draft_id %}"
+            id="send-email-form"
+        >
+            {% csrf_token %}
+
+            <div class="form-actions">
+                <button
+                    type="submit"
+                    class="success-button"
+                    id="send-email-button"
+                >
+                    Retry Send
+                </button>
+            </div>
+        </form>
+    {% endif %}
+
+{% elif latest_draft.workflow_status == "sent" %}
+
+    <div class="notice info">
+        This email has been sent successfully.
+    </div>
+
+    <p>
+        <strong>Subject:</strong>
+        {{ latest_draft.subject }}
+    </p>
+
+    <textarea
+        class="text-area email-body"
+        readonly
+    >{{ latest_draft.body }}</textarea>
+
+{% elif latest_draft.workflow_status == "cancelled" %}
+
+                            <div class="notice info">
+
+                                This draft has been cancelled and is read-only.
+
+                            </div>
+
+                            <div class="meta-grid">
+
+                                {% if latest_draft.cancelled_by %}
+
+                                    <div class="meta-item">
+
+                                        <strong>Cancelled By:</strong><br>
+
+                                        {{ latest_draft.cancelled_by }}
+
+                                    </div>
+
+                                {% endif %}
+
+                                {% if latest_draft.cancelled_at %}
+
+                                    <div class="meta-item">
+
+                                        <strong>Cancelled At:</strong><br>
+
+                                        {{ latest_draft.cancelled_at }}
+
+                                    </div>
+
+                                {% endif %}
+
+                                {% if latest_draft.cancellation_reason %}
+
+                                    <div class="meta-item">
+
+                                        <strong>Cancellation Reason:</strong><br>
+
+                                        {{ latest_draft.cancellation_reason }}
+
+                                    </div>
+
+                                {% endif %}
+
+                            </div>
+
+                            <p><strong>Subject:</strong> {{ latest_draft.subject }}</p>
+
+                            <textarea class="text-area email-body" readonly>{{ latest_draft.body }}</textarea>
+
+                        {% endif %}
+
+                        {% if latest_draft.workflow_status != "sent" and latest_draft.workflow_status != "sending" and latest_draft.workflow_status != "cancelled" %}
+
+                            <div class="workflow-subsection">
+
+                                <h3>Cancel Draft</h3>
+
+                                <p>
+
+                                    Cancelling this draft will stop it from being approved or sent.
+
+                                    The organisation will remain Not Yet Contacted.
+
+                                </p>
+
+                                <form
+
+                                    method="post"
+
+                                    action="{% url 'cancel_email_draft' latest_draft.draft_id %}"
+
+                                    onsubmit="return confirm('Are you sure you want to cancel this draft?');"
+
+                                >
+
+                                    {% csrf_token %}
+
+                                    <label class="form-label" for="cancellation-reason">
+
+                                        Cancellation Reason
+
+                                    </label>
+
+                                    <textarea
+
+                                        class="text-area"
+
+                                        id="cancellation-reason"
+
+                                        name="cancellation_reason"
+
+                                        rows="3"
+
+                                        required
+
+                                        placeholder="Enter the reason for cancelling this draft."
+
+                                    ></textarea>
+
+                                    <div class="form-actions">
+
+                                        <button type="submit" class="danger-button">
+
+                                            Cancel Draft
+
+                                        </button>
+
+                                    </div>
+
+                                </form>
+
+                            </div>
 
                         {% endif %}
 
@@ -820,492 +1973,288 @@ Organisation Details | Safe Roads For Us
 
                 {% endif %}
 
-
-                <form
-                    method="post"
-                    action="{% url 'update_email_draft' latest_draft.draft_id %}"
-                >
-
-                    {% csrf_token %}
-
-
-                    <label for="draft-subject">
-                        Subject
-                    </label>
-
-                    <input
-                        id="draft-subject"
-                        type="text"
-                        name="subject"
-                        value="{{ latest_draft.subject }}"
-                        required
-                    >
-
-
-                    <label for="latest-draft-body">
-                        Email Body
-                    </label>
-
-                    <textarea
-                        id="latest-draft-body"
-                        name="body"
-                        required
-                    >{{ latest_draft.body }}</textarea>
-
-
-                    <button
-                        type="submit"
-                        class="save-draft-button"
-                    >
-                        Save Draft
-                    </button>
-
-                </form>
-
-
-                <form
-                    method="post"
-                    action="{% url 'submit_email_draft_for_review' latest_draft.draft_id %}"
-                    style="margin-top: 12px;"
-                >
-
-                    {% csrf_token %}
-
-                    <button
-                        type="submit"
-                        class="submit-review-button"
-                    >
-                        Submit for Approval
-                    </button>
-
-                </form>
-
-
-                <!-- ============================================= -->
-                <!-- REGENERATE AI DRAFT -->
-                <!-- ============================================= -->
-
-                {% if latest_draft.template %}
-
-                    <form
-                        method="post"
-                        action="{% url 'generate_email_draft' content_type_id object_id %}"
-                        id="regenerate-draft-form"
-                        style="margin-top: 12px;"
-                    >
-
-                        {% csrf_token %}
-
-
-                        <input
-                            type="hidden"
-                            name="template_id"
-                            value="{{ latest_draft.template.id }}"
-                        >
-
-
-                        <input
-                            type="hidden"
-                            name="outreach_purpose"
-                            value="{{ latest_draft.outreach_purpose }}"
-                        >
-
-
-                        <input
-                            type="hidden"
-                            name="regenerate"
-                            value="1"
-                        >
-
-
-                        <input
-                            type="hidden"
-                            name="confirm_regenerate"
-                            value="1"
-                        >
-
-
-                        <button
-                            type="submit"
-                            class="regenerate-draft-button"
-                            id="regenerate-draft-button"
-                        >
-                            Regenerate Draft
-                        </button>
-
-                    </form>
-
-                {% endif %}
-
-
-
-            <!-- =============================== -->
-            <!-- NEEDS APPROVING -->
-            <!-- =============================== -->
-
-            {% elif latest_draft.workflow_status == "needs_approving" %}
-
-                <p>
-                    <strong>Subject:</strong>
-                    {{ latest_draft.subject }}
-                </p>
-
-
-                <label for="latest-draft-body">
-                    Email Body
-                </label>
-
-                <textarea
-                    id="latest-draft-body"
-                    readonly
-                >{{ latest_draft.body }}</textarea>
-
-
-                {% if perms.outreach.change_emaildraft %}
-
-                    <div class="review-actions">
-
-
-                        <form
-                            method="post"
-                            action="{% url 'approve_email_draft' latest_draft.draft_id %}"
-                        >
-
-                            {% csrf_token %}
-
-                            <button
-                                type="submit"
-                                class="approve-draft-button"
-                            >
-                                Approve Draft
-                            </button>
-
-                        </form>
-
-
-                        <form
-                            method="post"
-                            action="{% url 'reject_email_draft' latest_draft.draft_id %}"
-                        >
-
-                            {% csrf_token %}
-
-                            <label for="rejection-reason">
-                                Rejection Reason
-                            </label>
-
-                            <textarea
-                                id="rejection-reason"
-                                name="rejection_reason"
-                                rows="3"
-                                placeholder="Enter the reason for rejecting this draft..."
-                                required
-                            ></textarea>
-
-
-                            <button
-                                type="submit"
-                                class="reject-draft-button"
-                            >
-                                Reject Draft
-                            </button>
-
-                        </form>
-
-
-                    </div>
-
-                {% endif %}
-
-
-
-            <!-- =============================== -->
-            <!-- APPROVED -->
-            <!-- =============================== -->
-
-            {% elif latest_draft.workflow_status == "approved" %}
-
-                <p>
-                    <strong>Subject:</strong>
-                    {{ latest_draft.subject }}
-                </p>
-
-
-                <label for="latest-draft-body">
-                    Email Body
-                </label>
-
-                <textarea
-                    id="latest-draft-body"
-                    readonly
-                >{{ latest_draft.body }}</textarea>
-
-
-                {% if perms.outreach.change_emaildraft %}
-
-                    <form
-                        method="post"
-                        action="{% url 'mark_email_draft_sent' latest_draft.draft_id %}"
-                        style="margin-top: 12px;"
-                    >
-
-                        {% csrf_token %}
-
-                        <button
-                            type="submit"
-                            class="sent-draft-button"
-                        >
-                            Mark as Sent
-                        </button>
-
-                    </form>
-
-                {% endif %}
-
-
-
-            <!-- =============================== -->
-            <!-- REJECTED / SENT -->
-            <!-- =============================== -->
-
-            {% else %}
-
-
-                {% if latest_draft.workflow_status == "rejected" and latest_draft.rejection_reason %}
-
-                    <div class="draft-warning">
-
-                        <strong>
-                            Rejection Reason:
-                        </strong>
-
-                        <br>
-
-                        {{ latest_draft.rejection_reason }}
-
-                    </div>
-
-                {% endif %}
-
-
-                <p>
-                    <strong>Subject:</strong>
-                    {{ latest_draft.subject }}
-                </p>
-
-
-                <label for="latest-draft-body">
-                    Email Body
-                </label>
-
-                <textarea
-                    id="latest-draft-body"
-                    readonly
-                >{{ latest_draft.body }}</textarea>
-
-
-            {% endif %}
-
+            </div>
 
         </section>
 
     {% endif %}
 
+    {% if latest_draft and email_workflow_history %}
+    <section class="history-section">
+        <h2 class="section-heading">Email Workflow History</h2>
 
+        {% for item in email_workflow_history %}
+            <div class="history-card">
+                <p><strong>Action:</strong> {{ item.get_action_display }}</p>
+                <p><strong>Version:</strong> {{ item.version }}</p>
 
-<!-- ===================================================== -->
-<!-- OUTREACH HISTORY -->
-<!-- ===================================================== -->
+                {% if item.from_status or item.to_status %}
+                    <p>
+                        <strong>Status Change:</strong>
+                        {{ item.from_status|default:"-" }}
+                        &rarr;
+                        {{ item.to_status|default:"-" }}
+                    </p>
+                {% endif %}
 
-<section>
+                {% if item.performed_by %}
+                    <p><strong>Performed By:</strong> {{ item.performed_by }}</p>
+                {% endif %}
 
-    <h2 class="section-heading">
-        Outreach History
-    </h2>
+                <p><strong>Date:</strong> {{ item.created_at }}</p>
 
-    {% for opp in opportunities %}
+                {% if item.reason %}
+                    <p><strong>Reason:</strong> {{ item.reason }}</p>
+                {% endif %}
 
-        <div class="history-card">
+                {% if item.recipient_email_snapshot %}
+                    <p>
+                        <strong>Recipient Snapshot:</strong>
+                        {{ item.recipient_email_snapshot }}
+                    </p>
+                {% endif %}
+            </div>
+        {% endfor %}
+    </section>
+    {% endif %}
 
-            <p>
-                <strong>Status:</strong>
-                {{ opp.get_status_display }}
-            </p>
+    <section class="history-section">
 
-            <p>
-                <strong>Created:</strong>
-                {{ opp.date_created }}
-            </p>
+        <h2 class="section-heading">Outreach History</h2>
 
-            {% if opp.notes %}
-                <p>
-                    <strong>Notes:</strong>
-                    {{ opp.notes }}
-                </p>
-            {% endif %}
+        {% for opp in opportunities %}
 
+            <div class="history-card">
 
-            {% if opp.status == "contacted" %}
+                <p><strong>Status:</strong> {{ opp.get_status_display }}</p>
 
-                {% if org_type != "club" %}
+                <p><strong>Created:</strong> {{ opp.date_created }}</p>
 
-                    <form
-                        method="post"
-                        action="{% url 'record_positive_response_view' opp.id %}"
-                    >
-                        {% csrf_token %}
+                {% if opp.date_contacted %}
 
-                        <button
-                            type="submit"
-                            class="positive-response-button"
-                        >
-                            Record Positive Response
-                        </button>
-                    </form>
+                    <p><strong>Contacted:</strong> {{ opp.date_contacted }}</p>
 
                 {% endif %}
 
+                {% if opp.outreach_method %}
 
-                <form
-                    method="post"
-                    action="{% url 'record_response_view' opp.id %}"
-                    style="margin-top: 10px;"
-                >
-                    {% csrf_token %}
+                    <p><strong>Method:</strong> {{ opp.outreach_method }}</p>
 
-                    <input
-                        type="hidden"
-                        name="response_status"
-                        value="not_interested"
-                    >
+                {% endif %}
 
-                    <button
-                        type="submit"
-                        class="reject-draft-button"
-                    >
-                        Record Not Interested
-                    </button>
-                </form>
+                {% if opp.notes %}
 
+                    <p><strong>Notes:</strong> {{ opp.notes }}</p>
 
-                <form
-                    method="post"
-                    action="{% url 'record_response_view' opp.id %}"
-                    style="margin-top: 10px;"
-                >
-                    {% csrf_token %}
+                {% endif %}
 
-                    <input
-                        type="hidden"
-                        name="response_status"
-                        value="do_not_contact"
-                    >
+                {% if opp.status == "contacted" %}
 
-                    <button
-                        type="submit"
-                        class="sent-draft-button"
-                    >
-                        Record Do Not Contact
-                    </button>
-                </form>
+                    <div class="history-actions">
 
-            {% endif %}
+                        {% if org_type != "club" %}
 
-        </div>
+                            <form
 
-    {% empty %}
+                                method="post"
 
-        <div class="empty-history">
-            No outreach activity yet.
-            This organisation has not been contacted.
-            Outreach history will appear here once contact activity begins.
-        </div>
+                                action="{% url 'record_positive_response_view' opp.id %}"
 
-    {% endfor %}
+                            >
 
-</section>
+                                {% csrf_token %}
 
+                                <button type="submit" class="warning-button">
+
+                                    Record Positive Response
+
+                                </button>
+
+                            </form>
+
+                        {% endif %}
+
+                        <form method="post" action="{% url 'record_response_view' opp.id %}">
+
+                            {% csrf_token %}
+
+                            <input type="hidden" name="response_status" value="not_interested">
+
+                            <button type="submit" class="danger-button">Record Not Interested</button>
+
+                        </form>
+
+                        <form method="post" action="{% url 'record_response_view' opp.id %}">
+
+                            {% csrf_token %}
+
+                            <input type="hidden" name="response_status" value="do_not_contact">
+
+                            <button type="submit" class="secondary-button">Record Do Not Contact</button>
+
+                        </form>
+
+                    </div>
+
+                {% endif %}
+
+            </div>
+
+        {% empty %}
+
+            <div class="empty-history">
+
+                No outreach activity yet. Outreach history will appear here once contact activity begins.
+
+            </div>
+
+        {% endfor %}
+
+    </section>
 
 </div>
 
-
 <script>
 
-    document.addEventListener(
-        "DOMContentLoaded",
-        function () {
+    document.addEventListener("DOMContentLoaded", function () {
 
-            // ---------------------------------------------
-            // Normal AI generation
-            // ---------------------------------------------
+        const emailToggle = document.getElementById("toggle-email-workflow");
 
-            const generateForm = document.getElementById(
-                "generate-draft-form"
-            );
+        const emailCard = document.getElementById("email-workflow-card");
 
-            const generateButton = document.getElementById(
-                "generate-draft-button"
-            );
+        if (emailToggle && emailCard) {
 
-            if (generateForm && generateButton) {
+            emailToggle.addEventListener("click", function () {
 
-                generateForm.addEventListener(
-                    "submit",
-                    function () {
+                emailCard.classList.toggle("is-open");
 
-                        if (!generateForm.checkValidity()) {
-                            return;
-                        }
+                if (emailCard.classList.contains("is-open")) {
 
-                        generateButton.disabled = true;
-                        generateButton.textContent =
-                            "Generating draft...";
-                    }
-                );
+                    emailCard.scrollIntoView({
 
-            }
+                        behavior: "smooth",
 
+                        block: "start"
 
-            // ---------------------------------------------
-            // AI regeneration
-            // ---------------------------------------------
+                    });
 
-            const regenerateForm = document.getElementById(
-                "regenerate-draft-form"
-            );
+                }
 
-            const regenerateButton = document.getElementById(
-                "regenerate-draft-button"
-            );
-
-            if (regenerateForm && regenerateButton) {
-
-                regenerateForm.addEventListener(
-                    "submit",
-                    function (event) {
-
-                        const confirmed = window.confirm(
-                            "A new draft version will be created. " +
-                            "The current version will be preserved. " +
-                            "Do you want to continue?"
-                        );
-
-                        if (!confirmed) {
-                            event.preventDefault();
-                            return;
-                        }
-
-                        regenerateButton.disabled = true;
-
-                        regenerateButton.textContent =
-                            "Regenerating draft...";
-                    }
-                );
-
-            }
+            });
 
         }
-    );
+
+        const externalToggle = document.getElementById("toggle-external-outreach");
+
+        const externalPanel = document.getElementById("external-outreach-panel");
+
+        if (externalToggle && externalPanel) {
+
+            externalToggle.addEventListener("click", function () {
+
+                externalPanel.classList.toggle("is-open");
+
+            });
+
+        }
+
+        const manualToggle = document.getElementById("toggle-manual-draft");
+
+        const manualPanel = document.getElementById("manual-draft-panel");
+
+        if (manualToggle && manualPanel) {
+
+            manualToggle.addEventListener("click", function () {
+
+                manualPanel.classList.toggle("is-open");
+
+            });
+
+        }
+
+        const generateForm = document.getElementById("generate-draft-form");
+
+        const generateButton = document.getElementById("generate-draft-button");
+
+        if (generateForm && generateButton) {
+
+            generateForm.addEventListener("submit", function () {
+
+                if (!generateForm.checkValidity()) {
+
+                    return;
+
+                }
+
+                generateButton.disabled = true;
+
+                generateButton.textContent = "Generating draft...";
+
+            });
+
+        }
+
+        const regenerateForm = document.getElementById("regenerate-draft-form");
+
+        const regenerateButton = document.getElementById("regenerate-draft-button");
+
+        if (regenerateForm && regenerateButton) {
+
+            regenerateForm.addEventListener("submit", function (event) {
+
+                const confirmed = window.confirm(
+
+                    "A new draft version will be created. " +
+
+                    "The current version will be preserved. " +
+
+                    "Do you want to continue?"
+
+                );
+
+                if (!confirmed) {
+
+                    event.preventDefault();
+
+                    return;
+
+                }
+
+                regenerateButton.disabled = true;
+
+                regenerateButton.textContent = "Regenerating draft...";
+
+            });
+
+        }
+
+        const sendForm = document.getElementById("send-email-form");
+
+        const sendButton = document.getElementById("send-email-button");
+
+        if (sendForm && sendButton) {
+
+            sendForm.addEventListener("submit", function (event) {
+
+                const confirmed = window.confirm("Send this approved email now?");
+
+                if (!confirmed) {
+
+                    event.preventDefault();
+
+                    return;
+
+                }
+
+                sendButton.disabled = true;
+
+                sendButton.textContent = "Sending...";
+
+            });
+
+        }
+
+    });
 
 </script>
 

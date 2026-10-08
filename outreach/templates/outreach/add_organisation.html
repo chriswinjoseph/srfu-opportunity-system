@@ -3,807 +3,581 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>Add Organisation</title>
-
     <style>
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
 
         body {
             margin: 0;
-            background: #f5f7fa;
+            /* Dimmed backdrop behind the modal-style panel. */
+            background: #cfd6e1;
             font-family: Arial, sans-serif;
             color: #1f2937;
+            line-height: 1.45;
+        }
+
+        .visually-hidden {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            margin: -1px;
+            padding: 0;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
         }
 
         .page-wrapper {
             min-height: 100vh;
-            padding: 40px 20px;
+            padding: 20px 16px;
         }
 
-        .container {
+        .panel {
+            position: relative;
             width: 100%;
-            max-width: 850px;
+            max-width: 720px;
             margin: 0 auto;
+            background: #ffffff;
+            border: 1px solid #c4ccd9;
+            border-radius: 12px;
+            padding: 20px 28px 22px;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.25);
+        }
+
+        .panel-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 2px;
         }
 
         .back-link {
-            display: inline-block;
-            margin-bottom: 20px;
             color: #173363;
+            font-weight: 600;
             text-decoration: none;
-            font-weight: 600;
         }
 
-        .back-link:hover {
-            text-decoration: underline;
-        }
+        .back-link:hover, .back-link:focus { text-decoration: underline; }
 
-        .card {
-            position: relative;
-            background: white;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 32px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-        }
-
-        h1 {
-            margin-top: 0;
-            margin-bottom: 8px;
-            text-align: center;
-            font-size: 30px;
-            color: #111827;
-            text-decoration: underline;
-        }
-
-        .description {
-            margin-top: 0;
-            margin-bottom: 25px;
-            text-align: center;
-            color: #64748b;
-            line-height: 1.5;
-        }
-
-        .ux-banner {
-            width: fit-content;
-            max-width: 500px;
-            margin: 0 auto 20px;
-            padding: 12px 18px;
-            border-radius: 6px;
-            color: white;
-            font-size: 14px;
-            font-weight: 700;
-            text-align: center;
-        }
-
-        .ux-banner-success {
-            background: #63dc4c;
-        }
-
-        .ux-banner-error {
-            background: #ff5a5f;
-        }
-
-        .ux-banner-warning {
-            background: #f59e0b;
-        }
-
-        .status-note {
-            margin-bottom: 25px;
-            padding: 14px 16px;
-            background: #eff6ff;
-            border: 1px solid #bfdbfe;
-            border-radius: 8px;
-            color: #1e3a5f;
-        }
-
-        .section-title {
-            margin-top: 28px;
-            margin-bottom: 18px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #e5e7eb;
-            font-size: 18px;
-        }
-
-        .type-selector {
-            margin-bottom: 28px;
-            padding: 18px;
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-        }
-
-        .type-selector label {
-            margin-bottom: 8px;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 7px;
-            font-weight: 600;
-            color: #374151;
-        }
-
-        input,
-        select,
-        textarea {
-            width: 100%;
-            min-height: 44px;
-            padding: 10px 12px;
-            border: 1px solid #cbd5e1;
-            border-radius: 7px;
-            background: white;
-            font-family: inherit;
-            font-size: 15px;
-            color: #111827;
-        }
-
-        textarea {
-            min-height: 100px;
-            resize: vertical;
-        }
-
-        input:focus,
-        select:focus,
-        textarea:focus {
-            outline: none;
-            border-color: #173363;
-            box-shadow: 0 0 0 3px rgba(23, 51, 99, 0.1);
-        }
-
-        .required-mark {
-            color: #b91c1c;
-        }
-
-        .help-text {
-            display: block;
-            margin-top: 6px;
-            color: #64748b;
-            font-size: 13px;
-        }
-
-        .field-error {
-            margin-top: 6px;
-            color: #b91c1c;
-            font-size: 14px;
-        }
-
-        .non-field-errors {
-            margin-bottom: 20px;
-            padding: 14px 16px;
-            background: #fef2f2;
-            border: 1px solid #fecaca;
-            border-radius: 8px;
-            color: #991b1b;
-        }
-
-        .message {
-            margin-bottom: 20px;
-            padding: 14px 16px;
-            border-radius: 8px;
-            font-size: 15px;
-        }
-
-        .message.error {
-            background: #fef2f2;
-            border: 1px solid #fecaca;
-            color: #991b1b;
-        }
-
-        .organisation-preview {
-            margin-bottom: 8px;
-            padding: 14px 16px;
-            background: #ffffff;
-            border: 1px solid #d1d5db;
-            border-left: 5px solid #ef4444;
-            border-radius: 6px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
-        }
-
-        .preview-heading {
-            margin-top: 25px;
-            margin-bottom: 8px;
-            text-align: center;
-            font-weight: 700;
-            font-size: 14px;
-        }
-
-        .organisation-preview-name {
-            margin-bottom: 8px;
-            font-weight: 700;
-            color: #111827;
-        }
-
-        .preview-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 7px 20px;
-            font-size: 13px;
-        }
-
-        .preview-label {
-            font-weight: 600;
-        }
-
-        .button-row {
-            display: flex;
-            justify-content: center;
-            gap: 22px;
-            margin-top: 30px;
-            padding-top: 22px;
-            border-top: 1px solid #e5e7eb;
-        }
-
-        .button {
-            min-width: 130px;
-            min-height: 42px;
-            padding: 11px 18px;
-            border-radius: 7px;
-            font-size: 15px;
-            font-weight: 600;
-            cursor: pointer;
-
+        .close-link {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            color: #173363;
+            font-size: 24px;
             text-decoration: none;
-            text-align: center;
+            border: 1px solid #c4ccd9;
         }
 
-        .button-primary {
-            background: white;
-            color: #111827;
-            border: 1px solid #9ca3af;
+        h1 {
+            margin: 0 0 4px;
+            font-size: 26px;
+            color: #173363;
+            text-decoration: underline;
+            text-decoration-thickness: 3px;
+            text-underline-offset: 8px;
         }
 
-        .button-primary:hover {
-            background: #f3f4f6;
+        .description { margin: 10px 0 8px; color: #475569; }
+
+        .status-note {
+            margin-bottom: 8px;
+            padding: 6px 12px;
+            background: #eef3fb;
+            border-radius: 8px;
+            font-size: 14px;
         }
 
-        .button-secondary {
-            background: #d1d5db;
-            color: #111827;
-            border: 1px solid #9ca3af;
+        /* Notifications */
+        .banner {
+            margin: 10px 0;
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1px solid;
+            font-weight: 600;
+        }
+        .banner-error   { background: #fef2f2; border-color: #b91c1c; color: #7f1d1d; }
+        .banner-warning { background: #fffbeb; border-color: #b45309; color: #78350f; }
+        .banner-success { background: #ecfdf5; border-color: #047857; color: #064e3b; }
+        .banner .banner-detail { display: block; margin-top: 4px; font-weight: normal; }
+        .banner a { color: inherit; text-decoration: underline; }
+
+        /* Form sections */
+        fieldset.section {
+            margin: 0 0 14px;
+            padding: 0;
+            border: 0;
+            min-width: 0;
+        }
+        fieldset.section > legend {
+            width: 100%;
+            padding: 0 0 4px;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #dbe1ea;
+            font-size: 17px;
+            font-weight: 700;
+            color: #173363;
         }
 
-        .button-secondary:hover {
-            background: #c4c8ce;
+        .section-hint { margin: 0 0 8px; font-size: 13px; color: #475569; }
+
+        .field-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px 16px;
+        }
+        .field-grid .span-2 { grid-column: 1 / -1; }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 3px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .required-mark { color: #b91c1c; margin-left: 2px; }
+
+        .form-group input[type="text"],
+        .form-group input[type="email"],
+        .form-group input[type="url"],
+        .form-group input[type="tel"],
+        .form-group select,
+        .form-group textarea,
+        .reason-box textarea {
+            width: 100%;
+            padding: 7px 10px;
+            font: inherit;
+            color: inherit;
+            background: #ffffff;
+            border: 1px solid #94a3b8;
+            border-radius: 6px;
+        }
+        .form-group textarea, .reason-box textarea { min-height: 60px; resize: vertical; }
+
+        input:focus, select:focus, textarea:focus, a:focus, button:focus {
+            outline: 3px solid #2563eb;
+            outline-offset: 1px;
         }
 
-        @media (max-width: 650px) {
-            .page-wrapper {
-                padding: 20px 12px;
-            }
+        .form-group.has-error input,
+        .form-group.has-error select,
+        .form-group.has-error textarea {
+            border: 2px solid #b91c1c;
+            background: #fffafa;
+        }
 
-            .card {
-                padding: 22px 18px;
-            }
+        .help-text { display: block; margin-top: 4px; font-size: 12px; color: #475569; }
+        .field-error { margin-top: 5px; font-size: 13px; font-weight: 600; color: #991b1b; }
 
-            h1 {
-                font-size: 25px;
-            }
+        /* Organisation type radios */
+        .type-options { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+        .type-option {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 40px;
+            padding: 4px 14px;
+            border: 1px solid #94a3b8;
+            border-radius: 999px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .type-option input { width: 18px; height: 18px; margin: 0; }
+        .type-option.is-selected { background: #173363; border-color: #173363; color: #ffffff; }
+        .type-option:focus-within { outline: 3px solid #2563eb; outline-offset: 1px; }
 
-            .preview-grid {
-                grid-template-columns: 1fr;
-            }
+        /* Duplicate result card */
+        .match-heading { margin: 18px 0 8px; font-weight: 700; }
+        .match-card {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            padding: 14px 16px;
+            margin-bottom: 14px;
+            background: #f8fafc;
+            border: 1px solid #94a3b8;
+            border-left: 5px solid #173363;
+            border-radius: 8px;
+        }
+        .match-card-name { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
+        .match-card-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px 20px;
+            margin: 0;
+        }
+        .match-card-grid dt { font-size: 12px; color: #475569; text-transform: uppercase; }
+        .match-card-grid dd { margin: 0; word-break: break-word; }
+        .match-card-location span + span::before { content: ", "; }
 
-            .button-row {
-                flex-direction: column-reverse;
-            }
+        .reason-box { margin: 14px 0; }
+        .reason-box label { display: block; font-weight: 600; margin-bottom: 4px; }
 
-            .button {
-                width: 100%;
-            }
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 44px;
+            padding: 10px 22px;
+            font: inherit;
+            font-weight: 700;
+            border-radius: 8px;
+            border: 1px solid #173363;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .btn-primary { background: #173363; color: #ffffff; }
+        .btn-secondary { background: #ffffff; color: #173363; }
+        .btn[disabled], .btn[aria-disabled="true"] { opacity: 0.65; cursor: not-allowed; }
+
+        .button-row {
+            display: flex;
+            justify-content: flex-end;
+            gap: 14px;
+            margin-top: 12px;
+            padding-top: 14px;
+            border-top: 1px solid #dbe1ea;
+        }
+
+        @media (max-width: 640px) {
+            .page-wrapper { padding: 12px 8px; }
+            .panel { padding: 14px 14px 18px; }
+            .field-grid { grid-template-columns: 1fr; }
+            .match-card { flex-direction: column; }
+            .match-card-grid { grid-template-columns: 1fr; }
+            .match-card-link, .button-row .btn { width: 100%; }
+            .button-row { flex-direction: column-reverse; }
         }
     </style>
 </head>
-
 <body>
-
 <div class="page-wrapper">
+    <main class="panel" aria-labelledby="page-title">
 
-    <div class="container">
+        <div class="panel-top">
+            <a class="back-link" href="{% url 'outreach_dashboard' %}">&larr; Back to dashboard</a>
+            <a class="close-link" href="{% url 'outreach_dashboard' %}" aria-label="Close and return to dashboard">&times;</a>
+        </div>
 
-        <a
-            class="back-link"
-            href="{% url 'outreach_dashboard' %}"
-        >
-            &larr; Back to dashboard
-        </a>
+        <h1 id="page-title">Add Organisation</h1>
 
-        <div class="card">
+        {% if permission_error %}
+            <div class="banner banner-error" role="alert">
+                You don't have permission to add an organisation.
+            </div>
+        {% else %}
 
-            <h1>Add Organisation</h1>
-
-            {% if permission_error %}
-                <div class="ux-banner ux-banner-error">
-                    You don't have permission to add an organisation.
+            {% for message in messages %}
+                <div class="banner {% if message.tags == 'success' %}banner-success{% elif message.tags == 'warning' %}banner-warning{% else %}banner-error{% endif %}" role="{% if message.tags == 'success' %}status{% else %}alert{% endif %}">
+                    {{ message }}
                 </div>
-            {% endif %}
-
+            {% endfor %}
 
             {% if duplicate_organisation %}
-                <div class="ux-banner ux-banner-error">
+                <div class="banner banner-error" role="alert" id="duplicate-banner" tabindex="-1">
                     This organisation already exists.
+                    <span class="banner-detail">
+                        An organisation with the same name and location already exists, so a new record was not created.
+                        <a href="{% url 'organisation_detail' content_type_id=duplicate_content_type_id object_id=duplicate_organisation.pk %}" target="_blank" rel="noopener">Review the existing record</a>
+                    </span>
                 </div>
             {% endif %}
-
 
             {% if likely_duplicate_organisation %}
-                <div class="ux-banner ux-banner-warning">
+                <div class="banner banner-warning" role="alert" id="duplicate-banner" tabindex="-1">
                     Possible duplicate found. Please review the matching organisation.
+                    <span class="banner-detail">This may be a duplicate. Review the possible match before continuing.</span>
                 </div>
             {% endif %}
 
-
-            {% if created_organisation %}
-                <div class="ux-banner ux-banner-success">
-                    Organisation has been added successfully.
+            {% if form.errors and not duplicate_organisation and not likely_duplicate_organisation %}
+                <div class="banner banner-error" role="alert" id="error-summary" tabindex="-1">
+                    Please correct the highlighted fields below. Nothing has been saved.
                 </div>
             {% endif %}
-
 
             <p class="description">
                 Manually add a bank, branch or club to the outreach system.
+                Fields marked <span class="required-mark" aria-hidden="true">*</span><span class="visually-hidden">with an asterisk</span> are required. Other fields are optional.
             </p>
 
-
-            {% if messages %}
-
-                {% for message in messages %}
-
-                    {% if message.tags == "error" %}
-
-                        <div class="message error">
-                            {{ message }}
-                        </div>
-
-                    {% endif %}
-
-                {% endfor %}
-
-            {% endif %}
-
-
             <div class="status-note">
-                New organisations will automatically start as
-                <strong>Not Yet Contacted</strong>.
+                New organisations will automatically start as <strong>Not Yet Contacted</strong>.
             </div>
 
+            {# Radios below belong to this GET form via the form attribute. #}
+            <form id="type-form" method="get" action="{% url 'add_organisation' %}"></form>
 
-            <!-- Organisation Type -->
-
-            <div class="type-selector">
-
-                <form method="get">
-
-                    <label for="organisation-type">
-                        Organisation Type
-                        <span class="required-mark">*</span>
-                    </label>
-
-                    <select
-                        id="organisation-type"
-                        name="type"
-                        onchange="this.form.submit()"
-                    >
-
-                        <option
-                            value="bank"
-                            {% if organisation_type == "bank" %}
-                                selected
-                            {% endif %}
-                        >
-                            Bank
-                        </option>
-
-                        <option
-                            value="branch"
-                            {% if organisation_type == "branch" %}
-                                selected
-                            {% endif %}
-                        >
-                            Branch
-                        </option>
-
-                        <option
-                            value="club"
-                            {% if organisation_type == "club" %}
-                                selected
-                            {% endif %}
-                        >
-                            Club
-                        </option>
-
-                    </select>
-
-                    <noscript>
-                        <button type="submit">
-                            Change organisation type
-                        </button>
-                    </noscript>
-
-                </form>
-
-            </div>
-
-
-            <h2 class="section-title">
-                {{ organisation_type|title }} Details
-            </h2>
-
-
-            <form method="post" novalidate>
-
+            <form method="post" id="add-organisation-form" novalidate>
                 {% csrf_token %}
-
-                <input
-                    type="hidden"
-                    name="organisation_type"
-                    value="{{ organisation_type }}"
-                >
-
-
-                <!-- Hidden Django form fields -->
-
-                {% for hidden_field in form.hidden_fields %}
-                    {{ hidden_field }}
-                {% endfor %}
-
-
-                <!-- General validation errors -->
+                <input type="hidden" name="organisation_type" value="{{ organisation_type }}">
 
                 {% if form.non_field_errors %}
-
-                    <div class="non-field-errors">
-
-                        {% for error in form.non_field_errors %}
-                            <div>
-                                {{ error }}
-                            </div>
-                        {% endfor %}
-
+                    <div class="banner banner-error" role="alert">
+                        {% for error in form.non_field_errors %}<div>{{ error }}</div>{% endfor %}
                     </div>
-
                 {% endif %}
 
+                <fieldset class="section">
+                    <legend>Organisation Details</legend>
 
-                <!-- Visible form fields -->
-
-                {% for field in form.visible_fields %}
-
-                    <div class="form-group">
-
-                        <label for="{{ field.id_for_label }}">
-
-                            {{ field.label }}
-
-                            {% if field.field.required %}
-                                <span class="required-mark">*</span>
-                            {% endif %}
-
-                        </label>
-
-                        {{ field }}
-
-                        {% if field.help_text %}
-
-                            <span class="help-text">
-                                {{ field.help_text }}
-                            </span>
-
-                        {% endif %}
-
-
-                        {% if field.errors %}
-
-                            {% for error in field.errors %}
-
-                                <div class="field-error">
-                                    {{ error }}
-                                </div>
-
-                            {% endfor %}
-
-                        {% endif %}
-
+                    <div role="radiogroup" aria-labelledby="type-label">
+                        <div id="type-label" class="visually-hidden">Organisation type (required)</div>
+                        <div class="type-options">
+                            <label class="type-option {% if organisation_type == 'bank' %}is-selected{% endif %}">
+                                <input type="radio" name="type" value="bank" form="type-form" {% if organisation_type == "bank" %}checked{% endif %}> Bank
+                            </label>
+                            <label class="type-option {% if organisation_type == 'branch' %}is-selected{% endif %}">
+                                <input type="radio" name="type" value="branch" form="type-form" {% if organisation_type == "branch" %}checked{% endif %}> Branch
+                            </label>
+                            <label class="type-option {% if organisation_type == 'club' %}is-selected{% endif %}">
+                                <input type="radio" name="type" value="club" form="type-form" {% if organisation_type == "club" %}checked{% endif %}> Club
+                            </label>
+                        </div>
+                        <noscript><button type="submit" form="type-form" class="btn btn-secondary">Change organisation type</button></noscript>
                     </div>
 
-                {% endfor %}
+                    <div class="field-grid">
+                        {% for field in form.visible_fields %}
+                            {% with key=" "|add:field.name|add:" " %}
+                                {% if key in " bank bank_name branch_name club_name club_type supported_by_bank supported_by_branch " %}
+                                    <div class="{% if field.name == 'bank' or field.name == 'bank_name' or field.name == 'branch_name' or field.name == 'club_name' %}span-2{% endif %}">
+                                        {% include "outreach/_organisation_field.html" %}
+                                    </div>
+                                {% endif %}
+                            {% endwith %}
+                        {% endfor %}
+                    </div>
+                </fieldset>
 
+                <fieldset class="section">
+                    <legend>Location</legend>
+                    <p class="section-hint" id="location-hint">At least one of Region or Suburb is required.</p>
+                    <div class="field-grid">
+                        {% for field in form.visible_fields %}
+                            {% with key=" "|add:field.name|add:" " %}
+                                {% if key in " state region suburb postcode address " %}
+                                    <div class="{% if field.name == 'address' %}span-2{% endif %}">
+                                        {% include "outreach/_organisation_field.html" %}
+                                    </div>
+                                {% endif %}
+                            {% endwith %}
+                        {% endfor %}
+                    </div>
+                </fieldset>
 
-                <!-- Exact duplicate preview -->
+                <fieldset class="section">
+                    <legend>Contact Information</legend>
+                    <div class="field-grid">
+                        {% for field in form.visible_fields %}
+                            {% with key=" "|add:field.name|add:" " %}
+                                {% if key in " public_email public_phone contact_name contact_role website_url source_url " %}
+                                    <div class="{% if field.name == 'website_url' or field.name == 'source_url' %}span-2{% endif %}">
+                                        {% include "outreach/_organisation_field.html" %}
+                                    </div>
+                                {% endif %}
+                            {% endwith %}
+                        {% endfor %}
+                    </div>
+                </fieldset>
+
+                <fieldset class="section">
+                    <legend>Additional Information</legend>
+                    {% for field in form.visible_fields %}
+                        {% if field.name == "notes" %}
+                            {% include "outreach/_organisation_field.html" %}
+                        {% endif %}
+                    {% endfor %}
+                </fieldset>
 
                 {% if duplicate_organisation %}
-
-                    <div class="preview-heading">
-                        Existing Organisation
-                    </div>
-
-                    <div class="organisation-preview">
-
-                        <div class="organisation-preview-name">
-
-                            {% if organisation_type == "bank" %}
-                                {{ duplicate_organisation.bank_name }}
-
-                            {% elif organisation_type == "branch" %}
-                                {{ duplicate_organisation.branch_name }}
-
-                            {% elif organisation_type == "club" %}
-                                {{ duplicate_organisation.club_name }}
-
-                            {% endif %}
-
-                        </div>
-
-                        <div class="preview-grid">
-
-                            <div>
-                                <span class="preview-label">
-                                    Type:
-                                </span>
-
-                                {{ organisation_type|title }}
-                            </div>
-
-                            <div>
-                                <span class="preview-label">
-                                    Email:
-                                </span>
-
-                                {{ duplicate_organisation.public_email|default:"-" }}
-                            </div>
-
-                            <div>
-                                <span class="preview-label">
-                                    State:
-                                </span>
-
-                                {{ duplicate_organisation.state|default:"-" }}
-                            </div>
-
-                            <div>
-                                <span class="preview-label">
-                                    Contact Number:
-                                </span>
-
-                                {{ duplicate_organisation.public_phone|default:"-" }}
-                            </div>
-
-                        </div>
-
-                    </div>
-
+                    <div class="match-heading">Existing Organisation</div>
+                    {% include "outreach/_organisation_duplicate_card.html" with org=duplicate_organisation content_type_id=duplicate_content_type_id org_type_label=organisation_type|title card_label="Existing organisation" %}
                 {% endif %}
 
-
-                <!-- Likely duplicate preview -->
-
                 {% if likely_duplicate_organisation %}
+                    <div class="match-heading">Possible Matching Organisation</div>
+                    {% include "outreach/_organisation_duplicate_card.html" with org=likely_duplicate_organisation content_type_id=likely_duplicate_content_type_id org_type_label=organisation_type|title card_label="Possible matching organisation" %}
 
-                    <div class="preview-heading">
-                        Possible Matching Organisation
-                    </div>
+                    <input type="hidden" name="confirm_likely_duplicate" value="1">
 
-                    <div class="organisation-preview">
-
-                        <div class="organisation-preview-name">
-
-                            {% if organisation_type == "bank" %}
-                                {{ likely_duplicate_organisation.bank_name }}
-
-                            {% elif organisation_type == "branch" %}
-                                {{ likely_duplicate_organisation.branch_name }}
-
-                            {% elif organisation_type == "club" %}
-                                {{ likely_duplicate_organisation.club_name }}
-
-                            {% endif %}
-
-                        </div>
-
-                        <div class="preview-grid">
-
-                            <div>
-                                <span class="preview-label">
-                                    Type:
-                                </span>
-
-                                {{ organisation_type|title }}
-                            </div>
-
-                            <div>
-                                <span class="preview-label">
-                                    Email:
-                                </span>
-
-                                {{ likely_duplicate_organisation.public_email|default:"-" }}
-                            </div>
-
-                            <div>
-                                <span class="preview-label">
-                                    State:
-                                </span>
-
-                                {{ likely_duplicate_organisation.state|default:"-" }}
-                            </div>
-
-                            <div>
-                                <span class="preview-label">
-                                    Contact Number:
-                                </span>
-
-                                {{ likely_duplicate_organisation.public_phone|default:"-" }}
-                            </div>
-
-                        </div>
-
-                    </div>
-
-
-                    <!-- Duplicate override reason -->
-
-                    <div
-                        class="form-group"
-                        style="margin-top: 25px;"
-                    >
-
+                    <div class="reason-box">
                         <label for="duplicate_override_reason">
-                            Reason for continuing
-                            <span class="required-mark">*</span>
+                            Reason for continuing <span class="required-mark" aria-hidden="true">*</span>
+                            <span class="visually-hidden">(required)</span>
                         </label>
-
                         <textarea
                             id="duplicate_override_reason"
                             name="duplicate_override_reason"
                             placeholder="Explain why these are different organisations."
+                            {% if override_reason_error %}aria-invalid="true" aria-describedby="override-reason-error"{% endif %}
                         >{{ duplicate_override_reason }}</textarea>
-
-                        <span class="help-text">
-                            Please explain why you believe this is a different organisation.
-                        </span>
-
+                        <span class="help-text">Please explain why you believe this is a different organisation.</span>
                         {% if override_reason_error %}
-
-                            <div class="field-error">
-                                {{ override_reason_error }}
+                            <div class="field-error" id="override-reason-error" role="alert">
+                                <span aria-hidden="true">&#9888;</span> <span class="visually-hidden">Error:</span> {{ override_reason_error }}
                             </div>
-
                         {% endif %}
-
                     </div>
-
                 {% endif %}
 
-
-                <!-- Newly created organisation preview -->
-
-                {% if created_organisation %}
-
-                    <div class="preview-heading">
-                        Added Organisation
-                    </div>
-
-                    <div class="organisation-preview">
-
-                        <div class="organisation-preview-name">
-
-                            {% if organisation_type == "bank" %}
-                                {{ created_organisation.bank_name }}
-
-                            {% elif organisation_type == "branch" %}
-                                {{ created_organisation.branch_name }}
-
-                            {% elif organisation_type == "club" %}
-                                {{ created_organisation.club_name }}
-
-                            {% endif %}
-
-                        </div>
-
-                        <div class="preview-grid">
-
-                            <div>
-                                <span class="preview-label">
-                                    Type:
-                                </span>
-
-                                {{ organisation_type|title }}
-                            </div>
-
-                            <div>
-                                <span class="preview-label">
-                                    Email:
-                                </span>
-
-                                {{ created_organisation.public_email|default:"-" }}
-                            </div>
-
-                            <div>
-                                <span class="preview-label">
-                                    State:
-                                </span>
-
-                                {{ created_organisation.state|default:"-" }}
-                            </div>
-
-                            <div>
-                                <span class="preview-label">
-                                    Contact Number:
-                                </span>
-
-                                {{ created_organisation.public_phone|default:"-" }}
-                            </div>
-
-                        </div>
-
-                    </div>
-
-                {% endif %}
-
-
-                <!-- Buttons -->
-
-                {% if likely_duplicate_organisation %}
-
-                    <div class="button-row">
-
-                        <a
-                            href="{% url 'add_organisation' %}?type={{ organisation_type }}"
-                            class="button button-secondary"
-                        >
-                            Cancel
-                        </a>
-
-                        <button
-                            type="submit"
-                            name="confirm_likely_duplicate"
-                            value="1"
-                            class="button button-primary"
-                        >
-                            Continue Anyway
-                        </button>
-
-                    </div>
-
-                {% else %}
-
-                    <div class="button-row">
-
-                        <a
-                            href="{% url 'add_organisation' %}?type={{ organisation_type }}"
-                            class="button button-secondary"
-                        >
-                            Clear
-                        </a>
-
-                        <button
-                            type="submit"
-                            class="button button-primary"
-                        >
-                            Submit
-                        </button>
-
-                    </div>
-
-                {% endif %}
-
+                <div class="button-row">
+                    {% if likely_duplicate_organisation %}
+                        <a href="{% url 'add_organisation' %}?type={{ organisation_type }}" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary" data-submit>Continue Anyway (create separately)</button>
+                    {% else %}
+                        <a href="{% url 'add_organisation' %}?type={{ organisation_type }}" class="btn btn-secondary" id="clear-button">Clear</a>
+                        <button type="submit" class="btn btn-primary" data-submit>Submit</button>
+                    {% endif %}
+                </div>
             </form>
-
-        </div>
-
-    </div>
-
+        {% endif %}
+    </main>
 </div>
 
+<script>
+(function () {
+    "use strict";
+
+    var form = document.getElementById("add-organisation-form");
+
+    // Switching organisation type reloads the matching form.
+    var typeForm = document.getElementById("type-form");
+    var STORE_KEY = "srfu-add-organisation-draft";
+    var SKIP = { csrfmiddlewaretoken: 1, organisation_type: 1, type: 1,
+                 duplicate_override_reason: 1, confirm_likely_duplicate: 1 };
+
+    // Keep typed values (client-side only) while the form for another
+    // organisation type loads. Field names and server validation are untouched.
+    function saveDraft() {
+        var values = {};
+        var postForm = document.getElementById("add-organisation-form");
+
+        if (!postForm) { return; }
+
+        postForm.querySelectorAll("input, select, textarea").forEach(function (el) {
+            if (!el.name || SKIP[el.name] || el.type === "radio" || el.type === "checkbox") { return; }
+            if (el.value) { values[el.name] = el.value; }
+        });
+
+        try { window.sessionStorage.setItem(STORE_KEY, JSON.stringify(values)); } catch (e) {}
+    }
+
+    function restoreDraft() {
+        var saved = null;
+
+        try {
+            saved = window.sessionStorage.getItem(STORE_KEY);
+            window.sessionStorage.removeItem(STORE_KEY);
+        } catch (e) { return; }
+
+        if (!saved) { return; }
+
+        try { saved = JSON.parse(saved); } catch (e) { return; }
+
+        var postForm = document.getElementById("add-organisation-form");
+        if (!postForm) { return; }
+
+        Object.keys(saved).forEach(function (name) {
+            var el = postForm.elements[name];
+            if (el && el.value === "" && el.type !== "hidden") { el.value = saved[name]; }
+        });
+    }
+
+    restoreDraft();
+
+    document.querySelectorAll('input[name="type"]').forEach(function (radio) {
+        radio.addEventListener("change", function () {
+            saveDraft();
+            if (typeForm) { typeForm.submit(); }
+        });
+    });
+
+    if (!form) { return; }
+
+    // Link each error message to its input and flag it invalid.
+    form.querySelectorAll(".form-group").forEach(function (group) {
+        var error = group.querySelector(".field-error");
+        var input = group.querySelector("input, select, textarea");
+
+        if (!error || !input) { return; }
+
+        group.classList.add("has-error");
+        input.setAttribute("aria-invalid", "true");
+
+        var describedBy = (input.getAttribute("aria-describedby") || "") + " " + error.id;
+        input.setAttribute("aria-describedby", describedBy.trim());
+    });
+
+    // Focus the first invalid field, otherwise the duplicate/error banner.
+    var firstInvalid = form.querySelector('[aria-invalid="true"]');
+    var banner = document.getElementById("duplicate-banner") || document.getElementById("error-summary");
+
+    if (firstInvalid) {
+        firstInvalid.focus();
+    } else if (banner) {
+        banner.focus();
+    }
+
+    // Clear empties the fields in place (never submits).
+    var clearButton = document.getElementById("clear-button");
+    if (clearButton) {
+        clearButton.addEventListener("click", function (event) {
+            event.preventDefault();
+
+            try { window.sessionStorage.removeItem(STORE_KEY); } catch (e) {}
+
+            form.querySelectorAll("input, select, textarea").forEach(function (el) {
+                if (el.type === "hidden" || el.type === "submit" || el.type === "radio" || el.type === "checkbox") { return; }
+                if (el.tagName === "SELECT") { el.selectedIndex = 0; } else { el.value = ""; }
+                el.removeAttribute("aria-invalid");
+            });
+
+            form.querySelectorAll(".field-error").forEach(function (el) { el.remove(); });
+            form.querySelectorAll(".has-error").forEach(function (el) { el.classList.remove("has-error"); });
+
+            var first = form.querySelector("input:not([type=hidden]), select, textarea");
+            if (first) { first.focus(); }
+        });
+    }
+
+    // Prevent double submission once a submit has started.
+    var submitting = false;
+    var submitButton = form.querySelector("[data-submit]");
+    var submitLabel = submitButton ? submitButton.textContent : "";
+
+    form.addEventListener("submit", function (event) {
+        if (submitting) {
+            event.preventDefault();
+            return;
+        }
+
+        submitting = true;
+
+        if (submitButton) {
+            submitButton.setAttribute("aria-disabled", "true");
+            submitButton.textContent = "Saving organisation...";
+            // Disabled after the form data is collected.
+            window.setTimeout(function () { submitButton.disabled = true; }, 0);
+        }
+    });
+
+    // Restore the button when returning with the browser Back button.
+    window.addEventListener("pageshow", function () {
+        submitting = false;
+        if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.removeAttribute("aria-disabled");
+            submitButton.textContent = submitLabel;
+        }
+    });
+})();
+</script>
 </body>
 </html>
