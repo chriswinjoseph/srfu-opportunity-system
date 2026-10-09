@@ -3,9 +3,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Permission
 from django.core.mail import send_mail
-from django.db.models import Q
 from django.utils import timezone
 
 from .models import EmailDraft, EmailDraftHistory
@@ -14,33 +12,23 @@ logger = logging.getLogger(__name__)
 
 
 def get_available_approvers():
-    """Active users who hold outreach.approve_emaildraft."""
-    permission = Permission.objects.filter(
-        content_type__app_label="outreach",
-        codename="approve_emaildraft",
-    ).first()
-
+    """Active, set-up users with the Admin role (who may approve)."""
     User = get_user_model()
 
-    query = Q(is_superuser=True)
-
-    if permission is not None:
-        query |= Q(user_permissions=permission)
-        query |= Q(groups__permissions=permission)
-
-    return User.objects.filter(is_active=True).filter(query).distinct()
+    return User.objects.filter(
+        role="admin",
+        is_active=True,
+        invitation_pending=False,
+    )
 
 
 def get_admin_recipients():
-    """Email addresses of active superusers (PM/admin contacts)."""
-    User = get_user_model()
-
+    """Email addresses of active Admins (PM/admin contacts)."""
     return [
         email
-        for email in User.objects.filter(
-            is_active=True,
-            is_superuser=True,
-        ).values_list("email", flat=True)
+        for email in get_available_approvers().values_list(
+            "email", flat=True
+        )
         if email
     ]
 

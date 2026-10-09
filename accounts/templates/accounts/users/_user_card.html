@@ -1,0 +1,10 @@
+<div class="card">
+    <div class="card-head">
+        <strong>{{ user_item.get_full_name|default:user_item.email }}</strong>
+        {% if user_item.account_state == "disabled" %}<span class="badge badge-disabled">Account Status: Disabled</span>
+        {% elif user_item.account_state == "pending" %}<span class="badge badge-pending">Account Status: Pending Invitation</span>
+        {% else %}<span class="badge badge-active">Account Status: Enabled</span>{% endif %}
+    </div>
+    <div class="meta">Role: {{ user_item.get_role_display }}<br>Email: {{ user_item.email }}</div>
+    <a class="btn btn-primary" href="{% url 'user_options' user_id=user_item.pk %}">Options</a>
+</div>

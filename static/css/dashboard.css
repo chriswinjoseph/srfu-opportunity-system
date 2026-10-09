@@ -242,6 +242,11 @@ select:focus-visible,
     box-shadow: 0 2px 5px rgba(15, 23, 42, 0.12);
 }
 
+.topbar-nav {
+    display: flex;
+    align-self: stretch;
+}
+
 .topbar-dashboard-link {
     align-self: stretch;
     display: flex;

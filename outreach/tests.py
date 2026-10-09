@@ -94,6 +94,38 @@ from .status_transitions import (
 
 
 
+
+ADMIN_LEVEL_CODENAMES = {
+    "approve_emaildraft",
+    "add_bank",
+    "add_branch",
+    "add_club",
+}
+
+
+def sync_role_with_permissions(user):
+    """
+    Roles now decide outreach permissions. These tests were written
+    around individually granted permissions, so map the permission set
+    they build onto the equivalent role:
+    no permissions -> no recognised role (no access),
+    any approval/organisation-management permission -> Admin,
+    otherwise -> Staff.
+    """
+    codenames = set(
+        user.user_permissions.values_list("codename", flat=True)
+    )
+
+    if not codenames:
+        user.role = ""
+    elif codenames & ADMIN_LEVEL_CODENAMES:
+        user.role = "admin"
+    else:
+        user.role = "staff"
+
+    user.save(update_fields=["role"])
+
+
 class PositiveResponseTests(TestCase):
 
 
@@ -1251,6 +1283,7 @@ class AddOrganisationTests(TestCase):
 
 
         )
+        sync_role_with_permissions(self.user)
 
 
 
@@ -1435,6 +1468,7 @@ class AddOrganisationTests(TestCase):
 
 
         self.user.user_permissions.clear()
+        sync_role_with_permissions(self.user)
 
 
 
@@ -4199,6 +4233,7 @@ class EmailDraftWorkflowTests(TestCase):
 
 
         )
+        sync_role_with_permissions(self.user)
 
 
 
@@ -5505,6 +5540,7 @@ class EmailDraftWorkflowTests(TestCase):
 
 
         self.user.user_permissions.clear()
+        sync_role_with_permissions(self.user)
 
 
 
@@ -6466,6 +6502,7 @@ class EmailDraftWorkflowTests(TestCase):
                 codename="approve_emaildraft",
             )
         )
+        sync_role_with_permissions(self.user)
 
     def test_submit_without_approver_keeps_awaiting_and_flags(self):
         self.remove_approve_permission()
@@ -6554,6 +6591,7 @@ class EmailDraftWorkflowTests(TestCase):
                 codename="approve_emaildraft",
             )
         )
+        sync_role_with_permissions(approver)
 
         draft = self.create_draft()
 
@@ -6749,6 +6787,9 @@ class EmailDraftWorkflowTests(TestCase):
     # -----------------------------------------------------
     # D. SMTP success but database finalisation fails
     # -----------------------------------------------------
+    # Admin-role users are now notified about reconciliation; keep the
+    # mail backend mock below counting only the draft email itself.
+    @patch("outreach.views.notify_admins", new=lambda *a, **k: False)
     @patch("outreach.views.EmailMessage.send")
     def test_finalisation_failure_preserves_evidence_and_blocks_resend(
         self,
@@ -6926,6 +6967,7 @@ class ManualOrganisationEntryRequirementTests(TestCase):
                 codename__in=["add_bank", "add_branch", "add_club"],
             )
         )
+        sync_role_with_permissions(self.user)
         self.url = reverse("add_organisation")
         self.client.force_login(self.user)
 
@@ -7294,6 +7336,7 @@ class ManualOrganisationEntryRequirementTests(TestCase):
     # --- FR-01
     def test_user_without_permission_creates_nothing(self):
         self.user.user_permissions.clear()
+        sync_role_with_permissions(self.user)
 
         response = self.client.post(self.url, self.bank_data())
 
@@ -7562,6 +7605,7 @@ class EmailApprovalHardeningTests(TestCase):
                 codename__in=list(perms),
             )
         )
+        sync_role_with_permissions(user)
         return user
 
     def edit(self, draft, subject="Edited subject", body="Edited body."):
@@ -7763,6 +7807,9 @@ class EmailApprovalHardeningTests(TestCase):
         mock_send.assert_not_called()
 
     # ---------------------------------------- unknown delivery
+    # Admin-role users are now notified about reconciliation; keep the
+    # mail backend mock below counting only the draft email itself.
+    @patch("outreach.views.notify_admins", new=lambda *a, **k: False)
     def test_unknown_delivery_errors_flag_reconciliation_and_block_resend(self):
         errors = [
             TimeoutError("timed out"),
@@ -7906,6 +7953,7 @@ class EmailApprovalHardeningTests(TestCase):
         mock_send,
     ):
         self.user.user_permissions.clear()
+        sync_role_with_permissions(self.user)
 
         draft = self.create_draft()
         self.client.post(self.url("submit_email_draft_for_review", draft))
@@ -8023,6 +8071,9 @@ class EmailApprovalHardeningTests(TestCase):
             self.assertIn("Do Not Contact", entry.reason)
             self.assertEqual(entry.performed_by, self.user)
 
+    # Admin-role users are now notified about reconciliation; keep the
+    # mail backend mock below counting only the draft email itself.
+    @patch("outreach.views.notify_admins", new=lambda *a, **k: False)
     def test_unclassified_exception_is_treated_as_unknown_delivery(self):
         draft = self.make_approved_draft()
         url = self.url("mark_email_draft_sent", draft)
@@ -8076,6 +8127,9 @@ class EmailApprovalHardeningTests(TestCase):
         self.assertIsNotNone(django_settings.EMAIL_TIMEOUT)
         self.assertGreater(django_settings.EMAIL_TIMEOUT, 0)
 
+    # Admin-role users are now notified about reconciliation; keep the
+    # mail backend mock below counting only the draft email itself.
+    @patch("outreach.views.notify_admins", new=lambda *a, **k: False)
     def test_unexpected_runtime_error_requires_reconciliation(self):
         draft = self.make_approved_draft()
         url = self.url("mark_email_draft_sent", draft)
@@ -8352,6 +8406,7 @@ class PendingApprovalsQueueTests(TestCase):
     def test_user_without_approval_permission_is_denied(self):
         self.pending()
         self.user.user_permissions.clear()
+        sync_role_with_permissions(self.user)
 
         response = self.client.get(self.queue_url)
 
@@ -8393,6 +8448,7 @@ class PendingApprovalsQueueTests(TestCase):
         self.assertContains(approver_page, "Pending Approvals (1)")
 
         self.user.user_permissions.clear()
+        sync_role_with_permissions(self.user)
         other_page = self.client.get(reverse("outreach_dashboard"))
         self.assertNotContains(other_page, self.queue_url)
 

@@ -118,4 +118,14 @@ path(
     views.cancel_email_draft,
     name="cancel_email_draft",
 ),
+path(
+    "organisations/<int:content_type_id>/<int:object_id>/edit/",
+    views.edit_organisation,
+    name="edit_organisation",
+),
+path(
+    "organisations/<int:content_type_id>/<int:object_id>/archive/",
+    views.archive_organisation,
+    name="archive_organisation",
+),
 ]

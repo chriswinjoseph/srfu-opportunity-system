@@ -1,0 +1,29 @@
+{% extends "accounts/users/base.html" %}
+{% block title %}Unfinished Drafts{% endblock %}
+{% block content %}
+<div class="panel">
+    <h1>Unfinished Drafts</h1>
+    <p class="subtitle">{{ target_name }}</p>
+    {% if drafts %}
+        <table>
+            <thead><tr><th>Subject</th><th>Status</th><th>Updated</th></tr></thead>
+            <tbody>{% for draft in drafts %}<tr><td>{{ draft.subject|default:"(no subject)" }}</td><td>{{ draft.get_workflow_status_display }}</td><td>{{ draft.updated_at }}</td></tr>{% endfor %}</tbody>
+        </table>
+        <form method="post" data-once style="margin-top:16px">
+            {% csrf_token %}
+            <div class="field">
+                <label for="destination">Reassign all unfinished drafts to</label>
+                <select name="destination" id="destination" required>
+                    <option value="">Choose a user...</option>
+                    {% for user_item in candidates %}<option value="{{ user_item.pk }}">{{ user_item.get_full_name|default:user_item.email }} ({{ user_item.get_role_display }})</option>{% endfor %}
+                </select>
+            </div>
+            <div class="actions"><button class="btn btn-primary" type="submit">Reassign</button></div>
+            <p class="saving-note" role="status">Saving... please wait.</p>
+        </form>
+    {% else %}
+        <div class="empty">This user has no unfinished drafts.</div>
+    {% endif %}
+    <div class="actions"><a class="btn" href="{% url 'user_options' user_id=target.pk %}">Back</a></div>
+</div>
+{% endblock %}

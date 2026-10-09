@@ -1,0 +1,23 @@
+{% extends "accounts/users/base.html" %}
+{% block title %}User Activity{% endblock %}
+{% block content %}
+<h1>User Activity</h1>
+<p class="subtitle">Most recent 200 account actions</p>
+{% if activities %}
+    <table>
+        <thead><tr><th>When</th><th>Action</th><th>By</th><th>User</th><th>Change</th><th>Detail</th></tr></thead>
+        <tbody>
+        {% for a in activities %}
+            <tr>
+                <td>{{ a.created_at }}</td><td>{{ a.get_action_display }}</td>
+                <td>{{ a.actor_email|default:"System / user" }}</td><td>{{ a.target_email }}</td>
+                <td>{% if a.previous_value or a.new_value %}{{ a.previous_value }} &rarr; {{ a.new_value }}{% endif %}</td>
+                <td>{{ a.detail }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <div class="empty">No account activity has been recorded yet.</div>
+{% endif %}
+{% endblock %}

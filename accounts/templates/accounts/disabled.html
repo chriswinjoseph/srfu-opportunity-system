@@ -1,0 +1,6 @@
+{% extends "accounts/base.html" %}
+{% block title %}Account Disabled | Safe Roads For Us{% endblock %}
+{% block content %}
+    <h1 class="auth-title">Your account has been disabled. Please contact an administrator.</h1>
+    <p class="auth-switch"><a href="{% url 'login' %}">Return to log in</a></p>
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "accounts/users/base.html" %}
+{% block title %}Swap Role{% endblock %}
+{% block content %}
+<div class="panel">
+    <h1>Swap Role</h1>
+    <p class="subtitle">Are you sure you want to change the role of {{ target_name }}?<br>{{ current_role_label }} &rarr; {{ new_role_label }}</p>
+    <form method="post" data-once>
+        {% csrf_token %}
+        <div class="role-cards">
+            <div class="role-card"><strong>{{ current_role_label }}</strong><ul><li>Current role</li></ul></div>
+            <div class="role-card"><strong>{{ new_role_label }}</strong>
+                <ul>
+                {% if new_role == "admin" %}
+                    <li>Gains all Admin permissions</li><li>Can approve drafts and manage users</li><li>Can add, edit and archive organisations</li>
+                {% else %}
+                    <li>Loses all Admin permissions</li><li>Can no longer approve drafts or manage users</li><li>Keeps Staff permissions</li>
+                {% endif %}
+                </ul>
+            </div>
+        </div>
+        <div class="actions">
+            <a class="btn btn-danger" href="{% url 'user_options' user_id=target.pk %}">Cancel</a>
+            <button class="btn btn-success" type="submit">Confirm</button>
+        </div>
+        <p class="saving-note" role="status">Saving... please wait.</p>
+    </form>
+</div>
+{% endblock %}

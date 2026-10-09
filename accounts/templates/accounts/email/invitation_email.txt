@@ -1,0 +1,12 @@
+Hi {{ user.first_name }},
+
+You have been invited to join Safe Roads For Us as {{ role_label }}.
+
+Use the link below to set your password and activate your account:
+{{ invitation_url }}
+
+The link can only be used once and expires after a period of time. If it has expired, ask an administrator to send you a new invitation.
+
+If you were not expecting this invitation, you can ignore this email.
+
+— Safe Roads For Us

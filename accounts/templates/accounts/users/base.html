@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Users{% endblock %} | Safe Roads For Us</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: Arial, sans-serif; color: #111827; background: #f3f4f6; }
+        .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 20px; background: #fff; border-bottom: 1px solid #d1d5db; }
+        .topbar nav a { margin-right: 18px; color: #111827; text-decoration: none; font-weight: 600; }
+        .topbar nav a[aria-current="page"] { border-bottom: 2px solid #1d4ed8; }
+        .topbar-user { display: flex; align-items: center; gap: 12px; font-size: .9rem; }
+        .topbar-user form { margin: 0; }
+        main { max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; }
+        h1 { text-align: center; margin: 0 0 6px; }
+        .subtitle { text-align: center; margin: 0 0 20px; font-weight: 600; }
+        .banner { padding: 10px 14px; margin: 0 auto 14px; max-width: 720px; border-radius: 4px; font-weight: 600; text-align: center; }
+        .banner-error { background: #fecaca; color: #b91c1c; }
+        .banner-success { background: #bbf7d0; color: #166534; }
+        .banner-warning { background: #fef3c7; color: #92400e; }
+        .btn { display: inline-block; padding: 8px 18px; border-radius: 4px; font-size: .95rem; font-weight: 600; text-decoration: none; cursor: pointer; background: #fff; color: #111827; border: 1px solid #9ca3af; }
+        .btn-primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+        .btn-danger { background: #ef4444; color: #fff; border-color: #ef4444; }
+        .btn-success { background: #22c55e; color: #fff; border-color: #22c55e; }
+        .btn[disabled] { opacity: .55; cursor: not-allowed; }
+        .toolbar { display: flex; gap: 10px; margin-bottom: 18px; }
+        .toolbar input[type=search] { flex: 1; padding: 8px 10px; border: 1px solid #9ca3af; border-radius: 4px; }
+        .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+        .columns h2 { text-align: center; margin: 0 0 12px; }
+        .card { background: #fff; border: 1px solid #d1d5db; border-radius: 6px; padding: 12px 14px; margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+        .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+        .card strong { font-size: 1.05rem; }
+        .meta { font-size: .85rem; color: #374151; margin: 4px 0 8px; }
+        .badge { font-size: .72rem; font-weight: 700; padding: 2px 6px; border-radius: 3px; white-space: nowrap; }
+        .badge-active { background: #bbf7d0; color: #166534; }
+        .badge-disabled { background: #fecaca; color: #b91c1c; }
+        .badge-pending { background: #fde68a; color: #92400e; }
+        .empty { text-align: center; padding: 28px 16px; background: #fff; border: 1px solid #d1d5db; border-radius: 6px; }
+        .panel { max-width: 640px; margin: 0 auto; background: #fff; border: 1px solid #d1d5db; border-radius: 8px; padding: 22px; }
+        .field { margin-bottom: 14px; }
+        .field label { display: block; font-weight: 700; margin-bottom: 4px; }
+        .field input[type=text], .field input[type=email], .field select { width: 100%; padding: 8px 10px; border: 1px solid #9ca3af; border-radius: 4px; }
+        .field-error { color: #b91c1c; font-size: .85rem; margin: 4px 0 0; padding: 0; list-style: none; }
+        .role-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .role-card { border: 1px solid #9ca3af; border-radius: 6px; padding: 10px 12px; cursor: pointer; display: block; }
+        .role-card input { margin-right: 6px; }
+        .role-card:has(input:checked) { border: 2px solid #2563eb; }
+        .role-card ul { margin: 6px 0 0; padding-left: 18px; font-size: .8rem; }
+        .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; justify-content: center; }
+        .actions form { margin: 0; }
+        .loading { display: none; text-align: center; padding: 28px; }
+        .error-state { text-align: center; padding: 40px 16px; }
+        table { width: 100%; border-collapse: collapse; background: #fff; }
+        th, td { padding: 8px 10px; border: 1px solid #d1d5db; text-align: left; font-size: .88rem; vertical-align: top; }
+        .saving-note { display: none; text-align: center; font-weight: 600; margin-top: 10px; }
+        @media (max-width: 640px) { .columns, .role-cards { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <nav>
+            <a href="{% url 'outreach_dashboard' %}">Dashboard</a>
+            <a href="{% url 'user_list' %}" aria-current="page">Users</a>
+            <a href="{% url 'user_activity' %}">Activity</a>
+        </nav>
+        <div class="topbar-user">
+            <span>Welcome Back, {{ request.user.first_name|default:"User" }}</span>
+            <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="btn" type="submit">Log out</button></form>
+        </div>
+    </header>
+    <main>
+        {% for message in messages %}
+            <div class="banner {% if message.tags == 'success' %}banner-success{% elif message.tags == 'warning' %}banner-warning{% else %}banner-error{% endif %}" role="{% if message.tags == 'success' %}status{% else %}alert{% endif %}">{{ message }}</div>
+        {% endfor %}
+        {% block content %}{% endblock %}
+    </main>
+    <script>
+        // Prevent repeated submissions and show a saving message.
+        document.querySelectorAll('form[data-once]').forEach(function (form) {
+            form.addEventListener('submit', function (event) {
+                if (form.dataset.submitted === '1') { event.preventDefault(); return; }
+                form.dataset.submitted = '1';
+                // Disable after the browser has captured the submitter.
+                window.setTimeout(function () {
+                    form.querySelectorAll('button[type=submit]').forEach(function (b) { b.disabled = true; });
+                }, 0);
+                var note = form.querySelector('.saving-note');
+                if (note) { note.style.display = 'block'; }
+            });
+        });
+        // Re-enable buttons if the page is restored from the back/forward cache.
+        window.addEventListener('pageshow', function (e) {
+            if (e.persisted) {
+                document.querySelectorAll('form[data-once]').forEach(function (f) {
+                    f.dataset.submitted = '0';
+                    f.querySelectorAll('button[type=submit]').forEach(function (b) { b.disabled = false; });
+                    var n = f.querySelector('.saving-note'); if (n) { n.style.display = 'none'; }
+                });
+            }
+        });
+    </script>
+</body>
+</html>

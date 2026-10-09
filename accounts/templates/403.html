@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>No Permission | Safe Roads For Us</title>
+    <style>
+        body { margin: 0; font-family: Arial, sans-serif; color: #111; background: #fff; }
+        main { max-width: 640px; margin: 18vh auto 0; padding: 0 16px; text-align: center; }
+        h1 { font-size: 1.9rem; margin-bottom: 20px; }
+        a { display: inline-block; padding: 8px 16px; border: 1px solid #999; border-radius: 4px; color: #111; text-decoration: none; background: #fff; }
+        a:hover, a:focus { background: #f0f0f0; }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>You do not have permission to access this page.</h1>
+        <a href="{% url 'outreach_dashboard' %}">Return to Dashboard</a>
+    </main>
+</body>
+</html>

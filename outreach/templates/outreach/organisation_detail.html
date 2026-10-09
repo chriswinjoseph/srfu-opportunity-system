@@ -868,9 +868,39 @@ Organisation Details | Safe Roads For Us
 
     {% endif %}
 
+    {% if latest_draft and latest_draft.workflow_status == "sent" and latest_draft.sent_by and latest_draft.sent_at %}
+        <div class="notice info" id="email-already-sent">
+            This email was already sent by {{ latest_draft.sent_by.get_full_name|default:latest_draft.sent_by.email }} on {{ latest_draft.sent_at|date:"j F Y" }} at {{ latest_draft.sent_at|time:"g:i A" }}.
+        </div>
+    {% endif %}
+
+
+    {% if org.is_archived %}
+        <div class="notice warning">
+            This organisation is archived. It is hidden from lists and cannot be contacted.
+        </div>
+    {% endif %}
+
+    {% if org.is_archived and latest_draft and latest_draft.workflow_status == "sending" %}
+        <div class="notice warning" id="archived-unresolved-send">
+            An email to this archived organisation is unresolved (status: Sending{% if latest_draft.reconciliation_required %}; reconciliation required, do not resend{% endif %}).
+            {% if latest_draft.send_failure_reason %}{{ latest_draft.send_failure_reason }}{% endif %}
+        </div>
+    {% endif %}
+
+    {% if can_manage_organisation and not org.is_archived %}
+        <div class="action-bar">
+            <a class="secondary-button" href="{% url 'edit_organisation' content_type_id=content_type_id object_id=object_id %}">Edit Organisation</a>
+            <form method="post" action="{% url 'archive_organisation' content_type_id=content_type_id object_id=object_id %}" onsubmit="return confirm('Archive this organisation? It will be hidden from lists and cannot be contacted.');">
+                {% csrf_token %}
+                <button type="submit" class="secondary-button">Archive Organisation</button>
+            </form>
+        </div>
+    {% endif %}
+
     <div class="action-bar">
 
-        {% if perms.outreach.generate_emaildraft and not has_do_not_contact and org.contact_status == "not_yet_contacted" %}
+        {% if perms.outreach.generate_emaildraft and not org.is_archived and not has_do_not_contact and org.contact_status == "not_yet_contacted" %}
 
             <button type="button" class="action-button" id="toggle-email-workflow">
 
@@ -880,7 +910,7 @@ Organisation Details | Safe Roads For Us
 
         {% endif %}
 
-        {% if perms.outreach.change_opportunity and not has_do_not_contact %}
+        {% if perms.outreach.change_opportunity and not org.is_archived and not has_do_not_contact %}
 
             <button type="button" class="secondary-button" id="toggle-external-outreach">
 
@@ -900,7 +930,7 @@ Organisation Details | Safe Roads For Us
 
     </div>
 
-    {% if perms.outreach.change_opportunity and not has_do_not_contact %}
+    {% if perms.outreach.change_opportunity and not org.is_archived and not has_do_not_contact %}
 
         <section class="external-outreach-panel" id="external-outreach-panel">
 
@@ -980,7 +1010,7 @@ Organisation Details | Safe Roads For Us
 
     {% endif %}
 
-    {% if perms.outreach.generate_emaildraft and not has_do_not_contact and org.contact_status == "not_yet_contacted" %}
+    {% if perms.outreach.generate_emaildraft and not org.is_archived and not has_do_not_contact and org.contact_status == "not_yet_contacted" %}
 
         <section
 
@@ -1331,7 +1361,10 @@ Organisation Details | Safe Roads For Us
 
                         </div>
 
-                        {% if latest_draft.workflow_status == "draft" %}
+                        {% if not can_modify_draft and latest_draft.workflow_status != "sent" and latest_draft.workflow_status != "cancelled" %}
+<div class="notice info">You can view this draft, but only its owner or an Admin can edit or submit it.</div>
+{% endif %}
+{% if latest_draft.workflow_status == "draft" %}
 
                             {% if latest_draft.is_incomplete %}
 
@@ -1351,6 +1384,7 @@ Organisation Details | Safe Roads For Us
 
                             {% endif %}
 
+{% if can_modify_draft %}
                             <form
 
                                 method="post"
@@ -1405,7 +1439,9 @@ Organisation Details | Safe Roads For Us
                                 </div>
 
                             </form>
+{% endif %}
 
+{% if can_modify_draft %}
                             <form
 
                                 method="post"
@@ -1427,6 +1463,7 @@ Organisation Details | Safe Roads For Us
                                 </div>
 
                             </form>
+{% endif %}
 
                             {% if latest_draft.template %}
 
@@ -1580,6 +1617,7 @@ Organisation Details | Safe Roads For Us
 
                             <p>Edit the draft below, save it, and submit it again for approval.</p>
 
+{% if can_modify_draft %}
                             <form
 
                                 method="post"
@@ -1634,6 +1672,7 @@ Organisation Details | Safe Roads For Us
                                 </div>
 
                             </form>
+{% endif %}
 
                         {% elif latest_draft.workflow_status == "approved" %}
 
@@ -1657,7 +1696,7 @@ Organisation Details | Safe Roads For Us
 
                             >{{ latest_draft.body }}</textarea>
 
-                            {% if perms.outreach.generate_emaildraft %}
+                            {% if perms.outreach.generate_emaildraft and can_modify_draft %}
 
                                 <div class="workflow-subsection">
 
@@ -1671,6 +1710,7 @@ Organisation Details | Safe Roads For Us
 
                                     </p>
 
+{% if can_modify_draft %}
                                     <form
 
                                         method="post"
@@ -1729,6 +1769,7 @@ Organisation Details | Safe Roads For Us
                                         </div>
 
                                     </form>
+{% endif %}
 
                                 </div>
 
@@ -1838,7 +1879,11 @@ Organisation Details | Safe Roads For Us
 {% elif latest_draft.workflow_status == "sent" %}
 
     <div class="notice info">
-        This email has been sent successfully.
+        {% if latest_draft.sent_by and latest_draft.sent_at %}
+            This email was already sent by {{ latest_draft.sent_by.get_full_name|default:latest_draft.sent_by.email }} on {{ latest_draft.sent_at|date:"j F Y" }} at {{ latest_draft.sent_at|time:"g:i A" }}.
+        {% else %}
+            This email has been sent successfully.
+        {% endif %}
     </div>
 
     <p>
@@ -1919,6 +1964,7 @@ Organisation Details | Safe Roads For Us
 
                                 </p>
 
+{% if can_modify_draft %}
                                 <form
 
                                     method="post"
@@ -1964,6 +2010,7 @@ Organisation Details | Safe Roads For Us
                                     </div>
 
                                 </form>
+{% endif %}
 
                             </div>
 

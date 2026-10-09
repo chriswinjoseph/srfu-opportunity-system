@@ -1,0 +1,37 @@
+{% extends "accounts/users/base.html" %}
+{% block title %}Users{% endblock %}
+{% block content %}
+<h1>Users List</h1>
+<hr>
+{% if load_error %}
+    <div class="error-state" role="alert">
+        <h2>Users could not be loaded.</h2>
+        <p>Please try again later.</p>
+    </div>
+{% else %}
+    <div id="usersContent">
+        <form method="get" class="toolbar" role="search">
+            <input type="search" name="q" value="{{ search }}" placeholder="Search..." aria-label="Search users">
+            <button class="btn" type="submit">Search</button>
+            <a class="btn btn-primary" href="{% url 'user_add' %}">+ Add User</a>
+        </form>
+        <div class="columns">
+            <section>
+                <h2>Admin ({{ admins|length }})</h2>
+                {% for user_item in admins %}{% include "accounts/users/_user_card.html" %}
+                {% empty %}<div class="empty">No admin users found.</div>{% endfor %}
+            </section>
+            <section>
+                <h2>Staff ({{ staff|length }})</h2>
+                {% for user_item in staff %}{% include "accounts/users/_user_card.html" %}
+                {% empty %}
+                    <div class="empty">
+                        {% if search %}No staff users match your search.{% else %}No staff users have been added yet.{% endif %}
+                        <p><a class="btn btn-primary" href="{% url 'user_add' %}">Add User</a></p>
+                    </div>
+                {% endfor %}
+            </section>
+        </div>
+    </div>
+{% endif %}
+{% endblock %}

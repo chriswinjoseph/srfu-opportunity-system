@@ -148,6 +148,7 @@
     </button>
 </form>
 {% endif %}
+            {% if perms.outreach.add_bank %}
 
             <a
                 class="primary-button sidebar-button"
@@ -155,11 +156,13 @@
             >
                 + Add Organisation
             </a>
+            {% endif %}
         </div>
     </aside>
 
     <div class="page-shell">
         <header class="topbar">
+            <nav class="topbar-nav" aria-label="Main">
             <a
                 class="topbar-dashboard-link"
                 href="{% url 'outreach_dashboard' %}"
@@ -167,6 +170,13 @@
             >
                 Dashboard
             </a>
+
+            {% if request.user.is_app_admin %}
+            <a class="topbar-dashboard-link" href="{% url 'user_list' %}">
+                Users
+            </a>
+            {% endif %}
+            </nav>
 
             <div class="topbar-user">
                 <span class="user-icon" aria-hidden="true">

@@ -1,0 +1,34 @@
+{% extends "accounts/users/base.html" %}
+{% block title %}User Options{% endblock %}
+{% block content %}
+<div class="panel">
+    <h1>Options</h1>
+    <p class="subtitle">Selected user</p>
+    <div class="card">
+        <div class="card-head">
+            <strong>{{ target_name }}</strong>
+            {% if target.account_state == "disabled" %}<span class="badge badge-disabled">Disabled</span>
+            {% elif target.account_state == "pending" %}<span class="badge badge-pending">Pending Invitation</span>
+            {% else %}<span class="badge badge-active">Enabled</span>{% endif %}
+        </div>
+        <div class="meta">Email: {{ target.email }}<br>Role: {{ target.get_role_display }}
+        {% if target.invitation_pending %}<br>{% if target.invitation_sent_at %}Invitation last sent: {{ target.invitation_sent_at }}{% else %}Invitation has not been delivered yet.{% endif %}{% endif %}</div>
+    </div>
+    {% if is_self %}<p class="meta">This is your own account. You cannot change your own role or disable it.</p>{% endif %}
+    <div class="actions">
+        {% if not is_self %}
+            <a class="btn btn-primary" href="{% url 'user_role' user_id=target.pk %}">Assign new role</a>
+            {% if target.is_active %}
+                <form method="post" action="{% url 'user_disable' user_id=target.pk %}" data-once>{% csrf_token %}<button class="btn btn-danger" type="submit" onclick="return confirm('Disable this account? The user will be signed out.');">Disable User</button><span class="saving-note" role="status">Saving...</span></form>
+            {% else %}
+                <form method="post" action="{% url 'user_enable' user_id=target.pk %}" data-once>{% csrf_token %}<button class="btn btn-success" type="submit">Re-enable User</button><span class="saving-note" role="status">Saving...</span></form>
+            {% endif %}
+        {% endif %}
+        {% if target.invitation_pending and target.is_active %}
+            <form method="post" action="{% url 'user_resend_invitation' user_id=target.pk %}" data-once>{% csrf_token %}<button class="btn btn-primary" type="submit">Resend Invitation</button><span class="saving-note" role="status">Sending...</span></form>
+        {% endif %}
+        <a class="btn" href="{% url 'user_reassign_drafts' user_id=target.pk %}">Unfinished drafts ({{ unfinished_count }})</a>
+        <a class="btn" href="{% url 'user_list' %}">Back to users</a>
+    </div>
+</div>
+{% endblock %}

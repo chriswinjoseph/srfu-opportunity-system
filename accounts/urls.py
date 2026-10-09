@@ -1,13 +1,31 @@
 from django.contrib.auth import views as auth_views
 from django.urls import path
 
-from . import views
+from . import user_views, views
 
 urlpatterns = [
-    path("signup/", views.signup_view, name="signup"),
     path("login/", views.EmailLoginView.as_view(), name="login"),
     path("logout/", views.logout_view, name="logout"),
     path("dashboard/", views.dashboard_view, name="dashboard"),
+
+    # Admin-only user management
+    path("users/", user_views.user_list, name="user_list"),
+    path("users/add/", user_views.user_add, name="user_add"),
+    path("users/activity/", user_views.user_activity, name="user_activity"),
+    path("users/<int:user_id>/", user_views.user_options, name="user_options"),
+    path("users/<int:user_id>/role/", user_views.user_role, name="user_role"),
+    path("users/<int:user_id>/disable/", user_views.user_disable, name="user_disable"),
+    path("users/<int:user_id>/enable/", user_views.user_enable, name="user_enable"),
+    path(
+        "users/<int:user_id>/resend-invitation/",
+        user_views.user_resend_invitation,
+        name="user_resend_invitation",
+    ),
+    path(
+        "users/<int:user_id>/reassign-drafts/",
+        user_views.user_reassign_drafts,
+        name="user_reassign_drafts",
+    ),
 
     path("forgot-password/", views.forgot_password_view, name="forgot_password"),
 
@@ -15,10 +33,7 @@ urlpatterns = [
     # (token validation, expiry, setting the new password).
     path(
         "reset/<uidb64>/<token>/",
-        auth_views.PasswordResetConfirmView.as_view(
-            template_name="accounts/password_reset_confirm.html",
-            success_url="/accounts/reset/done/",
-        ),
+        views.PasswordSetupView.as_view(),
         name="password_reset_confirm",
     ),
     path(

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Organisation</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; background: #cfd6e1; font-family: Arial, sans-serif; color: #1f2937; line-height: 1.45; }
+        .panel { max-width: 720px; margin: 20px auto; background: #fff; border-radius: 8px; padding: 22px; }
+        h1 { margin-top: 0; }
+        .field { margin-bottom: 14px; }
+        .field label { display: block; font-weight: 700; margin-bottom: 4px; }
+        .field input, .field select, .field textarea { width: 100%; padding: 8px 10px; border: 1px solid #9ca3af; border-radius: 4px; }
+        .field-error { color: #b91c1c; font-size: .85rem; margin: 4px 0 0; padding: 0; list-style: none; }
+        .banner-error { background: #fecaca; color: #b91c1c; padding: 10px 14px; border-radius: 4px; margin-bottom: 14px; font-weight: 600; }
+        .button-row { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+        .btn { padding: 8px 18px; border-radius: 4px; border: 1px solid #9ca3af; background: #fff; color: #111827; font-weight: 600; text-decoration: none; cursor: pointer; }
+        .btn-primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+    </style>
+</head>
+<body>
+<main class="panel">
+    <a href="{% url 'organisation_detail' content_type_id=content_type_id object_id=object_id %}">&larr; Back to organisation</a>
+    <h1>Edit Organisation</h1>
+    <p>{{ organisation }}. Contact status is not changed by editing.</p>
+    {% if form.non_field_errors %}
+        <div class="banner-error" role="alert">{% for e in form.non_field_errors %}{{ e }} {% endfor %}</div>
+    {% elif form.errors %}
+        <div class="banner-error" role="alert">Please correct the highlighted fields.</div>
+    {% endif %}
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {% for field in form %}
+            <div class="field">
+                <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} *{% endif %}</label>
+                {{ field }}
+                {% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}
+                {% for e in field.errors %}<ul class="field-error"><li>{{ e }}</li></ul>{% endfor %}
+            </div>
+        {% endfor %}
+        <div class="button-row">
+            <a class="btn" href="{% url 'organisation_detail' content_type_id=content_type_id object_id=object_id %}">Cancel</a>
+            <button class="btn btn-primary" type="submit">Save changes</button>
+        </div>
+    </form>
+</main>
+</body>
+</html>

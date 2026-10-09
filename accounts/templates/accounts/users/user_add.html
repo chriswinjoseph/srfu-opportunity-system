@@ -1,0 +1,58 @@
+{% extends "accounts/users/base.html" %}
+{% block title %}Add User{% endblock %}
+{% block content %}
+<div class="panel">
+    <h1>Add User</h1>
+    <p class="subtitle">Fill in the details to invite a user</p>
+    {% if form.non_field_errors %}
+        <div class="banner banner-error" role="alert">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>
+    {% elif form.errors %}
+        <div class="banner banner-error" role="alert">Please correct the highlighted fields.</div>
+    {% endif %}
+    <form method="post" novalidate data-once>
+        {% csrf_token %}
+        <div class="field">
+            <label for="{{ form.full_name.id_for_label }}">User Name <span aria-hidden="true">*</span></label>
+            <input type="text" name="full_name" id="{{ form.full_name.id_for_label }}" value="{{ form.full_name.value|default:'' }}" placeholder="John Doe" autocomplete="off">
+            {% for e in form.full_name.errors %}<ul class="field-error"><li>{{ e }}</li></ul>{% endfor %}
+        </div>
+        <div class="field">
+            <label for="{{ form.email.id_for_label }}">User Email <span aria-hidden="true">*</span></label>
+            <input type="email" name="email" id="{{ form.email.id_for_label }}" value="{{ form.email.value|default:'' }}" placeholder="example@gmail.com" autocomplete="off">
+            {% for e in form.email.errors %}<ul class="field-error"><li>{{ e }}</li></ul>{% endfor %}
+        </div>
+        <div class="field">
+            <label>Role <span aria-hidden="true">*</span></label>
+            <div class="role-cards">
+                <label class="role-card">
+                    <input type="radio" name="role" value="admin" {% if form.role.value == "admin" %}checked{% endif %}><strong>Admin</strong>
+                    <ul>
+                        <li>Has all Staff permissions</li>
+                        <li>Can create and disable users</li>
+                        <li>Can approve or reject drafts</li>
+                        <li>Can change user roles</li>
+                        <li>Can add, edit and archive organisations</li>
+                    </ul>
+                </label>
+                <label class="role-card">
+                    <input type="radio" name="role" value="staff" {% if form.role.value == "staff" %}checked{% endif %}><strong>Staff</strong>
+                    <ul>
+                        <li>Generate an AI email draft</li>
+                        <li>Edit own or assigned drafts</li>
+                        <li>Submit a draft for approval</li>
+                        <li>Send Admin-approved emails</li>
+                        <li>View email status and history</li>
+                    </ul>
+                </label>
+            </div>
+            {% for e in form.role.errors %}<ul class="field-error"><li>{{ e }}</li></ul>{% endfor %}
+        </div>
+        <p class="meta">An invitation email with a secure password-setup link will be sent to the user.</p>
+        <div class="actions">
+            <a class="btn" href="{% url 'user_add' %}">Clear</a>
+            <button class="btn btn-primary" type="submit">Submit</button>
+        </div>
+        <p class="saving-note" role="status">Saving... please wait.</p>
+    </form>
+</div>
+{% endblock %}

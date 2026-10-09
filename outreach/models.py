@@ -58,6 +58,25 @@ class Bank(models.Model):
         default="",
     )
 
+    # Archived organisations are hidden from lists and cannot be
+    # contacted. Archiving never deletes the record or its history.
+    is_archived = models.BooleanField(
+        default=False,
+    )
+
+    archived_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    archived_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+
     duplicate_override_reason = models.TextField(
         blank=True,
         default="",
@@ -187,6 +206,25 @@ class Branch(models.Model):
         max_length=50,
         blank=True,
         default="",
+    )
+
+    # Archived organisations are hidden from lists and cannot be
+    # contacted. Archiving never deletes the record or its history.
+    is_archived = models.BooleanField(
+        default=False,
+    )
+
+    archived_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    archived_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
     )
 
     duplicate_override_reason = models.TextField(
@@ -321,6 +359,25 @@ class Club(models.Model):
         max_length=50,
         blank=True,
         default="",
+    )
+
+    # Archived organisations are hidden from lists and cannot be
+    # contacted. Archiving never deletes the record or its history.
+    is_archived = models.BooleanField(
+        default=False,
+    )
+
+    archived_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    archived_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
     )
     duplicate_override_reason = models.TextField(
         blank=True,
@@ -773,6 +830,16 @@ class EmailDraft(models.Model):
         related_name="requested_email_drafts",
     )
 
+    # Current assignee, set when an Admin reassigns an unfinished draft.
+    # requested_by (the creator) is never overwritten.
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_email_drafts",
+    )
+
     last_edited_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -917,6 +984,28 @@ class EmailDraft(models.Model):
             ),
         ]
 
+    def user_can_modify(self, user):
+        """
+        Admins may modify any draft. Staff may modify only drafts they
+        created or that are currently assigned to them. Assignment never
+        replaces the creator, so both keep authoring access; a previous
+        assignee, unrelated Staff and disabled users do not.
+        """
+        if not getattr(user, "is_authenticated", False):
+            return False
+
+        if not user.is_active:
+            return False
+
+        if getattr(user, "is_app_admin", False):
+            return True
+
+        return user.pk in {
+            pk
+            for pk in (self.requested_by_id, self.assigned_to_id)
+            if pk is not None
+        }
+
     def approval_overdue_threshold(self):
         return timedelta(
             hours=settings.EMAIL_APPROVAL_OVERDUE_HOURS
@@ -958,6 +1047,7 @@ class EmailDraftHistory(models.Model):
         ("recipient_changed", "Recipient Email Changed"),
         ("reconciliation_required", "Reconciliation Required"),
         ("blocked_do_not_contact", "Blocked - Do Not Contact"),
+        ("reassigned", "Reassigned"),
     ]
 
     draft = models.ForeignKey(

@@ -148,7 +148,7 @@ ORGANISATION_API_SORT_FIELDS = {
 def bank_list(request):
 
 
-    banks = Bank.objects.all().order_by("-date_added", "-id")
+    banks = Bank.objects.filter(is_archived=False).order_by("-date_added", "-id")
 
 
     return render(
@@ -492,13 +492,13 @@ def _get_all_organisations(
     """
 
 
-    banks = Bank.objects.all()
+    banks = Bank.objects.filter(is_archived=False)
 
 
-    branches = Branch.objects.all()
+    branches = Branch.objects.filter(is_archived=False)
 
 
-    clubs = Club.objects.all()
+    clubs = Club.objects.filter(is_archived=False)
 
 
     if search:
@@ -2100,6 +2100,14 @@ def organisation_detail(
         "latest_draft": latest_draft,
         "active_templates": active_templates,
         "email_workflow_history": email_workflow_history,
+        "can_modify_draft": (
+            latest_draft.user_can_modify(request.user)
+            if latest_draft
+            else False
+        ),
+        "can_manage_organisation": request.user.has_perm(
+            f"outreach.change_{content_type.model}"
+        ),
     }
 
     return render(
@@ -2295,6 +2303,7 @@ def _organisation_name(organisation):
 def _find_exact_duplicate(
     organisation_type,
     cleaned_data,
+    exclude=None,
 ):
     """
     Find an exact organisation duplicate.
@@ -2355,6 +2364,9 @@ def _find_exact_duplicate(
     ).strip().upper()
 
     for organisation in queryset:
+        if exclude is not None and organisation.pk == exclude.pk:
+            continue
+
         existing_name = _normalise_duplicate_value(
             _organisation_name(
                 organisation
@@ -2688,6 +2700,16 @@ def generate_email_draft(
         pk=object_id,
     )
 
+    if organisation.is_archived:
+        messages.error(
+            request,
+            "This organisation is archived and cannot be contacted.",
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=content_type_id,
+            object_id=object_id,
+        )
     if organisation.contact_status != "not_yet_contacted":
         messages.error(
             request,
@@ -3695,6 +3717,16 @@ def create_manual_email_draft(
 
     organisation = get_object_or_404(model_class, pk=object_id)
 
+    if organisation.is_archived:
+        messages.error(
+            request,
+            "This organisation is archived and cannot be contacted.",
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=content_type_id,
+            object_id=object_id,
+        )
     if organisation.contact_status != "not_yet_contacted":
         messages.error(
             request,
@@ -3846,6 +3878,10 @@ def update_email_draft(request, draft_id):
         EmailDraft,
         draft_id=draft_id,
     )
+
+    denied = _deny_unless_draft_owner(request, draft)
+    if denied:
+        return denied
 
     redirect_kwargs = {
         "content_type_id": draft.opportunity.content_type_id,
@@ -4148,6 +4184,27 @@ def record_email_draft_history(
         body_snapshot=draft.body,
     )
 
+def _deny_unless_draft_owner(request, draft):
+    """
+    Staff may change only drafts they own (created by them or assigned to
+    them); Admins may change any draft. Returns a redirect when denied.
+    """
+    if draft.user_can_modify(request.user):
+        return None
+
+    messages.error(
+        request,
+        "You can only change drafts you created or that are assigned "
+        "to you.",
+    )
+
+    return redirect(
+        "organisation_detail",
+        content_type_id=draft.opportunity.content_type_id,
+        object_id=draft.opportunity.object_id,
+    )
+
+
 def serialised_draft_transition(view):
     """
     Run a workflow transition inside one transaction, holding a write
@@ -4258,12 +4315,26 @@ def submit_email_draft_for_review(request, draft_id):
         return redirect("outreach_dashboard")
 
     draft = get_object_or_404(EmailDraft, draft_id=draft_id)
+
+    denied = _deny_unless_draft_owner(request, draft)
+    if denied:
+        return denied
     opportunity = draft.opportunity
     organisation = opportunity.organisation
 
     if organisation is None:
         raise Http404("Organisation not found.")
 
+    if organisation.is_archived:
+        messages.error(
+            request,
+            "This organisation is archived and cannot be contacted.",
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=opportunity.content_type_id,
+            object_id=opportunity.object_id,
+        )
     if organisation.contact_status != "not_yet_contacted":
         messages.error(
             request,
@@ -4527,6 +4598,16 @@ def approve_email_draft(request, draft_id):
             object_id=opportunity.object_id,
         )
 
+    if organisation.is_archived:
+        messages.error(
+            request,
+            "This organisation is archived and cannot be contacted.",
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=opportunity.content_type_id,
+            object_id=opportunity.object_id,
+        )
     if organisation.contact_status != "not_yet_contacted":
         messages.error(
             request,
@@ -4636,6 +4717,10 @@ def withdraw_email_draft(request, draft_id):
         EmailDraft,
         draft_id=draft_id,
     )
+
+    denied = _deny_unless_draft_owner(request, draft)
+    if denied:
+        return denied
 
     if draft.workflow_status != "awaiting_approval":
         messages.error(
@@ -4798,6 +4883,10 @@ def cancel_email_draft(request, draft_id):
         draft_id=draft_id,
     )
 
+    denied = _deny_unless_draft_owner(request, draft)
+    if denied:
+        return denied
+
     if draft.workflow_status in {
         "sent",
         "sending",
@@ -4908,6 +4997,15 @@ def mark_email_draft_sent(request, draft_id):
         "object_id": opportunity.object_id,
     }
 
+    if organisation.is_archived:
+        messages.error(
+            request,
+            "This organisation is archived and cannot be contacted.",
+        )
+        return redirect(
+            "organisation_detail",
+            **redirect_kwargs,
+        )
     if organisation.contact_status != "not_yet_contacted":
         messages.error(
             request,
@@ -5028,17 +5126,41 @@ def mark_email_draft_sent(request, draft_id):
 
     old_status = draft.workflow_status
 
-    claimed = EmailDraft.objects.filter(
-        pk=draft.pk,
-        workflow_status__in=[
-            "approved",
-            "send_failed",
-        ],
-        version=draft.approved_version,
-    ).update(
-        workflow_status="sending",
-        send_failure_reason="",
-    )
+    # The claim is a short transaction (never held open during SMTP).
+    # The conditional UPDATE takes the write lock first; the archive
+    # state is then re-read, so an archive that committed after the
+    # earlier check still prevents a new send.
+    archived_during_claim = False
+
+    with transaction.atomic():
+        claimed = EmailDraft.objects.filter(
+            pk=draft.pk,
+            workflow_status__in=[
+                "approved",
+                "send_failed",
+            ],
+            version=draft.approved_version,
+        ).update(
+            workflow_status="sending",
+            send_failure_reason="",
+        )
+
+        if claimed == 1 and type(organisation).objects.filter(
+            pk=organisation.pk,
+            is_archived=True,
+        ).exists():
+            archived_during_claim = True
+            transaction.set_rollback(True)
+
+    if archived_during_claim:
+        messages.error(
+            request,
+            "This organisation is archived and cannot be contacted.",
+        )
+        return redirect(
+            "organisation_detail",
+            **redirect_kwargs,
+        )
 
     if claimed != 1:
         messages.error(
@@ -5769,3 +5891,161 @@ def scrape_organisations(request):
     )
 
     return redirect("dashboard")
+
+# ---------------------------------------------------------
+# Edit and archive an organisation (Admin only)
+# ---------------------------------------------------------
+
+def _get_managed_organisation(request, content_type_id, object_id):
+    """
+    Resolve the organisation and enforce the Admin-only permission on
+    the server. Raises PermissionDenied for users without it.
+    """
+    content_type = get_object_or_404(ContentType, pk=content_type_id)
+    model_class = content_type.model_class()
+
+    if model_class not in (Bank, Branch, Club):
+        raise Http404("Organisation not found.")
+
+    if not request.user.has_perm(f"outreach.change_{content_type.model}"):
+        raise PermissionDenied
+
+    organisation = get_object_or_404(model_class, pk=object_id)
+
+    return content_type, organisation
+
+
+@login_required
+def edit_organisation(request, content_type_id, object_id):
+    content_type, organisation = _get_managed_organisation(
+        request,
+        content_type_id,
+        object_id,
+    )
+
+    detail_redirect = redirect(
+        "organisation_detail",
+        content_type_id=content_type_id,
+        object_id=object_id,
+    )
+
+    if organisation.is_archived:
+        messages.error(
+            request,
+            "An archived organisation cannot be edited.",
+        )
+        return detail_redirect
+
+    form_class = ORGANISATION_FORMS[content_type.model]
+
+    def build_form(data=None):
+        form = form_class(data, instance=organisation)
+
+        # Contact-person and notes fields exist only for creation.
+        for name in list(form.fields):
+            if name not in form._meta.fields:
+                del form.fields[name]
+
+        return form
+
+    if request.method == "POST":
+        form = build_form(request.POST)
+
+        if form.is_valid():
+            duplicate = _find_exact_duplicate(
+                content_type.model,
+                form.cleaned_data,
+                exclude=organisation,
+            )
+
+            if duplicate is not None:
+                form.add_error(
+                    None,
+                    "Another organisation with the same name and "
+                    "location already exists.",
+                )
+            else:
+                model_class = type(organisation)
+                field_names = list(form.fields)
+
+                if hasattr(organisation, "last_updated"):
+                    field_names.append("last_updated")
+
+                with transaction.atomic():
+                    # Take the write lock first, then re-read: a
+                    # concurrent archive must not be undone, and a
+                    # concurrent contact-status change must not be
+                    # overwritten by this (possibly stale) instance.
+                    model_class.objects.filter(
+                        pk=organisation.pk,
+                    ).update(is_archived=F("is_archived"))
+
+                    now_archived = model_class.objects.filter(
+                        pk=organisation.pk,
+                        is_archived=True,
+                    ).exists()
+
+                    if not now_archived:
+                        # Only the edited fields are written. Contact
+                        # status, archive state, duplicate-override
+                        # history and creation details are never touched.
+                        # A changed public email invalidates pending
+                        # drafts via the model signal.
+                        organisation.save(update_fields=field_names)
+
+                if now_archived:
+                    messages.error(
+                        request,
+                        "An archived organisation cannot be edited.",
+                    )
+                else:
+                    messages.success(
+                        request,
+                        "Organisation updated successfully.",
+                    )
+
+                return detail_redirect
+    else:
+        form = build_form()
+
+    return render(
+        request,
+        "outreach/edit_organisation.html",
+        {
+            "form": form,
+            "organisation": organisation,
+            "content_type_id": content_type_id,
+            "object_id": object_id,
+        },
+    )
+
+
+@login_required
+@require_POST
+def archive_organisation(request, content_type_id, object_id):
+    content_type, organisation = _get_managed_organisation(
+        request,
+        content_type_id,
+        object_id,
+    )
+
+    with transaction.atomic():
+        updated = type(organisation).objects.filter(
+            pk=organisation.pk,
+            is_archived=False,
+        ).update(
+            is_archived=True,
+            archived_at=timezone.now(),
+            archived_by=request.user,
+        )
+
+    if updated:
+        messages.success(request, "Organisation archived.")
+    else:
+        messages.error(request, "This organisation is already archived.")
+
+    return redirect(
+        "organisation_detail",
+        content_type_id=content_type_id,
+        object_id=object_id,
+    )
