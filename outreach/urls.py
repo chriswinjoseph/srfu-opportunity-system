@@ -128,4 +128,14 @@ path(
     views.archive_organisation,
     name="archive_organisation",
 ),
+path(
+    "organisations/<int:content_type_id>/<int:object_id>/email-modal/",
+    views.email_modal,
+    name="email_modal",
+),
+path(
+    "email-draft/<uuid:draft_id>/save-and-submit/",
+    views.save_and_submit_email_draft,
+    name="save_and_submit_email_draft",
+),
 ]

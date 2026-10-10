@@ -1,0 +1,246 @@
+{% load outreach_extras %}
+<div class="em-fragment" data-org-key="{{ org_key }}" data-initial-panel="{{ panel }}">
+
+    <header class="em-head">
+        <h2 id="emailModalTitle" class="em-title">Email Organisation</h2>
+        <p class="em-org-line"><span class="em-org-name">{{ org_name }}</span>
+            {% if current %}<span class="em-badge em-badge-{{ current.workflow_status|draft_status_css }}">{{ current.workflow_status|draft_status_label }}</span>{% endif %}
+        </p>
+    </header>
+
+    {% for message in modal_messages %}
+        <div class="em-message em-message-{{ message.tags }}" role="{% if message.level >= 40 %}alert{% else %}status{% endif %}">{{ message }}</div>
+    {% endfor %}
+
+    {# ------------------------------------------------------------ compose #}
+    <section class="em-panel" data-panel="compose" aria-labelledby="emailModalTitle">
+
+        <div class="em-readonly-fields">
+            <label class="em-label" for="em-name">Name</label>
+            <input class="em-input" id="em-name" type="text" value="{{ org_name }}" readonly>
+            <label class="em-label" for="em-to">To</label>
+            <input class="em-input" id="em-to" type="text" value="{{ flags.recipient }}" readonly>
+        </div>
+
+        {% if current %}
+
+            {% for note in actions.notes %}
+                <p class="em-note">{{ note }}</p>
+            {% endfor %}
+
+            {% if actions.issues %}
+                <div class="em-validation" role="alert">
+                    <strong>Validation issues to resolve:</strong>
+                    <ul>{% for issue in actions.issues %}<li>{{ issue }}</li>{% endfor %}</ul>
+                </div>
+            {% endif %}
+
+            {% if current.workflow_status == "changes_requested" and current.rejection_reason %}
+                <div class="em-feedback"><strong>Changes requested:</strong> {{ current.rejection_reason }}</div>
+            {% endif %}
+
+            {% if actions.can_edit %}
+                {% if current.workflow_status == "approved" %}
+                    <p class="em-note">Editing an approved draft removes its approval. It must be approved again before it can be sent.</p>
+                {% endif %}
+                {% if not current.template_id and current.workflow_status != "approved" %}
+                    <p class="em-note" data-field="manual-draft-note">This email was written manually, so AI regeneration is not available for it. Edit the message directly here. AI generation applies only to drafts created with an approved template.</p>
+                {% endif %}
+                <form method="post" action="{% url 'update_email_draft' current.draft_id %}" class="em-form" data-em-form data-em-editable novalidate>
+                    {% csrf_token %}
+                    <input type="hidden" name="version" value="{{ current.version }}">
+                    <input type="hidden" name="next" value="{{ next_url }}">
+                    <input type="hidden" name="org_key" value="{{ org_key }}">
+                    <input type="hidden" name="panel_on_error" value="compose">
+                    <label class="em-label" for="em-subject">Subject <span aria-hidden="true">*</span></label>
+                    <input class="em-input" id="em-subject" name="subject" type="text" value="{{ editor_subject }}" required aria-required="true" data-em-field>
+                    <label class="em-label" for="em-body">Message <span aria-hidden="true">*</span></label>
+                    <textarea class="em-textarea" id="em-body" name="body" rows="10" required aria-required="true" data-em-field>{{ editor_body }}</textarea>
+                    <p class="em-field-error" data-em-error hidden role="alert"></p>
+                    <div class="em-actions">
+                        <button type="button" class="em-btn" data-em-clear>Clear</button>
+                        {% if can_regenerate %}<button type="button" class="em-btn em-btn-blue" data-em-panel="generate">Generate New Message</button>{% endif %}
+                        <button type="submit" class="em-btn em-btn-blue" data-em-busy="Saving...">Save Draft</button>
+                        {% if actions.can_submit %}
+                            <button type="submit" class="em-btn em-btn-blue" formaction="{% url 'save_and_submit_email_draft' current.draft_id %}" data-em-busy="Submitting..." data-em-confirm-submit>Submit for Approval</button>
+                        {% endif %}
+                    </div>
+                </form>
+            {% else %}
+                <label class="em-label" for="em-subject-ro">Subject</label>
+                <input class="em-input" id="em-subject-ro" type="text" value="{{ current.subject }}" readonly>
+                <label class="em-label" for="em-body-ro">Message</label>
+                <textarea class="em-textarea" id="em-body-ro" rows="10" readonly>{{ current.body }}</textarea>
+
+            {% endif %}
+
+
+            <div class="em-actions em-actions-copy">
+                <button type="button" class="em-btn" data-em-copy-value="{{ current.recipient_email }}" data-em-copy-label="Recipient email">Copy Recipient Email</button>
+                <button type="button" class="em-btn" data-em-copy-from="{% if actions.can_edit %}#em-subject{% else %}#em-subject-ro{% endif %}" data-em-copy-label="Subject">Copy Subject</button>
+                <button type="button" class="em-btn" data-em-copy-from="{% if actions.can_edit %}#em-body{% else %}#em-body-ro{% endif %}" data-em-copy-label="Message">Copy Message</button>
+            </div>
+
+            {% if current.workflow_status == "awaiting_approval" %}
+                <div class="em-actions">
+                    {% if actions.can_withdraw %}
+                        <form method="post" action="{% url 'withdraw_email_draft' current.draft_id %}" data-em-form>
+                            {% csrf_token %}
+                            <input type="hidden" name="next" value="{{ next_url }}">
+                            <input type="hidden" name="org_key" value="{{ org_key }}">
+                            <button type="submit" class="em-btn" data-em-busy="Withdrawing...">Withdraw for Editing</button>
+                        </form>
+                    {% endif %}
+                    {% if actions.can_reject %}<button type="button" class="em-btn em-btn-red" data-em-panel="reject">Request Changes</button>{% endif %}
+                    {% if actions.can_approve %}
+                        <form method="post" action="{% url 'approve_email_draft' current.draft_id %}" data-em-form>
+                            {% csrf_token %}
+                            <input type="hidden" name="version" value="{{ current.version }}">
+                            <input type="hidden" name="next" value="{{ next_url }}">
+                            <input type="hidden" name="org_key" value="{{ org_key }}">
+                            <button type="submit" class="em-btn em-btn-green" data-em-busy="Approving...">Approve</button>
+                        </form>
+                    {% endif %}
+                </div>
+                {% if not actions.can_approve %}<p class="em-note">Waiting for an Admin to review this email.</p>{% endif %}
+            {% endif %}
+
+            {% if current.workflow_status == "approved" or current.workflow_status == "send_failed" %}
+                <div class="em-approved">
+                    {% if current.workflow_status == "approved" %}<p class="em-approved-line"><span class="em-check" aria-hidden="true">&#10003;</span> Approved{% if current.approved_by %} by {{ current.approved_by.get_full_name|default:current.approved_by.email }}{% endif %}{% if current.approved_at %} on {{ current.approved_at|date:"j M Y" }} at {{ current.approved_at|time:"g:i A" }}{% endif %}.</p>{% endif %}
+                    {% if current.workflow_status == "send_failed" %}<p class="em-note">The last send attempt was not delivered. {{ current.send_failure_reason }}</p>{% endif %}
+                    {% if actions.can_send or actions.can_retry_send %}
+                        <button type="button" class="em-btn em-btn-blue" data-em-panel="send">{% if actions.can_retry_send %}Retry Sending{% else %}Send Email{% endif %}</button>
+                    {% endif %}
+                </div>
+            {% endif %}
+
+            {% if current.workflow_status == "sent" %}
+                <p class="em-approved-line"><span class="em-check" aria-hidden="true">&#10003;</span> This email was already sent{% if current.sent_by %} by {{ current.sent_by.get_full_name|default:current.sent_by.email }}{% endif %}{% if current.sent_at %} on {{ current.sent_at|date:"j F Y" }} at {{ current.sent_at|time:"g:i A" }}{% endif %}.</p>
+            {% endif %}
+
+        {% elif can_compose %}
+
+            <form method="post" action="{% url 'create_manual_email_draft' content_type_id object_id %}" class="em-form" data-em-form data-em-editable novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ next_url }}">
+                <input type="hidden" name="org_key" value="{{ org_key }}">
+                <input type="hidden" name="panel_on_error" value="compose">
+                <label class="em-label" for="em-purpose">Purpose of outreach <span aria-hidden="true">*</span></label>
+                <input class="em-input" id="em-purpose" name="outreach_purpose" type="text" value="{{ stash.purpose }}" required aria-required="true" data-em-field>
+                <label class="em-label" for="em-subject">Subject <span aria-hidden="true">*</span></label>
+                <input class="em-input" id="em-subject" name="subject" type="text" value="{{ editor_subject }}" required aria-required="true" data-em-field>
+                <label class="em-label" for="em-body">Message <span aria-hidden="true">*</span></label>
+                <textarea class="em-textarea" id="em-body" name="body" rows="10" required aria-required="true" data-em-field>{{ editor_body }}</textarea>
+                <p class="em-field-error" data-em-error hidden role="alert"></p>
+                <p class="em-note">Save the draft first. It can then be submitted for approval from this dialog.</p>
+                <div class="em-actions">
+                    <button type="button" class="em-btn" data-em-clear>Clear</button>
+                    <button type="button" class="em-btn em-btn-blue" data-em-panel="generate">Generate New Message</button>
+                    <button type="submit" class="em-btn em-btn-blue" data-em-busy="Saving...">Save Draft</button>
+                </div>
+            </form>
+
+        {% else %}
+
+            <div class="em-unavailable" role="note">
+                {% for reason in flags.reasons %}<p>{{ reason }}</p>{% empty %}<p>You do not have permission to create email drafts.</p>{% endfor %}
+            </div>
+
+        {% endif %}
+
+        <p class="em-footer-link"><a href="{{ detail_url }}">View organisation details and all emails</a></p>
+    </section>
+
+    {# ----------------------------------------------------------- generate #}
+    {% if can_compose or can_regenerate %}
+    <section class="em-panel" data-panel="generate" hidden aria-label="Generate new message">
+        <h3 class="em-subtitle">Generate New Email</h3>
+        <p class="em-hint">Describe the message you want to send, so we can generate an email for you.</p>
+        <form method="post" action="{% url 'generate_email_draft' content_type_id object_id %}" class="em-form" data-em-form data-em-generate novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ next_url }}{% if '?' in next_url %}&amp;{% else %}?{% endif %}panel=preview">
+            <input type="hidden" name="org_key" value="{{ org_key }}">
+            <input type="hidden" name="panel_on_error" value="generate">
+            {% if current %}<input type="hidden" name="regenerate" value="1">{% endif %}
+            <label class="em-label" for="em-gen-purpose">Message type or purpose <span aria-hidden="true">*</span></label>
+            <textarea class="em-textarea em-textarea-short" id="em-gen-purpose" name="outreach_purpose" rows="3" required aria-required="true" placeholder="Tell us what type of message you want to send" data-em-field>{{ stash.purpose|default:default_purpose }}</textarea>
+            <label class="em-label" for="em-gen-template">Approved email template <span aria-hidden="true">*</span></label>
+            <select class="em-input" id="em-gen-template" name="template_id" required aria-required="true">
+                {% for template in templates %}<option value="{{ template.id }}" {% if stash.template_id == template.id|stringformat:"s" %}selected{% elif not stash.template_id and current.template_id == template.id %}selected{% endif %}>{{ template.name }} ({{ template.version }})</option>{% empty %}<option value="">No approved templates available</option>{% endfor %}
+            </select>
+            {% if current %}
+                <label class="em-check-row"><input type="checkbox" name="confirm_regenerate" value="1" required> A new draft version will be created. The current version is preserved.</label>
+                <p class="em-note">The new version is shown in the editor only after you choose "Use This Draft". Unsaved editor changes are not carried over.</p>
+            {% endif %}
+            <div class="em-loading" data-em-loading hidden role="status"><span class="em-spinner" aria-hidden="true"></span> Generating draft...</div>
+            <p class="em-field-error" data-em-error hidden role="alert"></p>
+            <div class="em-actions">
+                <button type="button" class="em-btn" data-em-panel="compose">Back</button>
+                <button type="submit" class="em-btn em-btn-blue" data-em-busy="Generating draft..." data-em-confirm-replace>Generate</button>
+            </div>
+        </form>
+    </section>
+    {% endif %}
+
+    {# ------------------------------------------------------------ preview #}
+    {% if can_regenerate and current.workflow_status == "draft" or can_regenerate and current.workflow_status == "changes_requested" %}
+    <section class="em-panel" data-panel="preview" hidden aria-label="Generated email preview">
+        <h3 class="em-subtitle">Generate Email Preview</h3>
+        <p class="em-hint">This draft has been saved. Using it does not approve or send anything.</p>
+        <label class="em-label" for="em-prev-subject">Subject</label>
+        <input class="em-input" id="em-prev-subject" type="text" value="{{ current.subject }}" readonly>
+        <label class="em-label" for="em-prev-body">Message</label>
+        <textarea class="em-textarea" id="em-prev-body" rows="10" readonly>{{ current.body }}</textarea>
+        {% if actions.issues %}
+            <div class="em-validation" role="alert"><strong>Validation issues:</strong>
+                <ul>{% for issue in actions.issues %}<li>{{ issue }}</li>{% endfor %}</ul></div>
+        {% endif %}
+        <div class="em-actions">
+            <button type="button" class="em-btn" data-em-panel="generate">Generate Again</button>
+            <button type="button" class="em-btn em-btn-blue" data-em-panel="compose" data-em-use-draft>Use This Draft</button>
+        </div>
+    </section>
+    {% endif %}
+
+    {# ----------------------------------------------------- request changes #}
+    {% if actions.can_reject %}
+    <section class="em-panel" data-panel="reject" hidden aria-label="Request changes">
+        <h3 class="em-subtitle">Reject Reason/Comment</h3>
+        <p class="em-hint">Why was the email message rejected?</p>
+        <form method="post" action="{% url 'reject_email_draft' current.draft_id %}" class="em-form" data-em-form novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="version" value="{{ current.version }}">
+            <input type="hidden" name="next" value="{{ next_url }}">
+            <input type="hidden" name="org_key" value="{{ org_key }}">
+            <input type="hidden" name="panel_on_error" value="reject">
+            <label class="em-label" for="em-reject-reason">Reason <span aria-hidden="true">*</span></label>
+            <textarea class="em-textarea em-textarea-short" id="em-reject-reason" name="rejection_reason" rows="4" required aria-required="true" data-em-field>{{ stash.rejection_reason }}</textarea>
+            <p class="em-field-error" data-em-error hidden role="alert"></p>
+            <div class="em-actions">
+                <button type="button" class="em-btn" data-em-panel="compose">Back</button>
+                <button type="submit" class="em-btn em-btn-red" data-em-busy="Submitting...">Request Changes</button>
+            </div>
+        </form>
+    </section>
+    {% endif %}
+
+    {# --------------------------------------------------------------- send #}
+    {% if actions.can_send or actions.can_retry_send %}
+    <section class="em-panel" data-panel="send" hidden aria-label="Confirm sending">
+        <h3 class="em-subtitle">Send Email</h3>
+        <p class="em-hint">This sends the approved email to <strong>{{ current.recipient_email }}</strong>. The organisation is marked Contacted only after the email is confirmed sent.</p>
+        <form method="post" action="{% url 'mark_email_draft_sent' current.draft_id %}" class="em-form" data-em-form>
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ next_url }}">
+            <input type="hidden" name="org_key" value="{{ org_key }}">
+            <div class="em-actions">
+                <button type="button" class="em-btn" data-em-panel="compose">Back</button>
+                <button type="submit" class="em-btn em-btn-blue" data-em-busy="Sending...">Send Email</button>
+            </div>
+        </form>
+    </section>
+    {% endif %}
+
+    <p class="em-live" id="emStatus" role="status" aria-live="polite"></p>
+</div>

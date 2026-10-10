@@ -55,6 +55,7 @@ from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 
+from django.urls import reverse
 from django.utils import timezone
 
 
@@ -68,6 +69,18 @@ from .services import (
 )
 
 from .approvals import get_available_approvers, notify_admins
+from .email_ui import (
+    CANCELLABLE_STATUSES,
+    OPEN_STATUSES,
+    _request_failed,
+    compute_actions,
+    honour_next,
+    newest_open_draft_id,
+    org_key,
+    organisation_flags,
+    pop_stash,
+    safe_next_url,
+)
 
 
 from .forms import AUSTRALIAN_STATES, BankForm, BranchForm, ClubForm
@@ -2089,6 +2102,21 @@ def organisation_detail(
         .order_by("name", "version")
     )
 
+    org_flags = organisation_flags(org, has_do_not_contact)
+    draft_rows = _draft_rows(
+        _drafts_for_organisation(content_type, object_id),
+        request.user,
+        org_flags,
+    )
+
+    selected_draft_id = request.GET.get("draft", "").strip()
+
+    if selected_draft_id and not any(
+        str(row["draft"].draft_id) == selected_draft_id
+        for row in draft_rows
+    ):
+        selected_draft_id = ""
+
     context = {
         "org": org,
         "org_type": content_type.model,
@@ -2105,6 +2133,17 @@ def organisation_detail(
             if latest_draft
             else False
         ),
+        "draft_rows": draft_rows,
+        "primary_contact": Contact.objects.filter(
+            content_type=content_type,
+            object_id=object_id,
+        ).first(),
+        "detail_path": request.path,
+        "selected_draft_id": selected_draft_id,
+        "org_flags": org_flags,
+        "org_key": org_key(content_type_id, object_id),
+        "next_url": request.get_full_path(),
+        **_sidebar_summary(request),
         "can_manage_organisation": request.user.has_perm(
             f"outreach.change_{content_type.model}"
         ),
@@ -2651,6 +2690,7 @@ ORGANISATION_FORMS = {
 
 @login_required
 @require_POST
+@honour_next
 def generate_email_draft(
     request,
     content_type_id,
@@ -3693,6 +3733,7 @@ def generate_email_draft(
         )
 @login_required
 @require_POST
+@honour_next
 def create_manual_email_draft(
     request,
     content_type_id,
@@ -3862,6 +3903,7 @@ def create_manual_email_draft(
 
 @login_required
 @require_POST
+@honour_next
 def update_email_draft(request, draft_id):
 
     if not request.user.has_perm(
@@ -4305,6 +4347,7 @@ KNOWN_NON_DELIVERY_EXCEPTIONS = (
 
 @login_required
 @require_POST
+@honour_next
 @serialised_draft_transition
 def submit_email_draft_for_review(request, draft_id):
     if not request.user.has_perm("outreach.generate_emaildraft"):
@@ -4524,6 +4567,7 @@ def submit_email_draft_for_review(request, draft_id):
 
 @login_required
 @require_POST
+@honour_next
 @serialised_draft_transition
 def approve_email_draft(request, draft_id):
     if not request.user.has_perm("outreach.approve_emaildraft"):
@@ -4704,6 +4748,7 @@ def approve_email_draft(request, draft_id):
     )
 @login_required
 @require_POST
+@honour_next
 @serialised_draft_transition
 def withdraw_email_draft(request, draft_id):
     if not request.user.has_perm("outreach.generate_emaildraft"):
@@ -4774,6 +4819,7 @@ def withdraw_email_draft(request, draft_id):
 
 @login_required
 @require_POST
+@honour_next
 @serialised_draft_transition
 def reject_email_draft(request, draft_id):
     if not request.user.has_perm("outreach.approve_emaildraft"):
@@ -4867,6 +4913,7 @@ def reject_email_draft(request, draft_id):
     )
 @login_required
 @require_POST
+@honour_next
 @serialised_draft_transition
 def cancel_email_draft(request, draft_id):
     if not request.user.has_perm(
@@ -4968,6 +5015,7 @@ def cancel_email_draft(request, draft_id):
 
 @login_required
 @require_POST
+@honour_next
 def mark_email_draft_sent(request, draft_id):
     if not request.user.has_perm("outreach.send_emaildraft"):
         messages.error(
@@ -6049,3 +6097,257 @@ def archive_organisation(request, content_type_id, object_id):
         content_type_id=content_type_id,
         object_id=object_id,
     )
+
+
+# ---------------------------------------------------------
+# Email dialog and per-draft email history (UI support)
+# ---------------------------------------------------------
+
+def _resolve_organisation(content_type_id, object_id):
+    content_type = get_object_or_404(ContentType, pk=content_type_id)
+    model_class = content_type.model_class()
+
+    if model_class not in (Bank, Branch, Club):
+        raise Http404("Organisation not found.")
+
+    return content_type, get_object_or_404(model_class, pk=object_id)
+
+
+def _drafts_for_organisation(content_type, object_id):
+    """All drafts of an organisation, newest first, with related rows."""
+    return list(
+        EmailDraft.objects.filter(
+            opportunity__content_type=content_type,
+            opportunity__object_id=object_id,
+        )
+        .select_related(
+            "template",
+            "requested_by",
+            "assigned_to",
+            "approved_by",
+            "sent_by",
+            "cancelled_by",
+            "last_edited_by",
+        )
+        .prefetch_related(
+            Prefetch(
+                "workflow_history",
+                queryset=EmailDraftHistory.objects.select_related(
+                    "performed_by"
+                ).order_by("-created_at", "-id"),
+            )
+        )
+        .order_by("-created_at", "-id")
+    )
+
+
+def _draft_rows(drafts, user, flags):
+    """One entry per draft; permissions are computed per draft."""
+    newest_open = newest_open_draft_id(drafts)
+
+    return [
+        {
+            "draft": draft,
+            "actions": compute_actions(draft, user, flags, newest_open),
+            "is_current": draft.pk == newest_open,
+        }
+        for draft in drafts
+    ]
+
+
+def _sidebar_summary(request):
+    rows = _get_all_organisations(search="", org_type="", region="")
+    total = len(rows)
+    contacted = len([row for row in rows if row["status"] == "contacted"])
+
+    def count(outcome):
+        return len(
+            [
+                row
+                for row in rows
+                if row["outcome_status"] == outcome
+                and not row["status_conflict"]
+            ]
+        )
+
+    return {
+        "percent_contacted": round(contacted / total * 100) if total else 0,
+        "not_yet_count": total - contacted,
+        "contacted_count": contacted,
+        "outcome_counts": {
+            "Interested": count("interested"),
+            "Not Interested": count("not_interested"),
+            "Do Not Contact": count("do_not_contact"),
+            "Needs Review": len(
+                [row for row in rows if row["status_conflict"]]
+            ),
+        },
+        "can_review_approvals": request.user.has_perm(
+            "outreach.approve_emaildraft"
+        ),
+        "pending_approval_count": (
+            EmailDraft.objects.filter(
+                workflow_status="awaiting_approval"
+            ).count()
+            if request.user.has_perm("outreach.approve_emaildraft")
+            else 0
+        ),
+    }
+
+
+@login_required
+@require_GET
+def email_modal(request, content_type_id, object_id):
+    """
+    Read-only content of the "Email Organisation" dialog. Opening it never
+    creates a draft, calls the AI, approves, sends or changes any status;
+    every action in it posts to the existing workflow endpoints.
+    """
+    content_type, organisation = _resolve_organisation(
+        content_type_id, object_id
+    )
+
+    has_dnc = Opportunity.objects.filter(
+        content_type=content_type,
+        object_id=object_id,
+        status="do_not_contact",
+    ).exists()
+
+    flags = organisation_flags(organisation, has_dnc)
+    drafts = _drafts_for_organisation(content_type, object_id)
+    rows = _draft_rows(drafts, request.user, flags)
+    current_row = next((row for row in rows if row["is_current"]), None)
+
+    key = org_key(content_type_id, object_id)
+    stash = pop_stash(request, key, request.GET.get("stash"))
+
+    return_url = safe_next_url(
+        request, request.GET.get("return")
+    ) or reverse("outreach_dashboard")
+
+    separator = "&" if "?" in return_url else "?"
+    next_url = (
+        f"{return_url}{separator}open_email={key}"
+        if request.GET.get("reopen") == "1"
+        else return_url
+    )
+
+    can_generate_perm = request.user.has_perm(
+        "outreach.generate_emaildraft"
+    )
+    current = current_row["draft"] if current_row else None
+    actions = current_row["actions"] if current_row else None
+
+    panel = request.GET.get("panel", "")
+
+    if stash and stash.get("panel"):
+        panel = stash["panel"]
+
+    if panel not in ("generate", "preview", "compose", "reject", "send"):
+        panel = ""
+
+    editor_subject = current.subject if current else ""
+    editor_body = current.body if current else ""
+
+    if (
+        stash
+        and current
+        and stash.get("draft_id") in ("", str(current.draft_id))
+    ):
+        editor_subject = stash.get("subject") or editor_subject
+        editor_body = stash.get("body") or editor_body
+    elif stash and not current:
+        editor_subject = stash.get("subject", "")
+        editor_body = stash.get("body", "")
+
+    context = {
+        "org": organisation,
+        "org_name": _organisation_name(organisation),
+        "org_type": content_type.model,
+        "content_type_id": content_type_id,
+        "object_id": object_id,
+        "org_key": key,
+        "flags": flags,
+        "current": current,
+        "actions": actions,
+        "rows": rows,
+        "stash": stash or {},
+        "default_purpose": current.outreach_purpose if current else "",
+        "panel": panel,
+        "editor_subject": editor_subject,
+        "editor_body": editor_body,
+        "next_url": next_url,
+        "templates": EmailTemplate.objects.filter(
+            is_active=True
+        ).order_by("name", "version"),
+        "can_compose": (
+            can_generate_perm
+            and flags["can_start_outreach"]
+            and current is None
+        ),
+        # Regeneration is only offered for AI-generated drafts, matching
+        # the server rule (a manual draft has no template to regenerate).
+        "can_regenerate": bool(
+            current
+            and current.template_id
+            and actions
+            and actions["can_edit"]
+            and flags["can_start_outreach"]
+        ),
+        "modal_messages": list(messages.get_messages(request)),
+        "detail_url": reverse(
+            "organisation_detail",
+            args=[content_type_id, object_id],
+        ),
+    }
+
+    response = render(request, "outreach/_email_modal.html", context)
+    response["Cache-Control"] = "no-store"
+
+    return response
+
+
+@login_required
+@require_POST
+@honour_next
+def save_and_submit_email_draft(request, draft_id):
+    """
+    Save the content visible in the editor, then submit it. Both steps
+    reuse the existing edit and submit views, so ownership, validation,
+    stale-version checks and the atomic state transitions are unchanged.
+    The submitted content is therefore always what the user sees.
+    """
+    draft = get_object_or_404(EmailDraft, draft_id=draft_id)
+
+    posted_subject = request.POST.get("subject", "").strip()
+    posted_body = request.POST.get("body", "").strip()
+
+    response = update_email_draft(request, draft_id)
+
+    draft = EmailDraft.objects.get(pk=draft.pk)
+
+    if (
+        draft.workflow_status != "draft"
+        or draft.subject != posted_subject
+        or draft.body != posted_body
+    ):
+        # The save was refused or incomplete: nothing is submitted, and
+        # the messages queued by the edit view explain why.
+        return response
+
+    post = request.POST.copy()
+    post["version"] = str(draft.version)
+    request.POST = post
+
+    response = submit_email_draft_for_review(request, draft_id)
+
+    if _request_failed(request):
+        # The first step succeeded: say so, so nobody retypes the email or
+        # creates a second draft. The same draft is submitted on retry.
+        messages.warning(
+            request,
+            "Your changes were saved as a draft, but it was not "
+            "submitted for approval. Please try Submit for Approval again.",
+        )
+
+    return response

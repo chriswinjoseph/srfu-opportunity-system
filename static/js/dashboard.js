@@ -330,6 +330,40 @@
         window.history.replaceState({}, "", newUrl);
     }
 
+    function openEmailDialog(row, trigger) {
+        const template = app.dataset.emailModalUrlTemplate;
+
+        if (!template || !window.EmailModal) {
+            return;
+        }
+
+        // Always the exact organisation of the clicked card.
+        const key = `${row.content_type_id}-${row.id}`;
+        const url = new URL(
+            template
+                .replace("999999999", String(row.content_type_id))
+                .replace("888888888", String(row.id)),
+            window.location.origin
+        );
+
+        const current = new URLSearchParams(window.location.search);
+        current.delete("open_email");
+        current.delete("panel");
+
+        url.searchParams.set(
+            "return",
+            window.location.pathname
+                + (current.toString() ? `?${current.toString()}` : "")
+        );
+        url.searchParams.set("reopen", "1");
+
+        window.EmailModal.open({
+            url: url.pathname + url.search,
+            key,
+            trigger,
+        });
+    }
+
     function createOrganisationCard(row) {
         const card = elements.template.content
             .firstElementChild
@@ -377,6 +411,23 @@ if (stateField) {
         card.querySelector(
             '[data-field="details-link"]'
         ).href = detailUrl;
+
+        const emailButton = card.querySelector(
+            '[data-field="email-button"]'
+        );
+
+        if (emailButton) {
+            emailButton.setAttribute(
+                "aria-label",
+                `Email ${getDisplayValue(row.name)}`
+            );
+
+            emailButton.addEventListener("click", (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                openEmailDialog(row, emailButton);
+            });
+        }
 
         card.addEventListener("click", (event) => {
             if (event.target.closest("a, button")) {

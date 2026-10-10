@@ -8335,7 +8335,12 @@ class PendingApprovalsQueueTests(TestCase):
             "organisation_detail",
             args=[self.content_type.pk, self.bank.pk],
         )
-        self.assertContains(response, f'href="{review_url}"')
+        # The review link opens the organisation page with this exact
+        # draft selected (not merely the newest draft).
+        self.assertContains(
+            response,
+            f'href="{review_url}?draft={draft.draft_id}"',
+        )
 
     def test_missing_submission_data_shows_not_recorded(self):
         self.pending()

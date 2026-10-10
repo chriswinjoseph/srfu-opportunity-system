@@ -14,6 +14,16 @@
         href="{% static 'css/dashboard.css' %}"
     >
 
+    <link
+        rel="stylesheet"
+        href="{% static 'css/email_workflow.css' %}"
+    >
+
+    <script
+        src="{% static 'js/email_modal.js' %}"
+        defer
+    ></script>
+
     <script
         src="{% static 'js/dashboard.js' %}"
         defer
@@ -26,6 +36,7 @@
     class="dashboard-shell"
     data-api-url="{% url 'organisation_list_api' %}"
     data-detail-url-template="{% url 'organisation_detail' 999999999 888888888 %}"
+    data-email-modal-url-template="{% url 'email_modal' 999999999 888888888 %}"
 >
     <aside class="sidebar">
         <div class="brand">
@@ -567,8 +578,7 @@
 
                     <button
                         type="button"
-                        disabled
-                        title="Email workflow is not available yet."
+                        data-field="email-button"
                     >
                         Email
                     </button>
@@ -577,6 +587,8 @@
         </div>
     </article>
 </template>
+
+{% include "outreach/_email_modal_shell.html" %}
 
 <noscript>
     <p class="noscript-message">

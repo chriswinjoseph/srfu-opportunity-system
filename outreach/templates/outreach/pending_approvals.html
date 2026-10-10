@@ -84,7 +84,7 @@
                             {% endif %}
                         </td>
                         <td data-label="">
-                            <a class="pa-review" href="{% url 'organisation_detail' content_type_id=row.content_type_id object_id=row.object_id %}">
+                            <a class="pa-review" href="{% url 'organisation_detail' content_type_id=row.content_type_id object_id=row.object_id %}?draft={{ row.draft.draft_id }}">
                                 Review<span class="visually-hidden"> {{ row.organisation_name }}</span>
                             </a>
                         </td>
