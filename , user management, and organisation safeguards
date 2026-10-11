@@ -1,0 +1,45 @@
+ README.md                                          |   30 [32m+[m[31m-[m
+ accounts/admin.py                                  |   95 [32m+[m[31m-[m
+ accounts/forms.py                                  |  124 [32m++[m[31m-[m
+ accounts/management/__init__.py                    |    0
+ accounts/management/commands/__init__.py           |    0
+ accounts/management/commands/create_first_admin.py |  108 [32m++[m
+ accounts/middleware.py                             |   35 [32m+[m
+ .../migrations/0002_admin_roles_and_archiving.py   |   50 [32m+[m
+ accounts/migrations/0003_assign_initial_roles.py   |   59 [32m++[m
+ accounts/models.py                                 |   99 [32m++[m
+ accounts/roles.py                                  |   47 [32m+[m
+ accounts/services.py                               |  423 [32m++++++++[m
+ accounts/templates/403.html                        |   21 [32m+[m
+ accounts/templates/accounts/disabled.html          |    6 [32m+[m
+ .../templates/accounts/email/invitation_email.txt  |   12 [32m+[m
+ accounts/templates/accounts/login.html             |    2 [31m-[m
+ accounts/templates/accounts/signup.html            |   91 [31m--[m
+ accounts/templates/accounts/users/_user_card.html  |   10 [32m+[m
+ accounts/templates/accounts/users/base.html        |  104 [32m++[m
+ .../templates/accounts/users/user_activity.html    |   23 [32m+[m
+ accounts/templates/accounts/users/user_add.html    |   58 [32m++[m
+ accounts/templates/accounts/users/user_list.html   |   37 [32m+[m
+ .../templates/accounts/users/user_options.html     |   34 [32m+[m
+ .../templates/accounts/users/user_reassign.html    |   29 [32m+[m
+ accounts/templates/accounts/users/user_role.html   |   28 [32m+[m
+ accounts/test_invitation_security.py               |  220 [32m++++[m
+ accounts/test_user_management.py                   | 1097 [32m++++++++++++++++++++[m
+ accounts/urls.py                                   |   27 [32m+[m[31m-[m
+ accounts/user_views.py                             |  328 [32m++++++[m
+ accounts/views.py                                  |   79 [32m+[m[31m-[m
+ outreach/admin.py                                  |  116 [32m++[m[31m-[m
+ outreach/approvals.py                              |   32 [32m+[m[31m-[m
+ .../migrations/0030_admin_roles_and_archiving.py   |   71 [32m++[m
+ outreach/models.py                                 |   90 [32m++[m
+ outreach/templates/outreach/dashboard.html         |   10 [32m+[m
+ outreach/templates/outreach/edit_organisation.html |   49 [32m+[m
+ .../templates/outreach/organisation_detail.html    |   61 [32m+[m[31m-[m
+ outreach/test_archive_and_admin_safeguards.py      |  388 [32m+++++++[m
+ outreach/test_roles_and_organisations.py           |  632 [32m+++++++++++[m
+ outreach/tests.py                                  |   56 [32m+[m
+ outreach/urls.py                                   |   12 [32m+[m[31m-[m
+ outreach/views.py                                  |  312 [32m+++++[m[31m-[m
+ srfu/settings.py                                   |    1 [32m+[m
+ static/css/dashboard.css                           |    5 [32m+[m
+ 44 files changed, 4875 insertions(+), 236 deletions(-)
