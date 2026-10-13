@@ -6,7 +6,7 @@ The purpose of this requirement is to define how the system imports Shane’s re
 
 The system must:
 
-- Import multiple organisations and contacts from Shane’s Excel dataset.
+- Import multiple organisations and contacts from Shane’s dataset.
 - Preserve previous outreach information.
 - Assign each imported organisation the correct contact status.
 - Prevent duplicate banks, branches, clubs and contacts.
@@ -188,16 +188,7 @@ Only an Admin must be able to start a scraper run or approve scraped changes.
 
 Staff users may view accepted organisation information but must not control the scraper.
 
-#### FR-15: Start a Scraper Run
-
-The system must allow an Admin to start a scrape using available search information such as:
-
-- Organisation type.
-- Name.
-- State.
-- Approved public source.
-
-#### FR-16: Collect Organisation Information
+#### FR-15: Collect Organisation Information
 
 Where publicly available, the scraper may collect:
 
@@ -213,7 +204,7 @@ Where publicly available, the scraper may collect:
 - Public website.
 - Public source URL.
 
-#### FR-17: Store the Source
+#### FR-16: Store the Source
 
 For every scraped record, the system must store:
 
@@ -223,7 +214,7 @@ For every scraped record, the system must store:
 - Fields collected from that source.
 - Whether the information requires verification.
 
-#### FR-18: Check Scraped Results for Duplicates
+#### FR-17: Check Scraped Results for Duplicates
 
 Before creating a scraped organisation, the system must compare it with:
 
@@ -233,7 +224,7 @@ Before creating a scraped organisation, the system must compare it with:
 
 A scraped record must not bypass the standard duplicate rules.
 
-#### FR-19: Handle New Scraped Organisations
+#### FR-18: Handle New Scraped Organisations
 
 If the scraper finds a genuinely new organisation with sufficient information, the system must:
 
@@ -245,7 +236,7 @@ If the scraper finds a genuinely new organisation with sufficient information, t
 
 Finding public contact information does not mean that outreach has occurred.
 
-#### FR-20: Handle Changed Scraped Information
+#### FR-29: Handle Changed Scraped Information
 
 If the scraper finds information that differs from an existing record, the system must:
 
@@ -255,7 +246,7 @@ If the scraper finds information that differs from an existing record, the syste
 - Prevent a blank value from replacing an existing value.
 - Prevent unverified scraped information from silently replacing manually verified information.
 
-#### FR-21: Display a Scraper Summary
+#### FR-20: Display a Scraper Summary
 
 After a scraper run finishes, the system must display:
 
@@ -274,7 +265,7 @@ After a scraper run finishes, the system must display:
 
 #### AC-01: Admin Imports a Valid Dataset
 
-**Given** an authenticated Admin selects the supported Excel dataset  
+**Given** an authenticated Admin selects the supported dataset  
 **When** the Admin starts the import  
 **Then** the system must validate the file  
 **And** process its valid organisation and contact records.
@@ -430,7 +421,7 @@ After a scraper run finishes, the system must display:
 ### 4.1 Real Data Import Workflow
 
 1. The Admin opens the Data Import page.
-2. The Admin selects Shane’s Excel dataset.
+2. The Admin selects Shane’s dataset.
 3. The system validates the file format and required columns.
 4. The system reads each organisation and contact row.
 5. The system groups contacts using `organisation_id`.
