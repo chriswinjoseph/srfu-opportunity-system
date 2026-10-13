@@ -1,4 +1,5 @@
 {% extends "accounts/users/base.html" %}
+{% load outreach_extras %}
 {% block title %}Unfinished Drafts{% endblock %}
 {% block content %}
 <div class="panel">
@@ -7,7 +8,7 @@
     {% if drafts %}
         <table>
             <thead><tr><th>Subject</th><th>Status</th><th>Updated</th></tr></thead>
-            <tbody>{% for draft in drafts %}<tr><td>{{ draft.subject|default:"(no subject)" }}</td><td>{{ draft.get_workflow_status_display }}</td><td>{{ draft.updated_at }}</td></tr>{% endfor %}</tbody>
+            <tbody>{% for draft in drafts %}<tr><td>{{ draft.subject|default:"(no subject)" }}</td><td>{{ draft.get_workflow_status_display }}</td><td>{{ draft.updated_at|melbourne }}</td></tr>{% endfor %}</tbody>
         </table>
         <form method="post" data-once style="margin-top:16px">
             {% csrf_token %}

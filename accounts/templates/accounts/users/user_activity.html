@@ -1,4 +1,5 @@
 {% extends "accounts/users/base.html" %}
+{% load outreach_extras %}
 {% block title %}User Activity{% endblock %}
 {% block content %}
 <h1>User Activity</h1>
@@ -9,7 +10,7 @@
         <tbody>
         {% for a in activities %}
             <tr>
-                <td>{{ a.created_at }}</td><td>{{ a.get_action_display }}</td>
+                <td>{{ a.created_at|melbourne }}</td><td>{{ a.get_action_display }}</td>
                 <td>{{ a.actor_email|default:"System / user" }}</td><td>{{ a.target_email }}</td>
                 <td>{% if a.previous_value or a.new_value %}{{ a.previous_value }} &rarr; {{ a.new_value }}{% endif %}</td>
                 <td>{{ a.detail }}</td>

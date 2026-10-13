@@ -607,3 +607,13 @@ body.em-open {
 .em-row select {
     font-family: inherit;
 }
+
+.em-follow-up-label {
+    margin: 0 0 4px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #1d4ed8;
+}
