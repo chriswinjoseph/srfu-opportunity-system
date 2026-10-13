@@ -1,4 +1,4 @@
-{% load static %}
+{% load static outreach_extras %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -74,7 +74,7 @@
                             {% if row.draft.is_approval_overdue %}<span class="pa-badge">Overdue</span>{% endif %}
                         </td>
                         <td data-label="Submitted">
-                            {% if row.submitted_at %}{{ row.submitted_at|date:"j M Y H:i" }}{% else %}Not recorded{% endif %}
+                            {% if row.submitted_at %}{{ row.submitted_at|melbourne }}{% else %}Not recorded{% endif %}
                         </td>
                         <td data-label="Submitted by">
                             {% if row.submitted_by %}

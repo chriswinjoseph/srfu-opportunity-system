@@ -83,12 +83,11 @@ class OrganisationValidationMixin:
         return (self.cleaned_data.get("notes") or "").strip()
 
     def clean_postcode(self):
-        postcode = self.cleaned_data.get("postcode", "").strip()
+        postcode = (self.cleaned_data.get("postcode") or "").strip()
 
+        # Postcode is optional; when given it must be a valid 4-digit one.
         if not postcode:
-            raise forms.ValidationError(
-                "Postcode is required."
-            )
+            return ""
 
         if not re.fullmatch(r"\d{4}", postcode):
             raise forms.ValidationError(
@@ -120,18 +119,6 @@ class OrganisationValidationMixin:
         cleaned_data["suburb"] = suburb
         cleaned_data["region"] = region
 
-        # At least one genuine region or suburb is required. The
-        # state is never copied into the region to satisfy this.
-        if (
-            not region
-            and not suburb
-            and "suburb" not in self.errors
-            and "region" not in self.errors
-        ):
-            message = "Enter a region or a suburb (at least one is required)."
-            self.add_error("region", message)
-            self.add_error("suburb", message)
-
         postcode = cleaned_data.get("postcode", "")
 
         if (
@@ -162,7 +149,7 @@ class BankForm(
         max_length=100,
         required=False,
         label="Region",
-        help_text="Provide a region or a suburb (at least one).",
+        help_text="Optional.",
     )
 
     suburb = forms.CharField(
@@ -173,13 +160,14 @@ class BankForm(
 
     postcode = forms.CharField(
         max_length=4,
-        required=True,
+        required=False,
         label="Postcode",
     )
 
     public_email = forms.EmailField(
-        required=False,
+        required=True,
         label="Email",
+        error_messages={"required": "Email is required."},
     )
 
     contact_name = forms.CharField(
@@ -253,7 +241,7 @@ class BranchForm(
         max_length=100,
         required=False,
         label="Region",
-        help_text="Provide a region or a suburb (at least one).",
+        help_text="Optional.",
     )
 
     suburb = forms.CharField(
@@ -264,13 +252,14 @@ class BranchForm(
 
     postcode = forms.CharField(
         max_length=4,
-        required=True,
+        required=False,
         label="Postcode",
     )
 
     public_email = forms.EmailField(
-        required=False,
+        required=True,
         label="Email",
+        error_messages={"required": "Email is required."},
     )
 
     contact_name = forms.CharField(
@@ -344,7 +333,7 @@ class ClubForm(
         max_length=100,
         required=False,
         label="Region",
-        help_text="Provide a region or a suburb (at least one).",
+        help_text="Optional.",
     )
 
     suburb = forms.CharField(
@@ -355,13 +344,14 @@ class ClubForm(
 
     postcode = forms.CharField(
         max_length=4,
-        required=True,
+        required=False,
         label="Postcode",
     )
 
     public_email = forms.EmailField(
-        required=False,
+        required=True,
         label="Email",
+        error_messages={"required": "Email is required."},
     )
 
     contact_name = forms.CharField(

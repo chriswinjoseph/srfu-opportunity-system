@@ -633,6 +633,22 @@ class Opportunity(models.Model):
         blank=True,
     )
 
+    # When (and by whom) outreach completed outside the system was
+    # recorded. date_contacted is the actual contact date; this is the
+    # recording time. Empty for records made before this was kept.
+    contact_recorded_at = models.DateTimeField(
+        null=True,
+        blank=True,
+    )
+
+    contact_recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+
     # Keep this for compatibility with existing code.
 
     draft_email = models.TextField(
@@ -934,6 +950,13 @@ class EmailDraft(models.Model):
     trigger_source = models.CharField(
         max_length=20,
         default="manual",
+    )
+
+    # True for an email to an organisation that was already Contacted when
+    # the draft was created. A follow-up never changes contact_status or
+    # an existing response (opportunity.status).
+    is_follow_up = models.BooleanField(
+        default=False,
     )
 
     version = models.PositiveIntegerField(

@@ -3,6 +3,7 @@
 
     <header class="em-head">
         <h2 id="emailModalTitle" class="em-title">Email Organisation</h2>
+        {% if is_follow_up %}<p class="em-follow-up-label" data-field="follow-up-label">Follow-up email</p>{% endif %}
         <p class="em-org-line"><span class="em-org-name">{{ org_name }}</span>
             {% if current %}<span class="em-badge em-badge-{{ current.workflow_status|draft_status_css }}">{{ current.workflow_status|draft_status_label }}</span>{% endif %}
         </p>
@@ -21,6 +22,14 @@
             <label class="em-label" for="em-to">To</label>
             <input class="em-input" id="em-to" type="text" value="{{ flags.recipient }}" readonly>
         </div>
+
+        {% if legacy_initial %}
+            <p class="em-note" data-field="legacy-initial">An earlier initial email draft ({{ legacy_initial.workflow_status|draft_status_label }}) exists. It cannot be sent because this organisation has already been contacted, and it stays in the email history. A follow-up is written as a new email.</p>
+        {% endif %}
+
+        {% if last_sent %}
+            <p class="em-note" data-field="last-sent">The last email to this organisation ("{{ last_sent.subject }}") was sent{% if last_sent.sent_by %} by {{ last_sent.sent_by.get_full_name|default:last_sent.sent_by.email }}{% endif %}{% if last_sent.sent_at %} on {{ last_sent.sent_at|date:"j M Y" }} at {{ last_sent.sent_at|melbourne_clock }}{% endif %}. A follow-up is written as a new email; the sent email is kept unchanged.</p>
+        {% endif %}
 
         {% if current %}
 
@@ -107,7 +116,7 @@
 
             {% if current.workflow_status == "approved" or current.workflow_status == "send_failed" %}
                 <div class="em-approved">
-                    {% if current.workflow_status == "approved" %}<p class="em-approved-line"><span class="em-check" aria-hidden="true">&#10003;</span> Approved{% if current.approved_by %} by {{ current.approved_by.get_full_name|default:current.approved_by.email }}{% endif %}{% if current.approved_at %} on {{ current.approved_at|date:"j M Y" }} at {{ current.approved_at|time:"g:i A" }}{% endif %}.</p>{% endif %}
+                    {% if current.workflow_status == "approved" %}<p class="em-approved-line"><span class="em-check" aria-hidden="true">&#10003;</span> Approved{% if current.approved_by %} by {{ current.approved_by.get_full_name|default:current.approved_by.email }}{% endif %}{% if current.approved_at %} on {{ current.approved_at|date:"j M Y" }} at {{ current.approved_at|melbourne_clock }}{% endif %}.</p>{% endif %}
                     {% if current.workflow_status == "send_failed" %}<p class="em-note">The last send attempt was not delivered. {{ current.send_failure_reason }}</p>{% endif %}
                     {% if actions.can_send or actions.can_retry_send %}
                         <button type="button" class="em-btn em-btn-blue" data-em-panel="send">{% if actions.can_retry_send %}Retry Sending{% else %}Send Email{% endif %}</button>
@@ -116,7 +125,7 @@
             {% endif %}
 
             {% if current.workflow_status == "sent" %}
-                <p class="em-approved-line"><span class="em-check" aria-hidden="true">&#10003;</span> This email was already sent{% if current.sent_by %} by {{ current.sent_by.get_full_name|default:current.sent_by.email }}{% endif %}{% if current.sent_at %} on {{ current.sent_at|date:"j F Y" }} at {{ current.sent_at|time:"g:i A" }}{% endif %}.</p>
+                <p class="em-approved-line"><span class="em-check" aria-hidden="true">&#10003;</span> This email was already sent{% if current.sent_by %} by {{ current.sent_by.get_full_name|default:current.sent_by.email }}{% endif %}{% if current.sent_at %} on {{ current.sent_at|date:"j F Y" }} at {{ current.sent_at|melbourne_clock }}{% endif %}.</p>
             {% endif %}
 
         {% elif can_compose %}
@@ -163,7 +172,8 @@
             <input type="hidden" name="org_key" value="{{ org_key }}">
             <input type="hidden" name="panel_on_error" value="generate">
             {% if current %}<input type="hidden" name="regenerate" value="1">{% endif %}
-            <label class="em-label" for="em-gen-purpose">Message type or purpose <span aria-hidden="true">*</span></label>
+            {% if is_follow_up %}<p class="em-hint" data-field="follow-up-hint">Relevant saved outreach and the recorded response are used as background. Nothing is assumed about what the organisation said.</p>{% endif %}
+            <label class="em-label" for="em-gen-purpose">{% if is_follow_up %}Follow-up purpose{% else %}Message type or purpose{% endif %} <span aria-hidden="true">*</span></label>
             <textarea class="em-textarea em-textarea-short" id="em-gen-purpose" name="outreach_purpose" rows="3" required aria-required="true" placeholder="Tell us what type of message you want to send" data-em-field>{{ stash.purpose|default:default_purpose }}</textarea>
             <label class="em-label" for="em-gen-template">Approved email template <span aria-hidden="true">*</span></label>
             <select class="em-input" id="em-gen-template" name="template_id" required aria-required="true">

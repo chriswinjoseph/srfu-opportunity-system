@@ -4,6 +4,7 @@ import socket
 import ssl
 from functools import wraps
 import hashlib
+from urllib.parse import urlencode
 
 
 import re
@@ -69,6 +70,13 @@ from .services import (
 )
 
 from .approvals import get_available_approvers, notify_admins
+from .follow_up import (
+    RESPONSE_LABELS,
+    current_outcome,
+    follow_up_context,
+    melbourne_now,
+    parse_contact_datetime,
+)
 from .email_ui import (
     CANCELLABLE_STATUSES,
     OPEN_STATUSES,
@@ -344,49 +352,17 @@ def _org_to_row(org, org_type):
     )
 
 
-    latest_opportunity = (
-
-
+    # Do Not Contact on ANY opportunity wins; otherwise the newest
+    # Interested / Not Interested response. A follow-up (a newer
+    # "contacted" opportunity) never hides a recorded response.
+    outcome_status = current_outcome(
         Opportunity.objects.filter(
-
-
             content_type=content_type,
-
-
             object_id=org.pk,
-
-
         )
-
-
-        .order_by("-date_created")
-
-
-        .first()
-
-
+        .order_by("-date_created", "-id")
+        .values_list("status", flat=True)
     )
-
-
-    outcome_status = ""
-
-
-    if (
-
-
-        latest_opportunity is not None
-
-
-        and latest_opportunity.status
-
-
-        in OPPORTUNITY_OUTCOME_LABELS
-
-
-    ):
-
-
-        outcome_status = latest_opportunity.status
 
 
     status_conflict = (
@@ -2103,6 +2079,9 @@ def organisation_detail(
     )
 
     org_flags = organisation_flags(org, has_do_not_contact)
+    outcome_status = current_outcome(
+        opportunity.status for opportunity in opportunities
+    )
     draft_rows = _draft_rows(
         _drafts_for_organisation(content_type, object_id),
         request.user,
@@ -2122,6 +2101,15 @@ def organisation_detail(
         "org_type": content_type.model,
         "opportunities": opportunities,
         "latest_opportunity": latest_opportunity,
+        "today_melbourne": melbourne_now().date().isoformat(),
+        "outcome_status": outcome_status,
+        "outcome_label": RESPONSE_LABELS.get(outcome_status, ""),
+        "external_form": {
+            "open": request.GET.get("external") == "1",
+            "method": request.GET.get("ext_method", ""),
+            "date": request.GET.get("ext_date", ""),
+            "time": request.GET.get("ext_time", ""),
+        },
         "has_do_not_contact": has_do_not_contact,
         "content_type_id": content_type_id,
         "object_id": object_id,
@@ -2142,7 +2130,11 @@ def organisation_detail(
         "selected_draft_id": selected_draft_id,
         "org_flags": org_flags,
         "org_key": org_key(content_type_id, object_id),
-        "next_url": request.get_full_path(),
+        "next_url": (
+            request.path
+            if request.GET.get("external") == "1"
+            else request.get_full_path()
+        ),
         **_sidebar_summary(request),
         "can_manage_organisation": request.user.has_perm(
             f"outreach.change_{content_type.model}"
@@ -2750,19 +2742,9 @@ def generate_email_draft(
             content_type_id=content_type_id,
             object_id=object_id,
         )
-    if organisation.contact_status != "not_yet_contacted":
-        messages.error(
-            request,
-            (
-                "A new initial outreach draft cannot be created because "
-                "this organisation has already been contacted."
-            ),
-        )
-        return redirect(
-            "organisation_detail",
-            content_type_id=content_type_id,
-            object_id=object_id,
-        )
+    # An already-Contacted organisation can receive a new follow-up draft.
+    # A follow-up never changes contact_status or an existing response.
+    is_follow_up = organisation.contact_status != "not_yet_contacted"
 
     # ---------------------------------------------------------
     # 3. Get generation inputs
@@ -2925,12 +2907,17 @@ def generate_email_draft(
     # 9. Check existing AI draft / regeneration
     # ---------------------------------------------------------
 
+    # Regeneration only ever considers drafts of the same kind. A sent
+    # email is evidence and is never reused: a follow-up is always a new
+    # draft, never a regeneration of an earlier (sent) one.
     latest_existing_draft = (
         EmailDraft.objects.filter(
             opportunity__content_type=content_type,
             opportunity__object_id=object_id,
             template__isnull=False,
+            is_follow_up=is_follow_up,
         )
+        .exclude(workflow_status="sent")
         .order_by("-created_at")
         .first()
     )
@@ -2939,6 +2926,10 @@ def generate_email_draft(
         EmailDraft.objects.filter(
             opportunity__content_type=content_type,
             opportunity__object_id=object_id,
+            # Only drafts of the same kind count: an older initial draft left on
+            # an already-contacted organisation cannot be sent and must not
+            # block a new follow-up. It stays untouched in the history.
+            is_follow_up=is_follow_up,
             workflow_status__in=[
                 "draft",
                 "awaiting_approval",
@@ -3222,6 +3213,11 @@ def generate_email_draft(
                 validation_issues,
             ) = generate_outreach_email(
 
+                **(
+                    {"follow_up_context": follow_up_context(content_type, object_id)}
+                    if is_follow_up
+                    else {}
+                ),
                 organisation_name=organisation_name,
                 organisation_type=content_type.model,
                 recipient_email=recipient_email,
@@ -3649,6 +3645,7 @@ def generate_email_draft(
             subject=subject,
             body=body,
             outreach_purpose=outreach_purpose,
+            is_follow_up=is_follow_up,
             workflow_status="draft",
             generation_status="success",
             requested_by=request.user,
@@ -3768,19 +3765,9 @@ def create_manual_email_draft(
             content_type_id=content_type_id,
             object_id=object_id,
         )
-    if organisation.contact_status != "not_yet_contacted":
-        messages.error(
-            request,
-            (
-                "A new initial outreach draft cannot be created because "
-                "this organisation has already been contacted."
-            ),
-        )
-        return redirect(
-            "organisation_detail",
-            content_type_id=content_type_id,
-            object_id=object_id,
-        )
+    # An already-Contacted organisation can receive a new follow-up draft.
+    # A follow-up never changes contact_status or an existing response.
+    is_follow_up = organisation.contact_status != "not_yet_contacted"
 
     recipient_email = (organisation.public_email or "").strip()
     try:
@@ -3818,6 +3805,8 @@ def create_manual_email_draft(
         EmailDraft.objects.filter(
             opportunity__content_type=content_type,
             opportunity__object_id=object_id,
+            # Same rule as generation: only drafts of the same kind count.
+            is_follow_up=is_follow_up,
             workflow_status__in=[
                 "draft",
                 "awaiting_approval",
@@ -3882,6 +3871,7 @@ def create_manual_email_draft(
         subject=subject,
         body=body,
         outreach_purpose=outreach_purpose,
+        is_follow_up=is_follow_up,
         workflow_status="draft",
         generation_status="success",
         requested_by=request.user,
@@ -4378,7 +4368,12 @@ def submit_email_draft_for_review(request, draft_id):
             content_type_id=opportunity.content_type_id,
             object_id=opportunity.object_id,
         )
-    if organisation.contact_status != "not_yet_contacted":
+    # An initial draft cannot go out once the organisation has been
+    # contacted; a follow-up draft is exactly for that case.
+    if (
+        organisation.contact_status != "not_yet_contacted"
+        and not draft.is_follow_up
+    ):
         messages.error(
             request,
             "This organisation has already been contacted.",
@@ -4652,7 +4647,12 @@ def approve_email_draft(request, draft_id):
             content_type_id=opportunity.content_type_id,
             object_id=opportunity.object_id,
         )
-    if organisation.contact_status != "not_yet_contacted":
+    # An initial draft cannot go out once the organisation has been
+    # contacted; a follow-up draft is exactly for that case.
+    if (
+        organisation.contact_status != "not_yet_contacted"
+        and not draft.is_follow_up
+    ):
         messages.error(
             request,
             "This organisation has already been contacted.",
@@ -5054,7 +5054,12 @@ def mark_email_draft_sent(request, draft_id):
             "organisation_detail",
             **redirect_kwargs,
         )
-    if organisation.contact_status != "not_yet_contacted":
+    # An initial draft cannot go out once the organisation has been
+    # contacted; a follow-up draft is exactly for that case.
+    if (
+        organisation.contact_status != "not_yet_contacted"
+        and not draft.is_follow_up
+    ):
         messages.error(
             request,
             "This organisation has already been contacted.",
@@ -5403,24 +5408,30 @@ def mark_email_draft_sent(request, draft_id):
                 ]
             )
 
-            organisation.contact_status = "contacted"
-            organisation.save(
-                update_fields=[
-                    "contact_status",
-                ]
-            )
+            if not locked_draft.is_follow_up:
+                # Initial outreach: only this organisation becomes
+                # Contacted. A follow-up leaves the organisation
+                # Contacted and never overwrites an existing response
+                # (Interested / Not Interested / Do Not Contact); the
+                # sent draft itself is the evidence.
+                organisation.contact_status = "contacted"
+                organisation.save(
+                    update_fields=[
+                        "contact_status",
+                    ]
+                )
 
-            opportunity.status = "contacted"
-            opportunity.date_contacted = sent_time
-            opportunity.outreach_method = "email"
+                opportunity.status = "contacted"
+                opportunity.date_contacted = sent_time
+                opportunity.outreach_method = "email"
 
-            opportunity.save(
-                update_fields=[
-                    "status",
-                    "date_contacted",
-                    "outreach_method",
-                ]
-            )
+                opportunity.save(
+                    update_fields=[
+                        "status",
+                        "date_contacted",
+                        "outreach_method",
+                    ]
+                )
 
             record_email_draft_history(
                 draft=locked_draft,
@@ -5750,6 +5761,16 @@ def record_external_outreach(
     content_type_id,
     object_id,
 ):
+    """
+    Record outreach completed outside the system (phone or a manually sent
+    email). It never sends an email. The user supplies the actual contact
+    date, which is stored separately from the time it was recorded.
+    """
+    detail_url = reverse(
+        "organisation_detail",
+        args=[content_type_id, object_id],
+    )
+
     if not request.user.has_perm(
         "outreach.change_opportunity"
     ):
@@ -5758,11 +5779,7 @@ def record_external_outreach(
             "You do not have permission to record external outreach.",
         )
 
-        return redirect(
-            "organisation_detail",
-            content_type_id=content_type_id,
-            object_id=object_id,
-        )
+        return redirect(detail_url)
 
     content_type = get_object_or_404(
         ContentType,
@@ -5780,7 +5797,7 @@ def record_external_outreach(
             "Organisation not found."
         )
 
-    organisation = get_object_or_404(
+    get_object_or_404(
         model_class,
         pk=object_id,
     )
@@ -5790,78 +5807,121 @@ def record_external_outreach(
         "",
     ).strip()
 
+    contact_date = request.POST.get("contact_date", "").strip()
+    contact_time = request.POST.get("contact_time", "").strip()
+
+    def back_with_input():
+        # Keep what the user entered so a correction does not mean
+        # starting again. The values are escaped when displayed.
+        query = urlencode(
+            {
+                "external": "1",
+                "ext_method": outreach_method,
+                "ext_date": contact_date,
+                "ext_time": contact_time,
+            }
+        )
+
+        return redirect(f"{detail_url}?{query}")
+
+    def refuse(message):
+        messages.error(request, message)
+
+        return redirect(detail_url)
+
     allowed_methods = {
         "phone",
         "manual_email",
     }
+
+    contact_moment = None
 
     if outreach_method not in allowed_methods:
         messages.error(
             request,
             "Please select a valid outreach method.",
         )
+        # Fall through to also report a date problem in one pass.
+        method_ok = False
+    else:
+        method_ok = True
 
-        return redirect(
-            "organisation_detail",
-            content_type_id=content_type_id,
-            object_id=object_id,
-        )
-
-    latest_opportunity = (
-        Opportunity.objects.filter(
-            content_type=content_type,
-            object_id=object_id,
-        )
-        .order_by("-date_created")
-        .first()
+    contact_moment, date_error = parse_contact_datetime(
+        contact_date,
+        contact_time,
     )
 
-    if (
-        latest_opportunity
-        and latest_opportunity.status == "do_not_contact"
-    ):
-        messages.error(
-            request,
-            "This organisation is marked Do Not Contact.",
-        )
+    if date_error:
+        messages.error(request, date_error)
 
-        return redirect(
-            "organisation_detail",
-            content_type_id=content_type_id,
-            object_id=object_id,
-        )
+    if not method_ok or date_error:
+        return back_with_input()
 
     with transaction.atomic():
-        if organisation.contact_status == "contacted":
-            latest_opportunity = Opportunity.objects.create(
-                content_type=content_type,
-                object_id=object_id,
-                status="contacted",
-                date_contacted=timezone.now(),
-                outreach_method=outreach_method,
-                notes="Follow-up outreach recorded.",
+        # Lock the selected organisation so archiving or a Do Not Contact
+        # response cannot slip in between the checks and the update.
+        organisation = model_class.objects.select_for_update().get(
+            pk=object_id
+        )
+
+        if organisation.is_archived:
+            return refuse(
+                "This organisation is archived. External outreach "
+                "cannot be recorded."
             )
 
-        elif latest_opportunity is None:
-            latest_opportunity = Opportunity.objects.create(
+        opportunities = list(
+            Opportunity.objects.filter(
+                content_type=content_type,
+                object_id=object_id,
+            ).order_by("-date_created", "-id")
+        )
+
+        # Do Not Contact on ANY opportunity takes precedence.
+        if any(op.status == "do_not_contact" for op in opportunities):
+            return refuse(
+                "This organisation is marked Do Not Contact. External "
+                "outreach cannot be recorded."
+            )
+
+        latest_opportunity = opportunities[0] if opportunities else None
+
+        recorded = {
+            "date_contacted": contact_moment,
+            "outreach_method": outreach_method,
+            "contact_recorded_at": timezone.now(),
+            "contact_recorded_by": request.user,
+        }
+
+        if organisation.contact_status == "contacted":
+            # A follow-up is recorded as its own entry. It leaves any
+            # existing response untouched.
+            Opportunity.objects.create(
                 content_type=content_type,
                 object_id=object_id,
                 status="contacted",
-                date_contacted=timezone.now(),
-                outreach_method=outreach_method,
+                notes="Follow-up outreach recorded.",
+                **recorded,
+            )
+
+        elif (
+            latest_opportunity is not None
+            and latest_opportunity.status == "not_yet_contacted"
+        ):
+            for field, value in recorded.items():
+                setattr(latest_opportunity, field, value)
+
+            latest_opportunity.status = "contacted"
+            latest_opportunity.save(
+                update_fields=[*recorded.keys(), "status"]
             )
 
         else:
-            latest_opportunity.status = "contacted"
-            latest_opportunity.date_contacted = timezone.now()
-            latest_opportunity.outreach_method = outreach_method
-
-            latest_opportunity.save(
-                update_fields=[
-                    "status",
-                    "date_contacted",
-                    "outreach_method",
-                ]
+            Opportunity.objects.create(
+                content_type=content_type,
+                object_id=object_id,
+                status="contacted",
+                **recorded,
             )
 
         organisation.contact_status = "contacted"
@@ -5877,12 +5937,9 @@ def record_external_outreach(
         "External outreach recorded successfully.",
     )
 
-    return redirect(
-        "organisation_detail",
-        content_type_id=content_type_id,
-        object_id=object_id,
-    )
-                                
+    return redirect(detail_url)
+
+
 @login_required
 @permission_required(
     "outreach.add_bank",
@@ -5993,6 +6050,12 @@ def edit_organisation(request, content_type_id, object_id):
         for name in list(form.fields):
             if name not in form._meta.fields:
                 del form.fields[name]
+
+        # Email is required when adding an organisation. Editing must not
+        # block changes to an existing record (for example an imported one)
+        # that has no email.
+        if "public_email" in form.fields:
+            form.fields["public_email"].required = False
 
         return form
 
@@ -6218,6 +6281,27 @@ def email_modal(request, content_type_id, object_id):
     rows = _draft_rows(drafts, request.user, flags)
     current_row = next((row for row in rows if row["is_current"]), None)
 
+    # A sent email is evidence, never an editable draft. It is shown as
+    # the last email sent, and a new follow-up starts as a new draft.
+    last_sent = None
+
+    if current_row and current_row["draft"].workflow_status == "sent":
+        last_sent = current_row["draft"]
+        current_row = None
+
+    # An older INITIAL draft left on an already-contacted organisation
+    # (for example one imported as Contacted) cannot be sent. It is shown
+    # as history, and a new follow-up can be started beside it.
+    legacy_initial = None
+
+    if (
+        current_row
+        and not current_row["draft"].is_follow_up
+        and flags["contacted"]
+    ):
+        legacy_initial = current_row["draft"]
+        current_row = None
+
     key = org_key(content_type_id, object_id)
     stash = pop_stash(request, key, request.GET.get("stash"))
 
@@ -6269,6 +6353,11 @@ def email_modal(request, content_type_id, object_id):
         "org_key": key,
         "flags": flags,
         "current": current,
+        "last_sent": last_sent,
+        "legacy_initial": legacy_initial,
+        "is_follow_up": (
+            current.is_follow_up if current else flags["is_follow_up"]
+        ),
         "actions": actions,
         "rows": rows,
         "stash": stash or {},

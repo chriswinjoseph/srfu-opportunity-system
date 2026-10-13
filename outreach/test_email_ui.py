@@ -178,9 +178,16 @@ class ModalAvailabilityTests(EmailUiBase):
         )
         self.assert_unavailable("Do Not Contact")
 
-    def test_contacted_organisation_gets_no_new_initial_path(self):
+    def test_contacted_organisation_gets_a_follow_up_path_not_an_initial_one(self):
+        # An already-contacted organisation is no longer "unavailable": it
+        # can receive a new follow-up draft (see test_follow_up.py).
         Bank.objects.filter(pk=self.bank.pk).update(contact_status="contacted")
-        self.assert_unavailable("already been contacted")
+
+        page = self.modal(self.staff)
+
+        self.assertContains(page, 'data-field="follow-up-label"')
+        self.assertNotContains(page, "has already been contacted")
+        self.assertNotContains(page, "New initial email outreach is unavailable")
 
     def test_missing_or_invalid_recipient(self):
         for value in ("", "not-an-email"):
@@ -196,9 +203,12 @@ class ModalAvailabilityTests(EmailUiBase):
 
         page = self.modal(self.staff)
 
-        self.assertContains(page, "was already sent by")
-        self.assertNotContains(page, "Save Draft")
+        # The sent email is shown as evidence and is never editable. A new
+        # follow-up is a separate draft, created through its own form.
+        self.assertContains(page, 'data-field="last-sent"')
+        self.assertContains(page, "was sent by")
         self.assertNotContains(page, reverse("update_email_draft", args=[draft.draft_id]))
+        self.assertNotContains(page, reverse("save_and_submit_email_draft", args=[draft.draft_id]))
 
     def test_server_stays_authoritative_if_the_dashboard_is_stale(self):
         # The dialog was opened while the organisation could be contacted;
@@ -716,9 +726,10 @@ class GenerationViaDialogTests(EmailUiBase):
         Opportunity.objects.filter(pk=self.opportunity.pk).update(status="not_yet_contacted")
         Bank.objects.filter(pk=self.bank.pk).update(is_archived=True)
         self.generate(self.staff)
-        Bank.objects.filter(pk=self.bank.pk).update(is_archived=False, contact_status="contacted")
-        self.generate(self.staff)
 
+        # Do Not Contact and archived organisations never generate. (An
+        # already-contacted organisation now gets a follow-up draft; that
+        # path is covered in test_follow_up.py.)
         ai.assert_not_called()
         self.assertEqual(EmailDraft.objects.count(), 0)
 

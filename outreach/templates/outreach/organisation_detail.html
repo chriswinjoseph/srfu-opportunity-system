@@ -97,24 +97,24 @@
 
             <div class="em-statuses" aria-label="Statuses">
                 <span><strong>Contact status:</strong> <span class="em-badge {% if org.contact_status == 'contacted' %}em-badge-green{% else %}em-badge-grey{% endif %}">{{ org.get_contact_status_display }}</span></span>
-                {% if latest_opportunity %}<span><strong>Outreach response:</strong> <span class="em-badge em-badge-grey">{{ latest_opportunity.get_status_display }}</span></span>{% endif %}
+                {% if outcome_status %}<span><strong>Outreach response:</strong> <span class="em-badge {% if outcome_status == 'do_not_contact' %}em-badge-red{% elif outcome_status == 'interested' %}em-badge-green{% else %}em-badge-grey{% endif %}" data-field="outcome">{{ outcome_label }}</span></span>{% elif org.contact_status == "contacted" %}<span><strong>Outreach response:</strong> <span class="em-badge em-badge-grey" data-field="outcome">No response recorded</span></span>{% endif %}
                 {% if latest_draft %}<span><strong>Latest email:</strong> <span class="em-badge em-badge-{{ latest_draft.workflow_status|draft_status_css }}">{{ latest_draft.workflow_status|draft_status_label }}</span></span>{% endif %}
             </div>
 
             {% if has_do_not_contact %}
-                <div class="em-banner em-banner-error">This organisation is marked <strong>Do Not Contact</strong>. New email outreach is unavailable.</div>
+                <div class="em-banner em-banner-error" data-field="blocked-reason">This organisation is marked <strong>Do Not Contact</strong>. Generating, approving and sending emails, and recording external outreach, are unavailable. Earlier emails remain below.</div>
             {% elif org.contact_status == "contacted" %}
-                <div class="em-banner em-banner-info">This organisation has already been contacted. New initial email outreach is unavailable, but follow-up outreach can still be recorded.</div>
+                <div class="em-banner em-banner-info" data-field="follow-up-note">This organisation has already been contacted. Use <strong>Email Organisation</strong> to write a follow-up email (it needs Admin approval before it is sent), or record follow-up outreach completed outside the system.</div>
             {% endif %}
 
             {% if latest_draft and latest_draft.workflow_status == "sent" and latest_draft.sent_by and latest_draft.sent_at %}
                 <div class="em-banner em-banner-info" id="email-already-sent">
-                    This email was already sent by {{ latest_draft.sent_by.get_full_name|default:latest_draft.sent_by.email }} on {{ latest_draft.sent_at|date:"j F Y" }} at {{ latest_draft.sent_at|time:"g:i A" }}.
+                    This email was already sent by {{ latest_draft.sent_by.get_full_name|default:latest_draft.sent_by.email }} on {{ latest_draft.sent_at|date:"j F Y" }} at {{ latest_draft.sent_at|melbourne_clock }}.
                 </div>
             {% endif %}
 
             {% if org.is_archived %}
-                <div class="em-banner em-banner-warning">This organisation is archived. It is hidden from lists and cannot be contacted.</div>
+                <div class="em-banner em-banner-warning" data-field="blocked-reason">This organisation is archived. It is hidden from lists and cannot be contacted: emails cannot be generated, approved or sent, and external outreach cannot be recorded. Earlier emails remain below.</div>
             {% endif %}
 
             {% if org.is_archived and latest_draft and latest_draft.workflow_status == "sending" %}
@@ -129,22 +129,27 @@
                     <button type="button" class="em-btn em-btn-blue" id="open-email-modal" data-em-open data-em-key="{{ org_key }}" data-em-url="{% url 'email_modal' content_type_id object_id %}?return={{ detail_path|urlencode:'' }}">Email Organisation</button>
                 {% endif %}
                 {% if perms.outreach.change_opportunity and not org.is_archived and not has_do_not_contact %}
-                    <button type="button" class="em-btn" id="toggle-external-outreach" aria-expanded="false" aria-controls="external-outreach-panel">{% if org.contact_status == "contacted" %}Record Follow-Up Outreach{% else %}Record External Outreach{% endif %}</button>
+                    <button type="button" class="em-btn" id="toggle-external-outreach" aria-expanded="{% if external_form.open %}true{% else %}false{% endif %}" aria-controls="external-outreach-panel">{% if org.contact_status == "contacted" %}Record Follow-Up Outreach{% else %}Record External Outreach{% endif %}</button>
                 {% endif %}
             </div>
 
             {% if perms.outreach.change_opportunity and not org.is_archived and not has_do_not_contact %}
-                <section class="external-outreach-panel em-row-body" id="external-outreach-panel" hidden>
+                <section class="external-outreach-panel em-row-body" id="external-outreach-panel" {% if not external_form.open %}hidden{% endif %}>
                     <h3>{% if org.contact_status == "contacted" %}Record Follow-Up Outreach{% else %}Record External Outreach{% endif %}</h3>
                     <p>{% if org.contact_status == "contacted" %}Record another outreach attempt. The organisation will remain Contacted.{% else %}Use this when the organisation was contacted outside the system, such as by phone or by a manually sent email.{% endif %}</p>
                     <form method="post" action="{% url 'record_external_outreach' content_type_id object_id %}">
                         {% csrf_token %}
                         <label class="em-label" for="external-outreach-method">Outreach Method</label>
-                        <select class="em-input" id="external-outreach-method" name="outreach_method" required>
+                        <select class="em-input" id="external-outreach-method" name="outreach_method" required aria-required="true">
                             <option value="">Select outreach method</option>
-                            <option value="phone">Phone Call</option>
-                            <option value="manual_email">Manually Sent Email</option>
+                            <option value="phone" {% if external_form.method == "phone" %}selected{% endif %}>Phone Call</option>
+                            <option value="manual_email" {% if external_form.method == "manual_email" %}selected{% endif %}>Manually Sent Email</option>
                         </select>
+                        <label class="em-label" for="external-outreach-date">Contact Date <span aria-hidden="true">*</span></label>
+                        <input class="em-input" id="external-outreach-date" name="contact_date" type="date" max="{{ today_melbourne }}" value="{{ external_form.date }}" required aria-required="true" aria-describedby="external-outreach-tz">
+                        <label class="em-label" for="external-outreach-time">Contact Time (optional)</label>
+                        <input class="em-input" id="external-outreach-time" name="contact_time" type="time" value="{{ external_form.time }}" aria-describedby="external-outreach-tz">
+                        <p class="em-hint" id="external-outreach-tz">Dates and times are in Melbourne time. Recording this does not send an email.</p>
                         <div class="em-actions"><button type="submit" class="em-btn em-btn-blue">Record Contact</button></div>
                     </form>
                 </section>
@@ -157,7 +162,7 @@
                 {% with draft=row.draft actions=row.actions %}
                 <details class="em-row" id="draft-{{ draft.draft_id }}" {% if draft.draft_id|stringformat:"s" == selected_draft_id %}open{% elif not selected_draft_id and forloop.first %}open{% endif %}>
                     <summary>
-                        <span class="em-row-subject">Subject: {{ draft.subject|default:"(no subject)" }}</span>
+                        <span class="em-row-subject">Subject: {{ draft.subject|default:"(no subject)" }}</span>{% if draft.is_follow_up %}<span class="em-badge em-badge-grey" data-field="follow-up-badge">Follow-up</span>{% endif %}
                         <span class="em-row-date">Date: {{ draft.created_at|date:"j M Y" }}</span>
                         <span class="em-badge em-badge-{{ draft.workflow_status|draft_status_css }}">Status: {{ draft.workflow_status|draft_status_label }}</span>
                     </summary>
@@ -168,8 +173,8 @@
                             <p><strong>Version:</strong> {{ draft.version }}{% if actions.superseded %} (older version){% endif %}</p>
                             <p><strong>Created by:</strong> {% if draft.requested_by %}{{ draft.requested_by.get_full_name|default:draft.requested_by.email }}{% else %}<span class="em-missing">Not recorded</span>{% endif %}</p>
                             {% if draft.assigned_to %}<p><strong>Currently assigned to:</strong> {{ draft.assigned_to.get_full_name|default:draft.assigned_to.email }}</p>{% endif %}
-                            {% if draft.approved_by and draft.approved_at %}<p><strong>Approved by:</strong> {{ draft.approved_by.get_full_name|default:draft.approved_by.email }} on {{ draft.approved_at|date:"j M Y" }} at {{ draft.approved_at|time:"g:i A" }} (version {{ draft.approved_version }})</p>{% endif %}
-                            {% if draft.sent_by and draft.sent_at %}<p><strong>Sent by:</strong> {{ draft.sent_by.get_full_name|default:draft.sent_by.email }} on {{ draft.sent_at|date:"j M Y" }} at {{ draft.sent_at|time:"g:i A" }}</p>{% endif %}
+                            {% if draft.approved_by and draft.approved_at %}<p><strong>Approved by:</strong> {{ draft.approved_by.get_full_name|default:draft.approved_by.email }} on {{ draft.approved_at|date:"j M Y" }} at {{ draft.approved_at|melbourne_clock }} (version {{ draft.approved_version }})</p>{% endif %}
+                            {% if draft.sent_by and draft.sent_at %}<p><strong>Sent by:</strong> {{ draft.sent_by.get_full_name|default:draft.sent_by.email }} on {{ draft.sent_at|date:"j M Y" }} at {{ draft.sent_at|melbourne_clock }}</p>{% endif %}
                             {% if draft.cancelled_at %}<p><strong>Cancelled:</strong> {{ draft.cancelled_at|date:"j M Y" }}{% if draft.cancellation_reason %}. {{ draft.cancellation_reason }}{% endif %}</p>{% endif %}
                         </div>
 
@@ -275,7 +280,7 @@
                                 <summary class="em-row-date" style="cursor:pointer">Workflow history ({{ draft.workflow_history.all|length }})</summary>
                                 <ul class="em-history-list">
                                     {% for event in draft.workflow_history.all %}
-                                        <li>{{ event.created_at|date:"j M Y H:i" }} &middot; {{ event.get_action_display }}{% if event.performed_by %} by {{ event.performed_by.get_full_name|default:event.performed_by.email }}{% endif %} (version {{ event.version }}){% if event.reason %}: {{ event.reason }}{% endif %}</li>
+                                        <li>{{ event.created_at|melbourne }} &middot; {{ event.get_action_display }}{% if event.performed_by %} by {{ event.performed_by.get_full_name|default:event.performed_by.email }}{% endif %} (version {{ event.version }}){% if event.reason %}: {{ event.reason }}{% endif %}</li>
                                     {% endfor %}
                                 </ul>
                             </details>
@@ -292,8 +297,9 @@
             {% for opp in opportunities %}
                 <div class="em-row em-row-body">
                     <p><strong>Status:</strong> {{ opp.get_status_display }}</p>
-                    <p><strong>Created:</strong> {{ opp.date_created }}</p>
-                    {% if opp.date_contacted %}<p><strong>Contacted:</strong> {{ opp.date_contacted }}</p>{% endif %}
+                    <p><strong>Created:</strong> {{ opp.date_created|melbourne }}</p>
+                    {% if opp.date_contacted %}<p><strong>Contacted:</strong> {{ opp.date_contacted|melbourne_contact }}</p>{% endif %}
+                    {% if opp.contact_recorded_at %}<p><strong>Recorded:</strong> {{ opp.contact_recorded_at|melbourne }}{% if opp.contact_recorded_by %} by {{ opp.contact_recorded_by.get_full_name|default:opp.contact_recorded_by.email }}{% endif %}</p>{% endif %}
                     {% if opp.outreach_method %}<p><strong>Method:</strong> {{ opp.outreach_method }}</p>{% endif %}
                     {% if opp.notes %}<p><strong>Notes:</strong> {{ opp.notes }}</p>{% endif %}
                     {% if opp.status == "contacted" %}

@@ -6979,7 +6979,8 @@ class ManualOrganisationEntryRequirementTests(TestCase):
             "suburb": "Ballarat",
             "postcode": "3350",
             "website_url": "",
-            "public_email": "",
+            # Email is required when adding an organisation.
+            "public_email": "bank@example.com",
             "public_phone": "",
             "source_url": "",
         }
@@ -6990,15 +6991,19 @@ class ManualOrganisationEntryRequirementTests(TestCase):
     def test_whitespace_only_required_fields_are_rejected(self):
         response = self.client.post(
             self.url,
-            self.bank_data(bank_name="   ", postcode="   ", state=""),
+            self.bank_data(
+                bank_name="   ", postcode="   ", state="", public_email="   "
+            ),
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Bank.objects.count(), 0)
         form = response.context["form"]
         self.assertIn("bank_name", form.errors)
-        self.assertIn("postcode", form.errors)
         self.assertIn("state", form.errors)
+        self.assertIn("public_email", form.errors)
+        # Postcode is optional, so a blank one is not an error.
+        self.assertNotIn("postcode", form.errors)
 
     def test_values_are_trimmed_and_valid_values_preserved_on_error(self):
         response = self.client.post(
@@ -7074,6 +7079,7 @@ class ManualOrganisationEntryRequirementTests(TestCase):
                         state=state,
                         postcode=postcode,
                         suburb=f"Suburb {state}",
+                        public_email=f"bank-{state.lower()}@example.com",
                     ),
                 )
                 self.assertEqual(response.status_code, 302)
@@ -7139,6 +7145,7 @@ class ManualOrganisationEntryRequirementTests(TestCase):
                         suburb=f"Suburb {index}",
                         postcode=str(3350 + index),
                         public_phone=phone,
+                        public_email=f"phone-bank-{index}@example.com",
                     ),
                 )
                 self.assertEqual(response.status_code, 302)
@@ -7156,13 +7163,14 @@ class ManualOrganisationEntryRequirementTests(TestCase):
                 )
 
     # --- FR-04 / edge case 1 / FR-11
-    def test_organisation_created_without_any_contact_information(self):
+    def test_organisation_created_without_optional_contact_information(self):
+        # Only the email is required; a phone number is optional.
         response = self.client.post(self.url, self.bank_data())
 
         self.assertEqual(response.status_code, 302)
 
         bank = Bank.objects.get()
-        self.assertEqual(bank.public_email, "")
+        self.assertEqual(bank.public_email, "bank@example.com")
         self.assertEqual(bank.public_phone, "")
         self.assertEqual(bank.contact_status, "not_yet_contacted")
         self.assertEqual(bank.record_source, "Manual Entry")
@@ -7230,7 +7238,10 @@ class ManualOrganisationEntryRequirementTests(TestCase):
 
         response = self.client.post(
             self.url,
-            self.bank_data(state="NSW", postcode="2000", suburb="Sydney"),
+            self.bank_data(
+                state="NSW", postcode="2000", suburb="Sydney",
+                public_email="bank-nsw@example.com",
+            ),
         )
 
         self.assertEqual(response.status_code, 302)
@@ -7478,7 +7489,9 @@ class ManualOrganisationEntryRequirementTests(TestCase):
         self.assertEqual(bank.region, "")
         self.assertEqual(bank.state, "VIC")
 
-    def test_both_region_and_suburb_empty_is_invalid(self):
+    def test_both_region_and_suburb_empty_is_valid(self):
+        # Region and suburb are optional (the earlier "at least one of
+        # them" rule was removed).
         response = self.client.post(
             self.url,
             self.bank_data(
@@ -7489,32 +7502,25 @@ class ManualOrganisationEntryRequirementTests(TestCase):
             ),
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(Bank.objects.count(), 0)
+        self.assertEqual(response.status_code, 302)
 
-        errors = response.context["form"].errors
-        self.assertIn("region", errors)
-        self.assertIn("suburb", errors)
-        self.assertContains(response, "Enter a region or a suburb")
+        bank = Bank.objects.get()
+        self.assertEqual(bank.bank_name, "Keep Me Bank")
+        self.assertEqual(bank.region, "")
+        self.assertEqual(bank.suburb, "")
+        self.assertEqual(bank.postcode, "3350")
 
-        # Other entered values are preserved.
-        self.assertContains(response, "Keep Me Bank")
-        self.assertEqual(
-            response.context["form"]["postcode"].value(),
-            "3350",
-        )
-
-    def test_whitespace_only_region_and_suburb_is_invalid(self):
-        response = self.client.post(
+    def test_whitespace_only_region_and_suburb_is_stored_as_empty(self):
+        self.client.post(
             self.url,
             self.bank_data(region="   ", suburb="   "),
         )
 
-        self.assertEqual(Bank.objects.count(), 0)
-        self.assertIn("region", response.context["form"].errors)
-        self.assertIn("suburb", response.context["form"].errors)
+        bank = Bank.objects.get()
+        self.assertEqual(bank.region, "")
+        self.assertEqual(bank.suburb, "")
 
-    def test_region_or_suburb_required_for_branch_and_club(self):
+    def test_region_and_suburb_are_optional_for_branch_and_club(self):
         bank = Bank.objects.create(
             bank_name="Parent Bank",
             region="VIC",
@@ -7531,6 +7537,7 @@ class ManualOrganisationEntryRequirementTests(TestCase):
             "postcode": "3350",
             "region": "",
             "suburb": "  ",
+            "public_email": "branch@example.com",
         }
         club_data = {
             "organisation_type": "club",
@@ -7539,18 +7546,22 @@ class ManualOrganisationEntryRequirementTests(TestCase):
             "postcode": "3350",
             "region": "",
             "suburb": "",
+            "public_email": "club@example.com",
         }
 
         for data in (branch_data, club_data):
             with self.subTest(type=data["organisation_type"]):
                 response = self.client.post(self.url, data)
-                self.assertIn("region", response.context["form"].errors)
+                self.assertEqual(response.status_code, 302)
 
-                ok = self.client.post(
-                    self.url,
-                    {**data, "region": "Central Highlands"},
+                # The email is still required for every type.
+                missing = self.client.post(
+                    self.url, {**data, "public_email": ""}
                 )
-                self.assertEqual(ok.status_code, 302)
+                self.assertEqual(missing.status_code, 200)
+                self.assertIn(
+                    "public_email", missing.context["form"].errors
+                )
 
         self.assertEqual(Branch.objects.count(), 1)
         self.assertEqual(Club.objects.count(), 1)

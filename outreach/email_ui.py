@@ -126,11 +126,6 @@ def organisation_flags(organisation, has_do_not_contact):
             "This organisation is marked Do Not Contact. "
             "New email outreach is unavailable."
         )
-    if flags["contacted"]:
-        reasons.append(
-            "This organisation has already been contacted. "
-            "New initial email outreach is unavailable."
-        )
     if not flags["valid_recipient"]:
         reasons.append(
             "A valid recipient email address is required before an "
@@ -138,6 +133,8 @@ def organisation_flags(organisation, has_do_not_contact):
         )
 
     flags["reasons"] = reasons
+    # An already-Contacted organisation can receive a new follow-up draft.
+    flags["is_follow_up"] = flags["contacted"]
     flags["can_start_outreach"] = not reasons
 
     return flags
@@ -173,8 +170,12 @@ def compute_actions(draft, user, flags, newest_open_id):
         "notes": [],
     }
 
+    # An initial draft cannot go out once the organisation has been
+    # contacted. A follow-up draft is exactly for that case.
     blocked = flags["archived"] or flags["do_not_contact"] or (
-        flags["contacted"] and status != "sent"
+        flags["contacted"]
+        and not draft.is_follow_up
+        and status != "sent"
     )
 
     can_author = (
@@ -191,12 +192,25 @@ def compute_actions(draft, user, flags, newest_open_id):
     )
 
     if flags["archived"]:
-        actions["notes"].append("Archived organisations are read-only.")
-    elif flags["do_not_contact"] and status != "sent":
-        actions["notes"].append("Do Not Contact: no further actions.")
-    elif flags["contacted"] and status not in ("sent", "cancelled"):
         actions["notes"].append(
-            "The organisation has already been contacted."
+            "This organisation is archived, so its emails are read-only. "
+            "Generating, approving and sending are unavailable; the "
+            "history stays available."
+        )
+    elif flags["do_not_contact"] and status != "sent":
+        actions["notes"].append(
+            "This organisation is marked Do Not Contact. Generating, "
+            "approving and sending are unavailable; the history stays "
+            "available."
+        )
+    elif (
+        flags["contacted"]
+        and not draft.is_follow_up
+        and status not in ("sent", "cancelled")
+    ):
+        actions["notes"].append(
+            "This is an initial email and the organisation has already "
+            "been contacted. Start a follow-up email instead."
         )
 
     if (
