@@ -236,7 +236,7 @@ If the scraper finds a genuinely new organisation with sufficient information, t
 
 Finding public contact information does not mean that outreach has occurred.
 
-#### FR-29: Handle Changed Scraped Information
+#### FR-19: Handle Changed Scraped Information
 
 If the scraper finds information that differs from an existing record, the system must:
 
