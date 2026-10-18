@@ -16,6 +16,7 @@ dates and the acting Admin are never inferred.
 import json
 import re
 from collections import defaultdict
+from datetime import timedelta
 
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
@@ -25,13 +26,34 @@ from outreach.models import Bank, Contact, EmailDraft, Opportunity
 
 from .evidence import map_organisation_status
 from .ingest import IMPORT_METHOD
-from .models import ContactSource, OrganisationSource
+from .models import ContactSource, FieldProvenance, OrganisationSource
 from .normalise import norm_email, norm_name, norm_state
 from .workbook import SOURCE_KEY, parse_workbook
 
 NOTE_PATTERN = re.compile(r"Source organisation ID:\s*(\S+)")
 UNSPECIFIED = "(unspecified)"
 LATER_OUTREACH_METHODS = ("phone", "manual_email", "email")
+
+# Every kind of correction a plan can contain. Approval is always per kind.
+ALL_KINDS = (
+    "state_in_region",
+    "region_duplicate_of_state",
+    "unspecified_name",
+    "source_provenance",
+    "contact_provenance",
+    "contact_status",
+)
+
+# A bank is "unedited since import" when its last-updated time is within this
+# window of the time it was created (the importer saves a record more than once).
+UNEDITED_TOLERANCE = timedelta(seconds=5)
+
+
+def _unedited_since_import(bank):
+    return bool(
+        bank.date_added and bank.last_updated
+        and bank.last_updated - bank.date_added <= UNEDITED_TOLERANCE
+    )
 
 
 class Plan:
@@ -224,6 +246,12 @@ def build_plan(workbook_bytes, filename="workbook.xlsx"):
                     evidence=[c["status"] for c in group["contacts"]], basis=basis,
                 )
 
+        # Archived organisations are never changed by any other kind of correction.
+        if bank.is_archived:
+            plan.exclude("archived", "The organisation is archived, so nothing is changed.",
+                         organisation=label, workbook_id=sid)
+            continue
+
         # 2. State code stored in Region.
         region = (bank.region or "").strip()
 
@@ -235,6 +263,32 @@ def build_plan(workbook_bytes, filename="workbook.xlsx"):
         elif not bank.state and region and norm_state(region) != group["state"]:
             plan.exclude("state_in_region", "Region was edited and no longer holds the state code.",
                          organisation=label, workbook_id=sid)
+
+        # 2b. State already set, Region still holding the same state code. The code is a
+        # leftover of the earlier importer (not a deliberately entered region) only when
+        # the workbook agrees, the bank was never edited, and no source supplied a Region.
+        region_code = norm_state(region)
+
+        if bank.state and region and region_code and region.upper() == region_code:
+            if norm_state(bank.state) != group["state"] or region_code != group["state"]:
+                plan.exclude("region_duplicate_of_state",
+                             "The state code differs from the workbook, so it is uncertain.",
+                             organisation=label, workbook_id=sid)
+            elif not _unedited_since_import(bank):
+                plan.exclude("region_duplicate_of_state",
+                             "The bank was edited after import, so the Region may have been entered deliberately.",
+                             organisation=label, workbook_id=sid)
+            elif FieldProvenance.objects.filter(content_type=bank_ct, object_id=bank.pk, field="region").exists():
+                plan.exclude("region_duplicate_of_state",
+                             "A source supplied the Region, so it is not a leftover.",
+                             organisation=label, workbook_id=sid)
+            else:
+                plan.fix(
+                    "region_duplicate_of_state", organisation=label, workbook_id=sid, bank_id=bank.pk,
+                    field="region", old=region, new="", state=bank.state, basis=basis,
+                    evidence="Region equals the workbook state code, State is set, the bank was never edited, "
+                             "and no source supplied a Region.",
+                )
 
         # 3. "(unspecified)" contact names.
         wb_by_email = {norm_email(c["email"]): c for c in group["contacts"]}
@@ -308,6 +362,16 @@ def apply_plan(plan_dict, rollback_path=None):
 
         try:
             with transaction.atomic():
+                if kind in ("contact_status", "state_in_region", "region_duplicate_of_state", "source_provenance") \
+                        and Bank.objects.filter(pk=fix["bank_id"], is_archived=True).exists():
+                    raise _Skip("the organisation is archived")
+
+                if kind in ("unspecified_name", "contact_provenance") and Bank.objects.filter(
+                    is_archived=True,
+                    pk=Contact.objects.filter(pk=fix["contact_id"]).values_list("object_id", flat=True)[:1],
+                ).exists():
+                    raise _Skip("the organisation is archived")
+
                 if kind == "contact_status":
                     bank = Bank.objects.get(pk=fix["bank_id"])
                     reasons, opps = _later_activity(bank)
@@ -337,6 +401,19 @@ def apply_plan(plan_dict, rollback_path=None):
                     bank.state = fix["new"]
                     bank.region = ""
                     bank.save(update_fields=["state", "region"])
+                elif kind == "region_duplicate_of_state":
+                    bank = Bank.objects.get(pk=fix["bank_id"])
+
+                    if (
+                        (bank.region or "").strip() != fix["old"]
+                        or norm_state(bank.state) != norm_state(fix["state"])
+                        or not _unedited_since_import(bank)
+                    ):
+                        raise _Skip("the record changed since the preview")
+
+                    rollback.append({"model": "Bank", "pk": bank.pk, "field": "region", "old": bank.region})
+                    bank.region = ""
+                    bank.save(update_fields=["region"])
                 elif kind == "unspecified_name":
                     contact = Contact.objects.get(pk=fix["contact_id"])
 
