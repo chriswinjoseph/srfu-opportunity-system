@@ -270,15 +270,17 @@ class ScraperPageTests(IntakeTestCase):
         page = self.client.get(reverse("intake_run", args=[run.pk]))
         # No worker has checked in, so the page must not look as if it is progressing.
         self.assertContains(page, "Queued - not started")
-        self.assertContains(page, "No background worker is running")
+        self.assertContains(page, "background service that runs scrapes is not running")
         self.assertNotContains(page, 'id="run-worker-warning" hidden')    # warning is visible
-        self.assertContains(page, "run_intake_worker")
+        self.assertNotContains(page, "run_intake_worker")      # operator commands stay out of the user-facing page
+        self.assertNotContains(page, "manage.py")
+        self.assertContains(page, "system operator")
         status = self.client.get(reverse("intake_run_status", args=[run.pk])).json()
         self.assertEqual((status["status"], status["finished"], status["worker_alive"]), ("queued", False, False))
 
         beat("test-worker")
         page = self.client.get(reverse("intake_run", args=[run.pk]))
-        self.assertContains(page, "Waiting for the background worker to pick this up")
+        self.assertContains(page, "Waiting for the background service to pick this up")
         self.assertContains(page, 'id="run-worker-warning" hidden')      # warning hidden
         self.assertTrue(self.client.get(reverse("intake_run_status", args=[run.pk])).json()["worker_alive"])
 

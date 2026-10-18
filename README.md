@@ -131,6 +131,16 @@ is running. In a second terminal (with the virtual environment activated):
 python manage.py run_intake_worker
 ```
 
+On a Windows demo machine, one command starts the website and the worker
+together (and avoids starting duplicates):
+
+```
+powershell -ExecutionPolicy Bypass -File scripts\start-demo.ps1
+```
+
+Use `-Status` to see what is running and `-Stop` to stop both. Details are in
+`docs/Intake-Jobs.md`.
+
 ### Running the tests
 
 ```

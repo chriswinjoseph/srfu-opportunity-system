@@ -32,6 +32,55 @@ the same machine (SQLite is a single file). With a different database engine (se
    "Running", then shows the summary. Stop the worker with Ctrl+C: a job in progress is
    re-queued automatically once the lease expires (5 minutes by default).
 
+### Windows local demo (one command)
+
+`scripts\start-demo.ps1` starts the website and the worker together, using the project's
+virtual environment (`.venv`, then `venv`, whichever has the packages installed):
+
+```
+powershell -ExecutionPolicy Bypass -File scripts\start-demo.ps1            # start both
+powershell -ExecutionPolicy Bypass -File scripts\start-demo.ps1 -Status    # what is running
+powershell -ExecutionPolicy Bypass -File scripts\start-demo.ps1 -Stop      # stop both
+```
+
+Options: `-Port` (default 8000), `-VenvPath`, `-SettingsModule` and `-ExtraPythonPath`
+(to run against another settings file, for example a disposable database),
+`-StartupTimeoutSeconds` (default 45).
+
+What it does, in order:
+
+1. Finds a virtual environment that has the required packages.
+2. Confirms `DJANGO_SECRET_KEY` and `OPENAI_API_KEY` are set (in `.env` or the environment;
+   values are never printed).
+3. Runs `manage.py check` and `manage.py migrate --check`. It **never runs migrations**: if
+   the database needs them it stops and tells you to back up and migrate yourself.
+4. Looks for this project's existing website and worker processes and for another program on
+   the port. A process that is already running is reported and **not started again**; a busy
+   port stops the launch before anything starts.
+5. Starts the website (`runserver --noreload`) and the worker as separate hidden processes,
+   with logs in `logs\web.*.log` and `logs\worker.*.log` (ignored by git).
+6. Waits until the login page answers and the worker has checked in. If either stops or does
+   not report in time it prints the last log lines, stops whatever it started, and exits with
+   code 1.
+
+It does not start a scrape. The worker only processes jobs an Admin has queued on the Scraper
+page; it only claims `queued` scraper runs and uses the same claim, lease and permission rules
+described below. `-Stop` is safe at any time: a job that is mid-run is re-queued after its
+lease and resumes without creating duplicates.
+
+If the Scraper page shows that "the background service that runs scrapes is not running",
+the worker is stopped: run the launcher (or `-Status` to check). Users see only that
+plain-language notice; the commands stay here.
+
+Duplicate detection recognises processes started by the launcher, processes started by hand
+from the project folder with the project's virtual environment, and a worker started some
+other way (found through the heartbeat it writes). `-Stop` only stops processes it can
+identify as this project's in the first two ways; note that it therefore also stops a
+`runserver` you started by hand with the project's virtual environment.
+
+This launcher is for a single Windows demo machine. It does not restart a process that
+crashes later, and it is not a production deployment.
+
 ### In hosting
 
 Run the worker as a **second long-lived process next to the web process**, restarted
@@ -134,6 +183,33 @@ decision, nothing here has been applied):
 4. Apply the pending migrations, then use the Admin import. Legacy banks whose Region holds the
    state code are matched exactly (State is read from Region when blank), so the import links
    sources and provenance instead of holding every organisation for review.
+
+## Handover: what is needed before the worker can be set up in hosting
+
+The repository contains no deployment configuration (no Procfile, Dockerfile, platform file,
+service definition or production web server), so nothing here has been assumed or deployed.
+Two Playwright specs default to a `*.up.railway.app` address, which suggests an earlier
+deployment, but nothing in the repository confirms the platform. To add the worker as a
+managed, auto-restarting process the following is needed from the client or hosting owner:
+
+1. **Platform and plan** (for example Railway, Render, Azure, a Windows or Linux server), and who
+   owns the account and its costs.
+2. **How the website is run there** (a production web server such as gunicorn on Linux or
+   waitress on Windows is not yet a dependency) and the process or start command it uses.
+3. **Database.** The worker and the website must share one database. On a platform where they
+   run as separate services, SQLite cannot be shared; that needs PostgreSQL (connection details,
+   a driver in `requirements.txt`, and a backup plan). Existing data would need migrating.
+4. **Static files and HTTPS settings**: the public address, `DJANGO_ALLOWED_HOSTS`, CSRF trusted
+   origins, and how `staticfiles` is served.
+5. **Environment values** held in the platform's secret store: `DJANGO_SECRET_KEY`,
+   `OPENAI_API_KEY`, the SMTP settings.
+6. **Outbound access.** The worker must be able to reach only the approved public hosts over
+   HTTPS; any firewall or egress rule needs to allow them.
+7. **Restart policy and monitoring**: how the platform restarts a failed worker and where
+   `python manage.py intake_status` can be used as a health check.
+
+Once those are known, the worker is added as a separate process (`python manage.py
+run_intake_worker`) with automatic restart, as in the examples above.
 
 ## Hosting limits
 
