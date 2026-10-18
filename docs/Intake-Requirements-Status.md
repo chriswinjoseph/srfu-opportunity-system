@@ -61,13 +61,36 @@ requirement is not delivered (see Gaps).
 | AC-21 | No login-protected or non-public information | Met | Tests (login, forbidden, robots, bot-check); Live: the council page's automated-access check was reported, not bypassed |
 | AC-22 | Scraper summary: new, updated, unchanged, duplicate, incomplete, failed | Met | Tests; Browser; Live |
 
+## Manual verification, 14 October 2026
+
+Done by the team in the running application. The run figures below are read back from the
+project database's own run records (read-only); times there are stored in UTC.
+
+| Check | Result | Evidence |
+|---|---|---|
+| All 11 Bendigo Community Bank pages collected | **11 of 11 succeeded** | Run 1 (about 11:20 am Melbourne time): processed 11, failed 0 |
+| Repeat run creates and updates nothing | **Confirmed** | Runs 2 and 4 (repeats, the last at about 5:25 pm): processed 11, created 0, updated 0, failed 0 (10 unchanged, 1 exact duplicate) |
+| Archived organisations stay untouched | **Confirmed** | The three archived banks keep their earlier last-updated times and stay archived. The scraper matched one of them and reported "It was not changed or restored" on every run. See note 1 below |
+| Club source blocked, reported honestly | **Confirmed** | Run 3: status Failed, 1 failed, 0 processed; message says the site returned an automated-access check, nothing was collected and the check was not bypassed |
+| Staff access denied | **Confirmed** | Staff were refused on all intake pages and see no Import or Scraper links. Also re-checked on 18 October on a disposable database: 403 on every intake page |
+
+Notes:
+
+1. When the scraper matches an archived organisation it records the source link (a provenance
+   row in the intake tables, with a "last checked" time) so that later runs recognise it. The
+   organisation record itself is never changed or restored. Whether a provenance link to an
+   archived organisation is acceptable is a BA decision.
+2. Run 1 reported 9 updated: it filled blank fields on existing banks and created no new banks.
+   Both repeat runs reported 0 updated.
+
 ## Gaps that remain (not hidden by "Met")
 
 1. **Club source is not usable today.** The Moonee Valley council directory answered the honest
    collector with an automated-access (Incapsula) check instead of the page. The check is not
    bypassed. Club scraping therefore works only against mocked pages; a permitted alternative
    (council data export or written permission) is needed.
-2. **Only 3 of the 11 Bendigo pages were fetched live** (bounded check). All 11 are configured.
+2. **The earlier bounded live check fetched 3 of the 11 Bendigo pages.** The 14 October manual
+   run (above) collected all 11. All 11 are configured.
 3. **FR-15 is partial** for the reasons above; there is no Branch source at all.
 4. **No second typed-import template** exists for Branch / Club files; the optional columns are
    read if present and tested, but the Admin screen only describes the client workbook.
