@@ -1,0 +1,30 @@
+/* Data import, duplicate review and scraper pages. Builds on dashboard.css
+   and email_workflow.css so the pages match the rest of the site. */
+.in-page { padding: 16px 24px 40px; max-width: 1100px; margin: 0 auto; }
+.in-title { margin: 8px 0 4px; font-size: 26px; text-align: center; text-decoration: underline; text-underline-offset: 6px; }
+.in-sub { margin: 4px 0 18px; text-align: center; color: #374151; font-size: 14px; }
+.in-card { border: 1px solid #c8ccd4; border-radius: 6px; padding: 14px 16px; margin: 14px 0; background: #fff; }
+.in-card h2, .in-card h3 { margin: 0 0 8px; font-size: 18px; }
+.in-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.in-stat { border: 1px solid #d5d9e0; border-radius: 5px; padding: 8px 10px; background: #f8fafc; }
+.in-stat strong { display: block; font-size: 22px; }
+.in-stat span { font-size: 12px; color: #4b5563; }
+.in-table-wrap { overflow-x: auto; }
+.in-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.in-table th, .in-table td { padding: 6px 8px; border-bottom: 1px solid #e5e7eb; text-align: left; vertical-align: top; }
+.in-table th { background: #f3f4f6; font-weight: 800; }
+.in-row-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.in-field-list { display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; margin: 0; font-size: 14px; }
+.in-field-list dt { font-weight: 800; }
+.in-field-list dd { margin: 0; overflow-wrap: anywhere; }
+.in-choices { display: flex; flex-wrap: wrap; gap: 14px; margin: 6px 0 10px; }
+.in-choices label { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+.in-muted { color: #6b7280; font-size: 13px; }
+.in-progress { height: 10px; border-radius: 5px; background: #e5e7eb; overflow: hidden; }
+.in-progress > span { display: block; height: 100%; background: #2563eb; }
+.in-match { border: 1px solid #fcd34d; background: #fffbeb; border-radius: 5px; padding: 8px 10px; margin: 8px 0; }
+.in-match-archived { border-color: #d1d5db; background: #f3f4f6; }
+@media (max-width: 700px) {
+    .in-page { padding: 12px 14px 32px; }
+    .in-field-list { grid-template-columns: 1fr; }
+}

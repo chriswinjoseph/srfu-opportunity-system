@@ -34,7 +34,7 @@ The endpoint requires an authenticated user.
 
 | Parameter | Description | Allowed values/default |
 | --- | --- | --- |
-| `q` | Case-insensitive organisation-name search | Any text |
+| `q` | Case-insensitive search of name, location and contact fields. The words `bank`, `branch` and `club` (and their plurals) also return every organisation of that type, even when the word is not in its name. | Any text |
 | `type` | Filter by organisation type | `bank`, `branch`, `club` |
 | `region` | Case-insensitive region search | Any text |
 | `status` | Filter by organisation contact status | `not_yet_contacted`, `contacted` |

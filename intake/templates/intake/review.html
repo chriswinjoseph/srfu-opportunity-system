@@ -1,0 +1,62 @@
+{% extends "intake/base.html" %}
+{% block title %}Review{% endblock %}
+{% block content %}
+<h1 class="in-title">{{ review.get_kind_display }}</h1>
+<p class="in-sub">Run <a href="{% url 'intake_run' review.run_id %}">#{{ review.run_id }}</a> &middot; {% if pending %}Awaiting decision{% else %}Decided: {{ review.decision }}{% if review.decided_by %} by {{ review.decided_by.get_full_name|default:review.decided_by.email }}{% endif %}{% endif %}</p>
+<section class="in-card">
+    <h2>Submitted record</h2>
+    <dl class="in-field-list">{% for label, value in fields %}<dt>{{ label }}</dt><dd>{{ value }}</dd>{% endfor %}</dl>
+    {% if contacts %}<p class="in-muted">{{ contacts|length }} contact{{ contacts|length|pluralize }} will be added with this record.</p>{% endif %}
+    <p><strong>Why it was held:</strong> {{ review.reason }}</p>
+</section>
+
+{% if matches %}
+<section class="in-card">
+    <h2>Possible matching organisations</h2>
+    {% for m in matches %}
+    <div class="in-match {% if m.archived %}in-match-archived{% endif %}">
+        <strong>{% if m.url %}<a href="{{ m.url }}" target="_blank" rel="noopener">{{ m.name }}</a>{% else %}{{ m.name }}{% endif %}</strong>
+        <span class="em-badge em-badge-grey">{{ m.type_label }}</span>
+        {% if m.archived %}<span class="em-badge em-badge-red">Archived</span>{% endif %}
+        <div class="in-muted">{{ m.state }}{% if m.suburb %} &middot; {{ m.suburb }}{% endif %}{% if m.postcode %} {{ m.postcode }}{% endif %}{% if m.score %} &middot; name {{ m.score }}% similar{% endif %}</div>
+        <ul>{% for reason in m.reasons %}<li>{{ reason }}</li>{% endfor %}</ul>
+    </div>
+    {% endfor %}
+</section>
+{% endif %}
+
+{% if pending %}
+<section class="in-card">
+    <h2>Your decision</h2>
+    <form method="post" data-single-submit>
+        {% csrf_token %}
+        {% if review.kind == "duplicate" %}
+            {% if matches %}
+            <div class="in-choices" role="radiogroup" aria-label="Existing organisation to use">
+                {% for m in matches %}<label><input type="radio" name="target" value="{{ m.type }}:{{ m.id }}" {% if forloop.first %}checked{% endif %}> {{ m.name }} ({{ m.type_label }})</label>{% endfor %}
+            </div>
+            {% endif %}
+            <div class="in-row-actions">
+                {% if matches %}<button class="em-btn em-btn-blue" name="decision" value="use_existing" type="submit">Use the existing organisation</button>{% endif %}
+                <button class="em-btn" name="decision" value="create_separate" type="submit">Create a separate organisation</button>
+                <button class="em-btn em-btn-red" name="decision" value="reject" type="submit">Reject this record</button>
+            </div>
+            <p class="in-muted">Archived organisations are never restored. Nothing is merged automatically.</p>
+        {% elif review.kind == "evidence" %}
+            <div class="in-row-actions">
+                <button class="em-btn em-btn-blue" name="decision" value="accept_contacted" type="submit">Accept as Contacted</button>
+                <button class="em-btn" name="decision" value="accept_not_yet_contacted" type="submit">Accept as Not Yet Contacted</button>
+                <button class="em-btn em-btn-red" name="decision" value="reject" type="submit">Reject this record</button>
+            </div>
+        {% else %}
+            <div class="in-row-actions">
+                <button class="em-btn em-btn-blue" name="decision" value="create_separate" type="submit">Add the contact to this organisation as well</button>
+                <button class="em-btn em-btn-red" name="decision" value="reject" type="submit">Reject this contact</button>
+            </div>
+        {% endif %}
+        <label class="em-label" for="note">Note (optional)</label>
+        <textarea class="em-textarea em-textarea-short" id="note" name="note" rows="2"></textarea>
+    </form>
+</section>
+{% elif review.note %}<section class="in-card"><strong>Note:</strong> {{ review.note }}</section>{% endif %}
+{% endblock %}

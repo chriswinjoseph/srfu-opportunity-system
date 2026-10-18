@@ -21,5 +21,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('accounts/', include('accounts.urls')),
     path('outreach/', include('outreach.urls')),
+    path('data/', include('intake.urls')),
     path('', RedirectView.as_view(pattern_name='login', permanent=False)),
 ]

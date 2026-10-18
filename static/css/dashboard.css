@@ -326,9 +326,13 @@ select:focus-visible,
     display: grid;
     width: min(100%, 890px);
     margin: 0 auto 18px;
-    grid-template-columns: minmax(220px, 1fr) auto auto;
-    align-items: center;
+    grid-template-columns: minmax(0, 1fr) minmax(150px, 200px) auto;
+    align-items: end;
     gap: 8px;
+}
+
+.filter-bar .search-control {
+    grid-column: 1 / -1;
 }
 
 .search-control {
@@ -366,6 +370,32 @@ select:focus-visible,
 
 .search-button:hover {
     background: #eef3f9;
+}
+
+.filter-controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px;
+}
+
+.filter-field {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    color: #4b5563;
+    font-size: 12px;
+}
+
+.filter-field select,
+.sort-control-wrapper select {
+    width: 100%;
+    min-width: 0;
+}
+
+.sort-control-wrapper {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
 }
 
 .sort-control-wrapper select {
@@ -882,7 +912,7 @@ select:focus-visible,
     }
 
     .filter-bar {
-        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .clear-filter-button {

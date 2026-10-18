@@ -1,0 +1,33 @@
+{% extends "intake/base.html" %}
+{% block title %}Proposed Changes{% endblock %}
+{% block content %}
+<h1 class="in-title">Proposed Changes</h1>
+<p class="in-sub">Different values found by an import or the scraper. Existing information is never replaced until an Admin approves the change.</p>
+<div class="in-row-actions" style="margin:0 0 10px">
+    <a class="em-btn {% if status == 'pending' %}em-btn-blue{% endif %}" href="?status=pending">Awaiting decision</a>
+    <a class="em-btn {% if status == 'all' %}em-btn-blue{% endif %}" href="?status=all">All</a>
+</div>
+<section class="in-card"><div class="in-table-wrap"><table class="in-table">
+    <thead><tr><th>Organisation</th><th>Field</th><th>Current value</th><th>New value</th><th>Source</th><th>Decision</th></tr></thead>
+    <tbody>
+    {% for row in rows %}
+        <tr>
+            <td>{% if row.org %}<a href="{{ row.url }}">{{ row.org }}</a>{% else %}(removed){% endif %}</td>
+            <td>{{ row.change.field }}</td>
+            <td>{{ row.change.old_value|default:"(empty)" }}</td>
+            <td>{{ row.change.new_value }}</td>
+            <td>{{ row.change.source_label }}{% if row.change.source_url %}<br><span class="in-muted">{{ row.change.source_url|truncatechars:60 }}</span>{% endif %}</td>
+            <td>
+                {% if row.change.status == "pending" %}
+                <form method="post" action="{% url 'intake_change_decide' row.change.pk %}" class="in-row-actions" style="margin:0">
+                    {% csrf_token %}
+                    <button class="em-btn em-btn-blue" name="decision" value="approve" type="submit">Approve</button>
+                    <button class="em-btn" name="decision" value="reject" type="submit">Reject</button>
+                </form>
+                {% else %}<span class="em-badge em-badge-grey">{{ row.change.status }}</span>{% endif %}
+            </td>
+        </tr>
+    {% empty %}<tr><td colspan="6" class="in-muted">No proposed changes.</td></tr>{% endfor %}
+    </tbody>
+</table></div></section>
+{% endblock %}

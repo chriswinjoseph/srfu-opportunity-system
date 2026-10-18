@@ -1,0 +1,36 @@
+{% extends "intake/base.html" %}
+{% load outreach_extras %}
+{% block title %}Scraper{% endblock %}
+{% block content %}
+<h1 class="in-title">Live Scraper</h1>
+<p class="in-sub">Collects publicly available organisation information from approved sources only. New organisations start as Not Yet Contacted; possible duplicates are held for review.</p>
+{% if not worker_alive %}<div class="em-banner em-banner-warning" role="status">No background worker is running{% if worker_last_seen %} (last seen {{ worker_last_seen|melbourne }}){% endif %}. A scrape you queue will wait, without making progress, until the worker is started (<code>python manage.py run_intake_worker</code>).</div>{% endif %}
+<section class="in-card">
+    <h2>Approved sources</h2>
+    <ul>{% for a in adapters %}<li><strong>{{ a.label }}</strong> &mdash; {{ a.org_type|title }}, {{ a.states|join:", " }}. <span class="in-muted">{{ a.description }}</span></li>{% endfor %}</ul>
+    <p class="in-muted">No approved public source is configured for Branches, or for states other than {{ supported_states|join:", " }}. Selecting those is reported as unsupported; nothing is invented.</p>
+</section>
+<section class="in-card">
+    <h2>Start a scrape</h2>
+    <form method="post" data-single-submit>
+        {% csrf_token %}
+        <fieldset style="border:0;padding:0"><legend class="em-label">Organisation types</legend>
+            <div class="in-choices">{% for value, label in type_choices %}<label><input type="checkbox" name="org_type" value="{{ value }}" {% if value in supported_types %}checked{% endif %}> {{ label }}{% if value not in supported_types %} <span class="in-muted">(no approved source)</span>{% endif %}</label>{% endfor %}</div>
+        </fieldset>
+        <fieldset style="border:0;padding:0"><legend class="em-label">State / Territory</legend>
+            <div class="in-choices">{% for s in states %}<label><input type="checkbox" name="state" value="{{ s }}" {% if s in supported_states %}checked{% endif %}> {{ s }}{% if s not in supported_states %} <span class="in-muted">(no source)</span>{% endif %}</label>{% endfor %}</div>
+        </fieldset>
+        <fieldset style="border:0;padding:0"><legend class="em-label">Suburb filter for clubs (optional)</legend>
+            <div class="in-choices">{% for s in suburbs %}<label><input type="checkbox" name="suburb" value="{{ s }}"> {{ s }}</label>{% endfor %}</div>
+        </fieldset>
+        <div class="in-row-actions"><button class="em-btn em-btn-blue" type="submit">Queue scrape</button></div>
+    </form>
+</section>
+<section class="in-card">
+    <h2>Recent scraper runs</h2>
+    {% if runs %}<div class="in-table-wrap"><table class="in-table"><thead><tr><th>Run</th><th>Status</th><th>Started</th><th>Progress</th></tr></thead>
+    <tbody>{% for r in runs %}<tr><td><a href="{% url 'intake_run' r.pk %}">#{{ r.pk }}</a></td><td>{{ r.get_status_display }}</td><td>{{ r.created_at|melbourne }}</td><td>{{ r.progress_done }} / {{ r.progress_total }}</td></tr>{% endfor %}</tbody></table></div>
+    {% else %}<p class="in-muted">No scraper runs yet.</p>{% endif %}
+</section>
+<script>document.querySelectorAll("form[data-single-submit]").forEach(function(f){f.addEventListener("submit",function(){var b=f.querySelector("button[type=submit]");setTimeout(function(){b.disabled=true;b.textContent="Queuing...";},0);});});</script>
+{% endblock %}

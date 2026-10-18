@@ -1,0 +1,123 @@
+{% extends "intake/base.html" %}
+{% load outreach_extras %}
+{% block title %}Run #{{ run.pk }}{% endblock %}
+{% block content %}
+<h1 class="in-title">{{ run.get_kind_display }} #{{ run.pk }}</h1>
+<p class="in-sub">{% if run.filename %}{{ run.filename }} &middot; {% endif %}<span class="em-badge em-badge-grey" id="run-status">{{ run.get_status_display }}</span>{% if run.created_by %} &middot; started by {{ run.created_by.get_full_name|default:run.created_by.email }}{% endif %}</p>
+
+{% if run.error_message %}<div class="em-banner em-banner-error" role="alert">{{ run.error_message }}</div>{% endif %}
+{% if type_note %}<div class="em-banner em-banner-info">{{ type_note }}</div>{% endif %}
+{% if previous %}<div class="em-banner em-banner-warning">This exact file was already imported on {{ previous.finished_at|melbourne }}. Importing it again will not create duplicates; existing records will be matched.</div>{% endif %}
+
+{% if run.status == "previewed" %}
+<section class="in-card">
+    <h2>Preview</h2>
+    <p class="in-muted">Nothing has been saved. Matching is checked again when you confirm.</p>
+    <div class="in-grid">
+        <div class="in-stat"><strong>{{ totals.organisation_rows }}</strong><span>Organisation rows</span></div>
+        <div class="in-stat"><strong>{{ totals.contact_rows }}</strong><span>Contact rows</span></div>
+        <div class="in-stat"><strong>{{ preview.create }}</strong><span>Would be created</span></div>
+        <div class="in-stat"><strong>{{ preview.match }}</strong><span>Match an existing organisation</span></div>
+        <div class="in-stat"><strong>{{ preview.review }}</strong><span>Held for review</span></div>
+        <div class="in-stat"><strong>{{ preview.incomplete }}</strong><span>Rows with problems</span></div>
+        <div class="in-stat"><strong>{{ totals.evidence_contacted }}</strong><span>Contacted (confirmed outgoing email)</span></div>
+        <div class="in-stat"><strong>{{ totals.evidence_not_yet }}</strong><span>Not Yet Contacted</span></div>
+        <div class="in-stat"><strong>{{ totals.evidence_review }}</strong><span>Conflicting outreach evidence</span></div>
+    </div>
+    {% if row_errors %}
+    <h3 style="margin-top:14px">Rows that cannot be imported</h3>
+    <div class="in-table-wrap"><table class="in-table"><thead><tr><th>Row</th><th>Organisation</th><th>Problem</th><th>Action</th></tr></thead>
+    <tbody>{% for e in row_errors %}<tr><td>{{ e.row_ref }}</td><td>{{ e.name|default:"-" }}</td><td>{{ e.message }}</td><td>{{ e.action }}</td></tr>{% endfor %}</tbody></table></div>
+    {% endif %}
+    <form method="post" action="{% url 'intake_confirm' run.pk %}" class="in-row-actions" data-single-submit>
+        {% csrf_token %}
+        <button class="em-btn em-btn-blue" type="submit">Confirm and import</button>
+        <a class="em-btn" href="{% url 'intake_import' %}">Cancel</a>
+    </form>
+</section>
+{% elif run.status == "queued" or run.status == "running" %}
+<section class="in-card" aria-live="polite">
+    <h2 id="run-heading">{% if run.status == "running" %}Running{% elif worker_alive %}Waiting for the background worker to pick this up{% else %}Queued - not started{% endif %}</h2>
+    <div class="em-banner em-banner-warning" role="alert" id="run-worker-warning" {% if run.status != "queued" or worker_alive %}hidden{% endif %}>
+        No background worker is running, so this job has not started and no progress is being made.
+        {% if worker_last_seen %}A worker was last seen {{ worker_last_seen|melbourne }}.{% endif %}
+        Ask the technical owner to start it (<code>python manage.py run_intake_worker</code>). The job stays queued and will run when the worker starts.
+    </div>
+    <div class="in-progress"><span id="run-bar" style="width: 0%"></span></div>
+    <p class="in-muted"><span id="run-done">{{ run.progress_done }}</span> of <span id="run-total">{{ run.progress_total }}</span> pages processed. This page updates automatically.</p>
+</section>
+<script>
+(function(){
+    var url = "{% url 'intake_run_status' run.pk %}";
+    function tick(){ fetch(url,{credentials:"same-origin"}).then(function(r){return r.json();}).then(function(d){
+        document.getElementById("run-status").textContent = d.status_label;
+        document.getElementById("run-done").textContent = d.progress_done;
+        document.getElementById("run-total").textContent = d.progress_total;
+        var pct = d.progress_total ? Math.round(100*d.progress_done/d.progress_total) : 0;
+        document.getElementById("run-bar").style.width = pct + "%";
+        var queued = d.status === "queued";
+        document.getElementById("run-worker-warning").hidden = !(queued && !d.worker_alive);
+        document.getElementById("run-heading").textContent = !queued ? "Running" : (d.worker_alive ? "Waiting for the background worker to pick this up" : "Queued - not started");
+        if (d.finished) { window.location.reload(); } else { setTimeout(tick, 3000); }
+    }).catch(function(){ setTimeout(tick, 6000); }); }
+    setTimeout(tick, 2000);
+})();
+</script>
+{% else %}
+<section class="in-card">
+    <h2>Summary</h2>
+    <div class="in-grid">
+        <div class="in-stat"><strong>{{ totals.processed|default:0 }}</strong><span>Records processed</span></div>
+        <div class="in-stat"><strong>{{ totals.created|default:0 }}</strong><span>Organisations created</span></div>
+        <div class="in-stat"><strong>{{ totals.contacts_created|default:0 }}</strong><span>Contacts created</span></div>
+        <div class="in-stat"><strong>{{ totals.updated|default:0 }}</strong><span>Existing records updated</span></div>
+        <div class="in-stat"><strong>{{ totals.exact_duplicates|default:0 }}</strong><span>Exact duplicates matched</span></div>
+        <div class="in-stat"><strong>{{ totals.review|default:0 }}</strong><span>Likely duplicates / review required</span></div>
+        <div class="in-stat"><strong>{{ totals.unchanged|default:0 }}</strong><span>Not changed</span></div>
+        <div class="in-stat"><strong>{{ totals.incomplete|default:0 }}</strong><span>Incomplete</span></div>
+        <div class="in-stat"><strong>{{ totals.failed|default:0 }}</strong><span>Failed</span></div>
+        <div class="in-stat"><strong>{{ totals.changes_proposed|default:0 }}</strong><span>Changes proposed</span></div>
+    </div>
+    {% if run.kind == "scraper" %}<p class="in-muted">{{ run.progress_done }} of {{ run.progress_total }} pages processed.</p>{% endif %}
+    {% if pending_reviews or pending_changes %}
+    <div class="in-row-actions">
+        {% if pending_reviews %}<a class="em-btn em-btn-blue" href="{% url 'intake_reviews' %}">Review {{ pending_reviews }} held record{{ pending_reviews|pluralize }}</a>{% endif %}
+        {% if pending_changes %}<a class="em-btn" href="{% url 'intake_changes' %}">Decide {{ pending_changes }} proposed change{{ pending_changes|pluralize }}</a>{% endif %}
+    </div>
+    {% endif %}
+</section>
+{% endif %}
+
+{% if coverage_notes %}
+<section class="in-card"><h2>Coverage notes</h2><ul>{% for note in coverage_notes %}<li>{{ note }}</li>{% endfor %}</ul></section>
+{% endif %}
+
+{% if rows or outcome %}
+<section class="in-card">
+    <h2>Results</h2>
+    <form method="get" class="in-row-actions" style="margin:0 0 8px">
+        <label class="em-label" for="outcome" style="margin:0">Show</label>
+        <select class="em-input" id="outcome" name="outcome" style="width:auto" onchange="this.form.submit()">
+            <option value="">All results</option>
+            {% for value, label in outcomes %}<option value="{{ value }}" {% if value == outcome %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+    </form>
+    <div class="in-table-wrap"><table class="in-table">
+        <thead><tr><th>Source row / page</th><th>Organisation</th><th>Result</th><th>Details</th><th>Action required</th></tr></thead>
+        <tbody>
+        {% for item in rows %}
+            <tr>
+                <td>{{ item.result.row_ref|truncatechars:60 }}</td>
+                <td>{% if item.url %}<a href="{{ item.url }}">{{ item.result.name|default:"(open)" }}</a>{% else %}{{ item.result.name|default:"-" }}{% endif %}</td>
+                <td><span class="em-badge em-badge-grey">{{ item.result.get_outcome_display }}</span></td>
+                <td>{{ item.result.message }}{% if item.result.field %} <span class="in-muted">({{ item.result.field }})</span>{% endif %}</td>
+                <td>{{ item.result.action_required }}{% if item.result.review %} <a href="{% url 'intake_review' item.result.review.pk %}">Open review</a>{% endif %}</td>
+            </tr>
+        {% empty %}<tr><td colspan="5" class="in-muted">No results.</td></tr>{% endfor %}
+        </tbody>
+    </table></div>
+    {% if truncated %}<p class="in-muted">Showing the first 300 of {{ total_results }} results. Use the filter to narrow the list.</p>{% endif %}
+</section>
+{% endif %}
+<script>document.querySelectorAll("form[data-single-submit]").forEach(function(f){f.addEventListener("submit",function(){var b=f.querySelector("button[type=submit]");setTimeout(function(){b.disabled=true;b.textContent="Working...";},0);});});</script>
+{% endblock %}

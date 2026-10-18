@@ -454,6 +454,31 @@ def _org_to_row(org, org_type):
     }
 
 
+TYPE_SEARCH_WORDS = {
+    "bank": "bank",
+    "banks": "bank",
+    "branch": "branch",
+    "branches": "branch",
+    "club": "club",
+    "clubs": "club",
+}
+
+
+def _region_options():
+    """Distinct regions of active organisations, for the Region filter."""
+    regions = set()
+
+    for model in (Bank, Branch, Club):
+        regions.update(
+            model.objects.filter(is_archived=False)
+            .exclude(region="")
+            .values_list("region", flat=True)
+            .distinct()
+        )
+
+    return sorted(regions, key=str.lower)
+
+
 def _get_all_organisations(
 
 
@@ -553,6 +578,18 @@ def _get_all_organisations(
 
         )
 
+
+    # Searching for an organisation type word (Bank, Branch, Club, or the
+    # plural) also returns every organisation of that type, even when the
+    # word is not in its name. Existing text matches stay in the results.
+    type_word = TYPE_SEARCH_WORDS.get(search.lower())
+
+    if type_word == "bank":
+        banks = Bank.objects.filter(is_archived=False)
+    elif type_word == "branch":
+        branches = Branch.objects.filter(is_archived=False)
+    elif type_word == "club":
+        clubs = Club.objects.filter(is_archived=False)
 
     if region:
 
@@ -1917,8 +1954,12 @@ def dashboard_view(request):
 
         "region": region,
 
+        "status": request.GET.get("status", "").strip(),
 
-    
+        "region_options": _region_options(),
+
+
+
         "can_review_approvals": request.user.has_perm(
             "outreach.approve_emaildraft"
         ),
@@ -5947,55 +5988,12 @@ def record_external_outreach(
 )
 def scrape_organisations(request):
     """
-    Run the approved public-data organisation collectors.
-
-    Only runs from a POST request.
-    Existing organisations are skipped by the management commands.
+    The scraper no longer runs inside a web request. This address is kept
+    for old links and sends Admins to the scraper page, where a background
+    job is queued with the supported source and location filters.
     """
+    return redirect("intake_scraper")
 
-    if request.method != "POST":
-        return redirect("dashboard")
-
-    output = StringIO()
-
-    try:
-        # Community Banks - Victoria
-        call_command(
-            "scrape_banks",
-            region="Victoria",
-            stdout=output,
-        )
-
-        # Public sports clubs
-        call_command(
-            "scrape_clubs",
-            stdout=output,
-        )
-
-    except CommandError as exc:
-        messages.error(
-            request,
-            f"Organisation scraping failed: {exc}",
-        )
-
-        return redirect("dashboard")
-
-    except Exception as exc:
-        messages.error(
-            request,
-            f"Unable to complete organisation scraping: {exc}",
-        )
-
-        return redirect("dashboard")
-
-    messages.success(
-        request,
-        "Organisation scraping completed successfully. "
-        "New public organisations have been added and "
-        "existing records were skipped.",
-    )
-
-    return redirect("dashboard")
 
 # ---------------------------------------------------------
 # Edit and archive an organisation (Admin only)

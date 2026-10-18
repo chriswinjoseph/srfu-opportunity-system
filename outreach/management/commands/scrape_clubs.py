@@ -2,23 +2,22 @@
 Collect publicly available sports club information from
 Moonee Valley City Council's public sports club directory.
 
-Test:
+Preview (writes nothing):
     python manage.py scrape_clubs --limit 5 --dry-run
 
-Real import:
-    python manage.py scrape_clubs
+Collect (shared duplicate/review pipeline, run by the background worker):
+    python manage.py scrape_clubs --queue --admin-email admin@example.org
+    python manage.py run_intake_worker --once
 """
 
 import re
 
-import requests
 from bs4 import BeautifulSoup
 
 from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
 from django.core.validators import validate_email
 
-from outreach.models import Club
 
 
 DIRECTORY_URL = (
@@ -28,8 +27,9 @@ DIRECTORY_URL = (
 
 HEADERS = {
     "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 Chrome/120 Safari/537.36"
+        "SafeRoadsForUsCollector/1.0 "
+        "(public organisation information only; "
+        "Safe Roads For Us outreach project)"
     )
 }
 
@@ -138,24 +138,6 @@ def extract_suburb(text):
             return suburb
 
     return ""
-
-
-def fetch_directory():
-    try:
-        response = requests.get(
-            DIRECTORY_URL,
-            headers=HEADERS,
-            timeout=15,
-        )
-
-        response.raise_for_status()
-
-        return response.text
-
-    except requests.RequestException as exc:
-        raise ValueError(
-            f"Could not access club directory: {exc}"
-        )
 
 
 def get_website_map(soup):
@@ -371,180 +353,41 @@ def parse_clubs(html):
 
 class Command(BaseCommand):
     help = (
-        "Collect public sports club information "
-        "from Moonee Valley City Council."
+        "Preview or queue the public sports club collection (Moonee Valley City "
+        "Council). This command no longer writes clubs directly: --dry-run "
+        "previews the approved page, and --queue hands the work to the shared "
+        "scraper job (duplicate checks, review and source records)."
     )
 
-    def add_arguments(
-        self,
-        parser,
-    ):
+    def add_arguments(self, parser):
         parser.add_argument(
-            "--dry-run",
-            action="store_true",
-            help=(
-                "Validate without writing "
-                "to the database."
-            ),
+            "--dry-run", action="store_true",
+            help="Fetch and validate the approved page without writing to the database.",
         )
-
+        parser.add_argument("--limit", type=int, default=None, help="Optional number of clubs to preview.")
         parser.add_argument(
-            "--limit",
-            type=int,
-            default=None,
-            help="Optional number of clubs to process.",
+            "--queue", action="store_true",
+            help="Queue the same background job as the Admin Scraper page (needs --admin-email).",
         )
+        parser.add_argument("--admin-email", type=str, default="", help="Active Admin the run is recorded against.")
 
-    def handle(
-        self,
-        *args,
-        **options,
-    ):
-        dry_run = options["dry_run"]
-        limit = options["limit"]
+    def handle(self, *args, **options):
+        from intake import legacy  # imported here: intake.sources imports this module
 
-        if limit is not None and limit < 1:
-            raise CommandError(
-                "--limit must be greater than 0."
-            )
+        if options["limit"] is not None and options["limit"] < 1:
+            raise CommandError("--limit must be greater than 0.")
 
-        self.stdout.write(
-            "Collecting public club data "
-            "from Moonee Valley City Council..."
-        )
+        if options["dry_run"] and options["queue"]:
+            raise CommandError("Use either --dry-run or --queue, not both.")
 
-        try:
-            html = fetch_directory()
-            clubs = parse_clubs(html)
-
-        except ValueError as exc:
-            raise CommandError(
-                f"Collection failed: {exc}"
-            )
-
-        if not clubs:
-            raise CommandError(
-                "No clubs were detected on the directory page."
-            )
-
-        if limit:
-            clubs = clubs[:limit]
-
-        created_count = 0
-        duplicate_count = 0
-        skipped_count = 0
-
-        for entry in clubs:
-            club_name = clean_text(
-                entry["club_name"]
-            )
-
-            suburb = clean_text(
-                entry["suburb"]
-            )
-
-            state = clean_text(
-                entry["state"]
-            )
-
-            if not club_name:
-                skipped_count += 1
-                continue
-
-            duplicate_query = (
-                Club.objects.filter(
-                    club_name__iexact=club_name
-                )
-            )
-
-            if suburb:
-                duplicate_query = (
-                    duplicate_query.filter(
-                        suburb__iexact=suburb
-                    )
-                )
-
-            if state:
-                duplicate_query = (
-                    duplicate_query.filter(
-                        state__iexact=state
-                    )
-                )
-
-            if duplicate_query.exists():
-                duplicate_count += 1
-
-                self.stdout.write(
-                    self.style.WARNING(
-                        f"'{club_name}' already exists — skipped."
-                    )
-                )
-
-                continue
-
-            if dry_run:
-                created_count += 1
-
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        f"Would create: "
-                        f"{club_name} | "
-                        f"{entry['club_type']} | "
-                        f"{suburb} | "
-                        f"{entry['public_email']}"
-                    )
-                )
-
-                continue
-
-            Club.objects.create(
-                club_name=club_name,
-                club_type=entry["club_type"],
-                suburb=suburb,
-                state=state,
-                postcode=entry["postcode"],
-                region="Victoria",
-                website_url=entry["website_url"],
-                public_email=entry["public_email"],
-                public_phone=entry["public_phone"],
-                contact_status="not_yet_contacted",
-                record_source=(
-                    "Public Web - Moonee Valley City Council"
-                ),
-            )
-
-            created_count += 1
-
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"Created '{club_name}'"
-                )
-            )
-
-        self.stdout.write("")
-
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"New clubs: {created_count}"
-            )
-        )
-
-        self.stdout.write(
-            self.style.WARNING(
-                f"Duplicates skipped: "
-                f"{duplicate_count}"
-            )
-        )
-
-        self.stdout.write(
-            f"Invalid/skipped records: "
-            f"{skipped_count}"
-        )
-
-        if dry_run:
-            self.stdout.write(
-                self.style.NOTICE(
-                    "Dry run only — nothing was written "
-                    "to the database."
-                )
+        if options["dry_run"]:
+            legacy.preview_source(self, "mvcc_sports_clubs", states=["VIC"], limit=options["limit"])
+        elif options["queue"]:
+            legacy.queue_source(self, "club", admin_email=options["admin_email"], states=["VIC"])
+        else:
+            raise legacy.direct_write_disabled(
+                "scrape_clubs",
+                "Use the Admin Scraper page (Data > Scraper), or run this command with --queue "
+                "--admin-email <admin> and then start the worker (python manage.py run_intake_worker). "
+                "Use --dry-run to preview.",
             )

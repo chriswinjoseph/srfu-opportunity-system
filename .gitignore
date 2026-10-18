@@ -7,3 +7,13 @@ staticfiles/
 *.log
 .DS_Store
 /local_data/
+
+# Databases, backups and client data must never be committed
+db.sqlite3*
+*.sqlite3
+*.sqlite3-journal
+*.backup
+*.backup-*
+*.bak
+*.xlsx
+*.xls

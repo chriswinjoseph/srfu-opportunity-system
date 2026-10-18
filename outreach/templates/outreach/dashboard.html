@@ -142,23 +142,9 @@
             </a>
             {% endif %}
             {% if perms.outreach.add_bank %}
-<form
-    method="post"
-    action="{% url 'scrape_organisations' %}"
->
-    {% csrf_token %}
-
-    <button
-        class="secondary-button sidebar-button"
-        type="submit"
-        onclick="return confirm(
-            'Collect new organisations from the approved public sources?'
-        );"
-    >
-        Scrape Organisations
-    </button>
-</form>
-{% endif %}
+            <a class="secondary-button sidebar-button" href="{% url 'intake_scraper' %}">Scrape Organisations</a>
+            <a class="secondary-button sidebar-button" href="{% url 'intake_import' %}">Import Data</a>
+            {% endif %}
             {% if perms.outreach.add_bank %}
 
             <a
@@ -236,7 +222,7 @@
                         id="searchInput"
                         type="search"
                         name="q"
-                        placeholder="Search..."
+                        placeholder="Search name, place or type (Bank, Branch, Club)"
                         value="{{ search }}"
                     >
 
@@ -249,56 +235,77 @@
                     </button>
                 </div>
 
-                <input
-                    id="typeFilter"
-                    type="hidden"
-                    name="type"
-                    value=""
+                <div
+                    class="filter-controls"
+                    role="group"
+                    aria-label="Filter organisations"
                 >
+                    <label class="filter-field" for="typeFilter">
+                        <span>Organisation type</span>
+                        <select id="typeFilter" name="type">
+                            <option value="">All</option>
+                            <option value="bank" {% if org_type|lower == "bank" %}selected{% endif %}>Bank</option>
+                            <option value="branch" {% if org_type|lower == "branch" %}selected{% endif %}>Branch</option>
+                            <option value="club" {% if org_type|lower == "club" %}selected{% endif %}>Club</option>
+                        </select>
+                    </label>
 
-                <input
-                    id="regionFilter"
-                    type="hidden"
-                    name="region"
-                    value=""
-                >
+                    <label class="filter-field" for="regionFilter">
+                        <span>Region</span>
+                        <select id="regionFilter" name="region">
+                            <option value="">All regions</option>
+                            {% for option in region_options %}
+                            <option value="{{ option }}" {% if option == region %}selected{% endif %}>{{ option }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+
+                    <label class="filter-field" for="statusFilter">
+                        <span>Contact status</span>
+                        <select id="statusFilter" name="status">
+                            <option value="">All</option>
+                            <option value="not_yet_contacted" {% if status == "not_yet_contacted" %}selected{% endif %}>Not Yet Contacted</option>
+                            <option value="contacted" {% if status == "contacted" %}selected{% endif %}>Contacted</option>
+                        </select>
+                    </label>
+                </div>
 
                 <div class="sort-control-wrapper">
                     <label
-                        class="visually-hidden"
+                        class="filter-field"
                         for="sortControl"
                     >
-                        Sort organisations
+                        <span>Order by</span>
                     </label>
 
                     <select id="sortControl">
 
     <option value="date_added:desc" selected>
-        Sort: Newest First
+        Newest first
     </option>
 
     <option value="date_added:asc">
-        Sort: Oldest First
+        Oldest first
     </option>
 
     <option value="name:asc">
-        Sort: Name A-Z
+        Name A-Z
     </option>
 
     <option value="name:desc">
-        Sort: Name Z-A
+        Name Z-A
     </option>
 
     <option value="region:asc">
-        Sort: Region
+        Region A-Z
     </option>
 
     <option value="type:asc">
-        Sort: Organisation Type
+        Organisation type A-Z
     </option>
 
     <option value="status:asc">
-        Sort: Contact Status
+        Contact status
     </option>
 
 </select>
@@ -352,7 +359,7 @@
                     >
                         <h3>No organisations found</h3>
                         <p>
-                            Try changing or clearing the search.
+                            Try changing or clearing the search and filters.
                         </p>
                     </div>
 
@@ -420,7 +427,7 @@
                     >
                         <h3>No organisations found</h3>
                         <p>
-                            Try changing or clearing the search.
+                            Try changing or clearing the search and filters.
                         </p>
                     </div>
 

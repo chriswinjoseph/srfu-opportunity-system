@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "accounts",
     "outreach",
+    "intake",
 ]
 
 
@@ -116,6 +117,13 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
+        "OPTIONS": {
+            # Take SQLite's write lock when a transaction begins and wait for it,
+            # so simultaneous imports, reviews and workers queue up instead of
+            # failing with "database is locked" part-way through.
+            "transaction_mode": "IMMEDIATE",
+            "timeout": 30,
+        },
     }
 }
 

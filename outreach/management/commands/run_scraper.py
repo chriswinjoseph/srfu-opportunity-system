@@ -1,25 +1,21 @@
 from django.core.management.base import BaseCommand
-from outreach.scraper import scrape_public_banks
 
 
 class Command(BaseCommand):
-    help = "Run the public directory scraper for community banks"
+    help = (
+        "Disabled. The old demo scraper wrote banks directly with its own duplicate "
+        "rule and a browser-style user agent. Use the Admin Scraper page or "
+        "'scrape_banks --queue' instead."
+    )
 
     def add_arguments(self, parser):
-        parser.add_argument(
-            '--url',
-            type=str,
-            default=None,
-            help='Target public directory URL to scrape'
-        )
+        parser.add_argument("--url", type=str, default=None, help="Ignored (command disabled).")
 
     def handle(self, *args, **options):
-        self.stdout.write("Running public bank directory scraper...")
-        result = scrape_public_banks(target_url=options['url'])
+        from intake import legacy
 
-        if result['error']:
-            self.stdout.write(self.style.WARNING(f"Scraper notice: {result['error']}"))
-        else:
-            self.stdout.write(self.style.SUCCESS(
-                f"Completed: {result['created']} added, {result['skipped']} skipped."
-            ))
+        raise legacy.direct_write_disabled(
+            "run_scraper",
+            "Use the Admin Scraper page (Data > Scraper) or 'python manage.py scrape_banks --region Victoria "
+            "--queue --admin-email <admin>' and start the worker with 'python manage.py run_intake_worker'.",
+        )

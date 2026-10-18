@@ -1,0 +1,17 @@
+{% extends "intake/base.html" %}
+{% block title %}Import Data{% endblock %}
+{% block content %}
+<h1 class="in-title">Import Data</h1>
+<p class="in-sub">Upload the agreed Excel (.xlsx) workbook. Nothing is saved until you review the preview and confirm.</p>
+{% for error in errors %}<div class="em-banner em-banner-error" role="alert">{{ error }}</div>{% endfor %}
+<section class="in-card">
+    <form method="post" enctype="multipart/form-data" data-single-submit>
+        {% csrf_token %}
+        <label class="em-label" for="workbook">Excel workbook (.xlsx)</label>
+        <input class="em-input" id="workbook" name="workbook" type="file" accept=".xlsx" required aria-required="true">
+        <p class="in-muted">The workbook needs the Organisations and Contacts sheets with the agreed columns.</p>
+        <div class="in-row-actions"><button class="em-btn em-btn-blue" type="submit">Validate and preview</button></div>
+    </form>
+</section>
+<script>document.querySelectorAll("form[data-single-submit]").forEach(function(f){f.addEventListener("submit",function(){var b=f.querySelector("button[type=submit]");setTimeout(function(){b.disabled=true;b.textContent="Working...";},0);});});</script>
+{% endblock %}

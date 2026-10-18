@@ -1,0 +1,22 @@
+{% extends "intake/base.html" %}
+{% load outreach_extras %}
+{% block title %}Data{% endblock %}
+{% block content %}
+<h1 class="in-title">Data Import and Scraper</h1>
+<p class="in-sub">Admin tools for importing client data, reviewing possible duplicates and collecting public organisation information.</p>
+<div class="in-grid">
+    <a class="in-stat" href="{% url 'intake_import' %}"><strong>Import</strong><span>Upload and import an Excel workbook</span></a>
+    <a class="in-stat" href="{% url 'intake_reviews' %}"><strong>{{ pending_reviews }}</strong><span>Records awaiting duplicate review</span></a>
+    <a class="in-stat" href="{% url 'intake_changes' %}"><strong>{{ pending_changes }}</strong><span>Proposed changes awaiting a decision</span></a>
+    <a class="in-stat" href="{% url 'intake_scraper' %}"><strong>Scraper</strong><span>Collect public organisation information</span></a>
+</div>
+<section class="in-card">
+    <h2>Recent runs</h2>
+    {% if runs %}
+    <div class="in-table-wrap"><table class="in-table">
+        <thead><tr><th>Run</th><th>Type</th><th>Status</th><th>Started</th><th>File or source</th></tr></thead>
+        <tbody>{% for r in runs %}<tr><td><a href="{% url 'intake_run' r.pk %}">#{{ r.pk }}</a></td><td>{{ r.get_kind_display }}</td><td><span class="em-badge em-badge-grey">{{ r.get_status_display }}</span></td><td>{{ r.created_at|melbourne }}</td><td>{{ r.filename|default:r.source_label }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% else %}<p class="in-muted">No runs yet.</p>{% endif %}
+</section>
+{% endblock %}

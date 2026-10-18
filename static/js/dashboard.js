@@ -20,6 +20,9 @@
         needs_review: "Needs Review",
     };
 
+    // Values restored by Clear and used when the URL names none.
+    const DEFAULT_SORT = "date_added:desc";
+
     const state = {
         pages: {
             not_yet_contacted: 1,
@@ -32,6 +35,7 @@
         search: document.getElementById("searchInput"),
         type: document.getElementById("typeFilter"),
         region: document.getElementById("regionFilter"),
+        status: document.getElementById("statusFilter"),
         sort: document.getElementById("sortControl"),
         clearFilters: document.getElementById("clearFilters"),
         error: document.getElementById("dashboardError"),
@@ -229,7 +233,28 @@
         return parameters;
     }
 
+    function emptyResult() {
+        return {
+            results: [],
+            pagination: {
+                total_items: 0,
+                current_page: 1,
+                total_pages: 1,
+                has_previous: false,
+                has_next: false,
+            },
+            summary: {},
+        };
+    }
+
     async function fetchOrganisations(contactStatus) {
+        // A Contact Status filter shows only the matching column.
+        const statusFilter = elements.status.value;
+
+        if (statusFilter && statusFilter !== contactStatus) {
+            return emptyResult();
+        }
+
         const parameters = getRequestParameters(
             contactStatus
         );
@@ -314,11 +339,12 @@
             parameters.set("region", region);
         }
 
-        if (sortBy !== "name") {
-            parameters.set("sort_by", sortBy);
+        if (elements.status.value) {
+            parameters.set("status", elements.status.value);
         }
 
-        if (sortDirection !== "asc") {
+        if (elements.sort.value !== DEFAULT_SORT) {
+            parameters.set("sort_by", sortBy);
             parameters.set("sort_dir", sortDirection);
         }
 
@@ -532,6 +558,18 @@ if (stateField) {
         column.next.disabled =
             !pagination.hasNext;
 
+        const hiddenByStatus = Boolean(
+            elements.status.value
+            && elements.status.value !== contactStatus
+        );
+        const hint = column.empty.querySelector("p");
+
+        if (hint) {
+            hint.textContent = hiddenByStatus
+                ? "Hidden by the Contact Status filter. Set it to All to see these organisations."
+                : "Try changing or clearing the search and filters.";
+        }
+
         column.empty.hidden = results.length !== 0;
         column.loading.hidden = true;
         column.cards.removeAttribute("aria-busy");
@@ -632,7 +670,13 @@ if (stateField) {
             ).length;
     }
 
+    // Only the most recent request may update the page, so a slow earlier
+    // response can never overwrite newer filter results.
+    let latestLoad = 0;
+
     async function loadDashboard() {
+        const loadId = ++latestLoad;
+
         clearError();
 
         setLoading("not_yet_contacted", true);
@@ -649,6 +693,10 @@ if (stateField) {
 ),
                 ]);
 
+            if (loadId !== latestLoad) {
+                return;
+            }
+
             renderColumn(
                 "not_yet_contacted",
                 notYetData
@@ -659,6 +707,10 @@ if (stateField) {
             updateSummary(notYetData, contactedData);
             updateBrowserUrl();
         } catch (error) {
+            if (loadId !== latestLoad) {
+                return;
+            }
+
             setLoading("not_yet_contacted", false);
             setLoading("contacted", false);
 
@@ -684,13 +736,28 @@ if (stateField) {
         }
     );
 
+    // Any filter or ordering change starts again from page 1.
+    [
+        elements.type,
+        elements.region,
+        elements.status,
+        elements.sort,
+    ].forEach((control) => {
+        control.addEventListener("change", () => {
+            resetPages();
+            elements.detailsPanel.hidden = true;
+            loadDashboard();
+        });
+    });
+
     elements.clearFilters.addEventListener(
         "click",
         () => {
             elements.search.value = "";
             elements.type.value = "";
             elements.region.value = "";
-            elements.sort.value = "name:asc";
+            elements.status.value = "";
+            elements.sort.value = DEFAULT_SORT;
 
             resetPages();
             elements.detailsPanel.hidden = true;
@@ -749,5 +816,38 @@ if (stateField) {
         }
     );
 
+    // Restore filters and ordering from the address (for example after a
+    // reload or when a filtered view is shared). Unknown values are ignored.
+    function setSelectValue(select, value) {
+        if (!value) {
+            return;
+        }
+
+        const known = Array.from(select.options).some(
+            (option) => option.value === value
+        );
+
+        if (known) {
+            select.value = value;
+        }
+    }
+
+    function restoreFromUrl() {
+        const params = new URLSearchParams(window.location.search);
+
+        elements.search.value = params.get("q") || "";
+        setSelectValue(elements.type, (params.get("type") || "").toLowerCase());
+        setSelectValue(elements.region, params.get("region") || "");
+        setSelectValue(elements.status, params.get("status") || "");
+
+        if (params.get("sort_by")) {
+            setSelectValue(
+                elements.sort,
+                `${params.get("sort_by")}:${params.get("sort_dir") || "asc"}`
+            );
+        }
+    }
+
+    restoreFromUrl();
     loadDashboard();
 })();

@@ -1,0 +1,25 @@
+{% extends "intake/base.html" %}
+{% block title %}Duplicate Review{% endblock %}
+{% block content %}
+<h1 class="in-title">Duplicate Review</h1>
+<p class="in-sub">Records held because they may match an existing organisation, conflict with existing data, or need an Admin decision.</p>
+<div class="in-row-actions" style="margin:0 0 10px">
+    <a class="em-btn {% if status == 'pending' %}em-btn-blue{% endif %}" href="?status=pending">Awaiting decision</a>
+    <a class="em-btn {% if status == 'decided' %}em-btn-blue{% endif %}" href="?status=decided">Decided</a>
+    <a class="em-btn {% if status == 'all' %}em-btn-blue{% endif %}" href="?status=all">All</a>
+</div>
+<section class="in-card"><div class="in-table-wrap"><table class="in-table">
+    <thead><tr><th>Item</th><th>Type</th><th>Why it was held</th><th>Run</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for r in reviews %}
+        <tr>
+            <td><a href="{% url 'intake_review' r.pk %}">{% if r.submission.name %}{{ r.submission.name }}{% else %}{{ r.submission.organisation.name }}{% endif %}</a></td>
+            <td>{{ r.get_kind_display }}</td>
+            <td>{{ r.reason|truncatechars:140 }}</td>
+            <td><a href="{% url 'intake_run' r.run_id %}">#{{ r.run_id }}</a></td>
+            <td>{% if r.status == "pending" %}<span class="em-badge em-badge-orange">Awaiting decision</span>{% else %}<span class="em-badge em-badge-grey">{{ r.decision }}</span>{% endif %}</td>
+        </tr>
+    {% empty %}<tr><td colspan="5" class="in-muted">Nothing to review.</td></tr>{% endfor %}
+    </tbody>
+</table></div></section>
+{% endblock %}

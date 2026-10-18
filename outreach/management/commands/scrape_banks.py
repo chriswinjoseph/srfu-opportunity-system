@@ -8,6 +8,11 @@ Usage:
 Optional:
     python manage.py scrape_banks --region Victoria --limit 5 --dry-run
 
+Collecting is done by the shared scraper job (duplicate checks, review, source
+records), never written directly by this command:
+    python manage.py scrape_banks --region Victoria --queue --admin-email admin@example.org
+    python manage.py run_intake_worker --once
+
 This collector only uses public organisation information:
     - bank name
     - state / region
@@ -19,20 +24,18 @@ It does not collect private or sensitive information.
 """
 
 import re
-import time
 
-import requests
 from bs4 import BeautifulSoup
 
 from django.core.management.base import BaseCommand, CommandError
 
-from outreach.models import Bank
 
 
 HEADERS = {
     "User-Agent": (
-        "SafeRoadsForUsStudentProject/1.0 "
-        "(public organisation data only)"
+        "SafeRoadsForUsCollector/1.0 "
+        "(public organisation information only; "
+        "Safe Roads For Us outreach project)"
     )
 }
 
@@ -81,327 +84,79 @@ def extract_phone(text):
     return ""
 
 
-def extract_state(text):
-    match = re.search(
-        r"\b(VIC|NSW|QLD|SA|WA|TAS|ACT|NT)\b",
-        text,
-        flags=re.IGNORECASE,
-    )
-
-    if match:
-        return match.group(1).upper()
-
-    return ""
+STATE_CODES = ("VIC", "NSW", "QLD", "SA", "WA", "TAS", "ACT", "NT")
 
 
-def scrape_branch_page(session, url):
-    response = session.get(
-        url,
-        headers=HEADERS,
-        timeout=15,
-    )
+def extract_state(text, url=""):
+    """
+    A reliable state code, or "" when it cannot be established.
 
-    response.raise_for_status()
+    The branch URL path (/branch/<state>/...) is the most reliable
+    evidence. Otherwise only an UPPERCASE code that is the single distinct
+    code on the page is accepted, so ordinary words ("act", "sa") are never
+    mistaken for a state.
+    """
+    path_match = re.search(r"/branch/([a-z]{2,3})/", (url or "").lower())
 
-    soup = BeautifulSoup(
-        response.text,
-        "html.parser",
-    )
+    if path_match and path_match.group(1).upper() in STATE_CODES:
+        return path_match.group(1).upper()
 
-    for tag in soup(
-        ["script", "style", "noscript"]
-    ):
-        tag.decompose()
-
-    page_text = clean_text(
-        soup.get_text(
-            " ",
-            strip=True,
+    found = {
+        match.group(1)
+        for match in re.finditer(
+            r"\b(VIC|NSW|QLD|SA|WA|TAS|ACT|NT)\b",
+            text or "",
         )
-    )
-
-    # Try to find the main branch name
-    bank_name = ""
-
-    heading = soup.find("h1")
-
-    if heading:
-        bank_name = clean_text(
-            heading.get_text(
-                " ",
-                strip=True,
-            )
-        )
-
-    # Fallback to page title
-    if not bank_name and soup.title:
-        title = clean_text(
-            soup.title.get_text(
-                " ",
-                strip=True,
-            )
-        )
-
-        if "|" in title:
-            title = title.split("|", 1)[0].strip()
-
-        bank_name = title
-
-    if not bank_name:
-        raise ValueError(
-            "Could not determine bank name."
-        )
-
-    if "community bank" not in bank_name.lower():
-        raise ValueError(
-            "Page is not recognised as a Community Bank page."
-        )
-
-    public_phone = extract_phone(
-        page_text
-    )
-
-    state = extract_state(
-        page_text
-    )
-
-    return {
-        "bank_name": bank_name,
-        "state": state,
-        "website_url": url,
-        "public_email": "",
-        "public_phone": public_phone,
-        "source_url": url,
     }
 
-
-def fetch_banks_for_region(
-    region,
-    limit=None,
-):
-    urls = PUBLIC_BRANCH_URLS.get(
-        region,
-        [],
-    )
-
-    if not urls:
-        raise ValueError(
-            f"No public branch URLs configured for '{region}'."
-        )
-
-    if limit:
-        urls = urls[:limit]
-
-    session = requests.Session()
-
-    results = []
-
-    for index, url in enumerate(
-        urls,
-        start=1,
-    ):
-        try:
-            bank = scrape_branch_page(
-                session,
-                url,
-            )
-
-            results.append(bank)
-
-        except requests.RequestException as exc:
-            print(
-                f"Fetch failed for {url}: {exc}"
-            )
-
-        except ValueError as exc:
-            print(
-                f"Skipped {url}: {exc}"
-            )
-
-        if index < len(urls):
-            time.sleep(0.5)
-
-    return results
+    return found.pop() if len(found) == 1 else ""
 
 
 class Command(BaseCommand):
     help = (
-        "Collect public Community Bank information "
-        "from confirmed Bendigo Bank branch pages."
+        "Preview or queue the public Community Bank collection. This command no "
+        "longer writes banks directly: --dry-run previews approved pages, and "
+        "--queue hands the work to the shared scraper job (duplicate checks, "
+        "review and source records)."
     )
 
-    def add_arguments(
-        self,
-        parser,
-    ):
+    def add_arguments(self, parser):
+        parser.add_argument("--region", type=str, required=True, help="Region/state to collect, e.g. Victoria.")
         parser.add_argument(
-            "--region",
-            type=str,
-            required=True,
-            help="Region/state to collect, e.g. Victoria.",
+            "--dry-run", action="store_true",
+            help="Fetch and validate the approved pages without writing to the database.",
         )
-
+        parser.add_argument("--limit", type=int, default=None, help="Optional number of branch pages to test.")
         parser.add_argument(
-            "--dry-run",
-            action="store_true",
-            help=(
-                "Collect and validate without writing "
-                "to the database."
-            ),
+            "--queue", action="store_true",
+            help="Queue the same background job as the Admin Scraper page (needs --admin-email).",
         )
+        parser.add_argument("--admin-email", type=str, default="", help="Active Admin the run is recorded against.")
 
-        parser.add_argument(
-            "--limit",
-            type=int,
-            default=None,
-            help="Optional number of branch pages to test.",
-        )
+    def handle(self, *args, **options):
+        from intake import legacy  # imported here: intake.sources imports this module
 
-    def handle(
-        self,
-        *args,
-        **options,
-    ):
         region = options["region"]
-        dry_run = options["dry_run"]
-        limit = options["limit"]
 
         if region not in PUBLIC_BRANCH_URLS:
-            raise CommandError(
-                f"No configured public source list for '{region}'."
-            )
+            raise CommandError(f"No configured public source list for '{region}'.")
 
-        if limit is not None and limit < 1:
-            raise CommandError(
-                "--limit must be greater than 0."
-            )
+        if options["limit"] is not None and options["limit"] < 1:
+            raise CommandError("--limit must be greater than 0.")
 
-        self.stdout.write(
-            f"Collecting public Community Bank data "
-            f"for {region}..."
-        )
+        if options["dry_run"] and options["queue"]:
+            raise CommandError("Use either --dry-run or --queue, not both.")
 
-        try:
-            fetched_banks = fetch_banks_for_region(
-                region,
-                limit=limit,
-            )
+        state = legacy.state_code(region)
 
-        except Exception as exc:
-            raise CommandError(
-                f"Collection failed: {exc}"
-            )
-
-        created_count = 0
-        duplicate_count = 0
-        skipped_count = 0
-
-        for entry in fetched_banks:
-            bank_name = clean_text(
-                entry.get("bank_name")
-            )
-
-            if not bank_name:
-                skipped_count += 1
-
-                self.stdout.write(
-                    self.style.ERROR(
-                        "Skipped record with no bank name."
-                    )
-                )
-
-                continue
-
-            existing_bank = (
-                Bank.objects
-                .filter(
-                    bank_name__iexact=bank_name
-                )
-                .first()
-            )
-
-            if existing_bank:
-                duplicate_count += 1
-
-                self.stdout.write(
-                    self.style.WARNING(
-                        f"'{bank_name}' already exists — skipped."
-                    )
-                )
-
-                continue
-
-            state = clean_text(
-                entry.get("state")
-            )
-
-            if not state:
-                state = "VIC"
-
-            if dry_run:
-                created_count += 1
-
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        f"Would create: "
-                        f"{bank_name} | "
-                        f"{state} | "
-                        f"{entry.get('public_phone', '')}"
-                    )
-                )
-
-                continue
-
-            Bank.objects.create(
-                bank_name=bank_name,
-                region=region,
-                state=state,
-                website_url=clean_text(
-                    entry.get("website_url")
-                ),
-                public_email=clean_text(
-                    entry.get("public_email")
-                ),
-                public_phone=clean_text(
-                    entry.get("public_phone")
-                ),
-                source_url=clean_text(
-                    entry.get("source_url")
-                ),
-                contact_status="not_yet_contacted",
-                record_source="Public Web - Bendigo Bank",
-            )
-
-            created_count += 1
-
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"Created '{bank_name}'"
-                )
-            )
-
-        self.stdout.write("")
-
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"New records: {created_count}"
-            )
-        )
-
-        self.stdout.write(
-            self.style.WARNING(
-                f"Duplicates skipped: {duplicate_count}"
-            )
-        )
-
-        self.stdout.write(
-            f"Invalid/skipped records: {skipped_count}"
-        )
-
-        if dry_run:
-            self.stdout.write(
-                self.style.NOTICE(
-                    "Dry run only — nothing was written "
-                    "to the database."
-                )
+        if options["dry_run"]:
+            legacy.preview_source(self, "bendigo_community_banks", states=[state], limit=options["limit"])
+        elif options["queue"]:
+            legacy.queue_source(self, "bank", admin_email=options["admin_email"], states=[state])
+        else:
+            raise legacy.direct_write_disabled(
+                "scrape_banks",
+                "Use the Admin Scraper page (Data > Scraper), or run this command with --queue "
+                "--admin-email <admin> and then start the worker (python manage.py run_intake_worker). "
+                "Use --dry-run to preview.",
             )
