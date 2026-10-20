@@ -37,6 +37,12 @@ def find_unresolved_placeholders(subject, body):
     return found
 
 
+# A hyphenated word such as "hi-vis" is not a greeting.
+_GREETING_REGEX = re.compile(
+    r"(?<![a-z0-9-])(?:dear|hello|hi)(?![a-z0-9])(?!-[a-z0-9])"
+)
+
+
 def validate_generated_email(
     subject,
     body,
@@ -60,14 +66,9 @@ def validate_generated_email(
     # Greeting check
     # ---------------------------------------------------------
 
-    greeting_found = any(
-        greeting in body_lower
-        for greeting in [
-            "dear ",
-            "hello ",
-            "hi ",
-        ]
-    )
+    # Whole words only, so "Hello, Team" and "Hi Team" count but the "hi"
+    # inside "this" or "which" does not.
+    greeting_found = bool(_GREETING_REGEX.search(body_lower))
 
     if not greeting_found:
         issues.append("Missing greeting.")
@@ -188,33 +189,50 @@ def validate_generated_email(
     )
 
 
-def detect_prompt_injection(data):
-    suspicious_phrases = [
-        "ignore previous instructions",
-        "ignore all previous instructions",
-        "ignore your instructions",
-        "disregard previous instructions",
-        "disregard all instructions",
-        "forget previous instructions",
-        "override system prompt",
-        "system prompt",
-        "developer message",
-        "follow these instructions instead",
-        "reveal your prompt",
-        "show your system prompt",
-        "you are now",
-        "act as",
-    ]
+_INJECTION_PHRASES = [
+    "ignore previous instructions",
+    "ignore all previous instructions",
+    "ignore your instructions",
+    "disregard previous instructions",
+    "disregard all instructions",
+    "forget previous instructions",
+    "override system prompt",
+    "system prompt",
+    "developer message",
+    "follow these instructions instead",
+    "reveal your prompt",
+    "show your system prompt",
+    "you are now",
+    "act as",
+]
 
+# Only the two short phrases need word boundaries: "act as" is an instruction,
+# but it also occurs inside names such as "Exact Assets" or "Impact Assist".
+# Every other phrase is matched anywhere in the text, exactly as before. For
+# all phrases, any run of whitespace between the words counts as one space.
+_STANDALONE_PHRASES = {"you are now", "act as"}
+
+
+def _injection_regex(phrase):
+    words = r"\s+".join(re.escape(word) for word in phrase.split())
+
+    if phrase in _STANDALONE_PHRASES:
+        return re.compile(r"(?<![a-z0-9])" + words + r"(?![a-z0-9])")
+
+    return re.compile(words)
+
+
+_INJECTION_REGEXES = [_injection_regex(p) for p in _INJECTION_PHRASES]
+
+
+def detect_prompt_injection(data):
     flagged_fields = []
 
     for field_name, value in data.items():
         text = str(value or "").lower()
 
-        for phrase in suspicious_phrases:
-            if phrase in text:
-                flagged_fields.append(field_name)
-                break
+        if any(regex.search(text) for regex in _INJECTION_REGEXES):
+            flagged_fields.append(field_name)
 
     return flagged_fields
 

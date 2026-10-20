@@ -163,8 +163,12 @@ class ImportPageTests(IntakeTestCase):
         self.assertEqual(Bank.objects.count(), 3)
 
     def test_previewing_the_same_file_again_warns_and_repeat_import_adds_nothing(self):
+        # One build, two uploads of the exact same bytes: an .xlsx embeds its
+        # creation time, so building it twice can differ across a second boundary.
+        data = default_workbook()
+
         for _ in range(2):
-            self.client.post(reverse("intake_import"), {"workbook": upload(default_workbook())})
+            self.client.post(reverse("intake_import"), {"workbook": upload(data)})
             run = IntakeRun.objects.order_by("-pk").first()
             page = self.client.get(reverse("intake_run", args=[run.pk]))
             self.client.post(reverse("intake_confirm", args=[run.pk]))
