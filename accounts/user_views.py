@@ -78,6 +78,7 @@ def user_list(request):
             "staff": staff,
             "total": len(users),
             "search": search,
+            "failed_invitations": services.failed_invitation_ids(users),
         },
     )
 
@@ -144,6 +145,11 @@ def user_options(request, user_id):
                 target
             ).count(),
             "target_name": _display_name(target),
+            "delivery_state": (
+                services.invitation_delivery_state(target)
+                if target.invitation_pending
+                else ""
+            ),
         },
     )
 
@@ -264,7 +270,8 @@ def user_resend_invitation(request, user_id):
     else:
         messages.warning(
             request,
-            "The invitation email could not be sent. Please try again.",
+            "The invitation email could not be sent. The previous link no "
+            "longer works. Use Resend invitation to try again.",
         )
 
     return redirect("user_options", user_id=target.pk)

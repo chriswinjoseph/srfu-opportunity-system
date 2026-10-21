@@ -8,6 +8,8 @@ concurrent requests cannot leave the system without an Admin.
 """
 
 import logging
+import smtplib
+import socket
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -99,10 +101,131 @@ def invitation_url(request, user, base_url=None):
     return request.build_absolute_uri(path)
 
 
+def classify_email_failure(error):
+    """
+    A short, safe description of why an email could not be sent: the kind of
+    failure, the exception class name and (for SMTP replies) the numeric reply
+    code. It never includes the message text, addresses, links or credentials.
+    """
+    if isinstance(error, smtplib.SMTPAuthenticationError):
+        kind = "authentication"
+    elif isinstance(error, (TimeoutError, socket.timeout)):
+        kind = "timeout"
+    elif isinstance(error, smtplib.SMTPRecipientsRefused):
+        kind = "recipient_refused"
+    elif isinstance(
+        error,
+        (
+            smtplib.SMTPConnectError,
+            smtplib.SMTPServerDisconnected,
+            ConnectionError,
+            socket.gaierror,
+        ),
+    ):
+        kind = "connection"
+    elif isinstance(error, smtplib.SMTPException):
+        kind = "smtp_rejected"
+    elif isinstance(error, OSError):
+        kind = "connection"
+    else:
+        kind = "other"
+
+    code = getattr(error, "smtp_code", None)
+
+    if code is None and isinstance(error, smtplib.SMTPRecipientsRefused):
+        codes = [reply[0] for reply in error.recipients.values() if reply]
+        code = codes[0] if codes else None
+
+    return kind, type(error).__name__, code if isinstance(code, int) else None
+
+
+def log_email_failure(purpose, error, user_id=None):
+    """Sanitised diagnostic line: no traceback, message text, address or link."""
+    kind, error_type, code = classify_email_failure(error)
+    logger.warning(
+        "%s email could not be sent: kind=%s error_type=%s smtp_code=%s user_id=%s",
+        purpose,
+        kind,
+        error_type,
+        code if code is not None else "-",
+        user_id if user_id is not None else "-",
+    )
+
+
+def send_password_reset_email(request, user):
+    """
+    Email a password-reset link. Returns True on delivery, False on any
+    delivery failure (a sanitised diagnostic is logged; nothing is shown).
+    """
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    path = reverse(
+        "password_reset_confirm",
+        kwargs={"uidb64": uid, "token": default_token_generator.make_token(user)},
+    )
+    message = render_to_string(
+        "accounts/email/password_reset_email.txt",
+        {"user": user, "reset_url": request.build_absolute_uri(path)},
+    )
+
+    try:
+        send_mail(
+            subject="Reset your Safe Roads For Us password",
+            message=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
+    except Exception as error:
+        log_email_failure("Password reset", error, user.pk)
+        return False
+
+    return True
+
+
+INVITATION_ACTIONS = ("invitation_sent", "invitation_resent", "invitation_failed")
+
+
+def invitation_delivery_state(user):
+    """
+    "failed" if the most recent invitation attempt for this account failed,
+    "sent" if it succeeded, "none" if there has been no attempt. A failed
+    attempt after an earlier success still counts as failed: resending
+    cancels the earlier link, so only the newest attempt matters.
+    """
+    latest = (
+        UserActivity.objects.filter(target=user, action__in=INVITATION_ACTIONS)
+        .order_by("-id")
+        .first()
+    )
+
+    if latest is None:
+        return "none"
+
+    return "failed" if latest.action == "invitation_failed" else "sent"
+
+
+def failed_invitation_ids(users):
+    """Ids of the given pending accounts whose latest invitation attempt failed."""
+    pending_ids = [u.pk for u in users if getattr(u, "invitation_pending", False)]
+    newest = {}
+
+    for target_id, action in (
+        UserActivity.objects.filter(
+            target_id__in=pending_ids, action__in=INVITATION_ACTIONS
+        )
+        .order_by("id")
+        .values_list("target_id", "action")
+    ):
+        newest[target_id] = action
+
+    return {uid for uid, action in newest.items() if action == "invitation_failed"}
+
+
 def send_invitation_email(request, user, base_url=None):
     """
     Email a secure password-setup link. Returns True on delivery,
-    False on any delivery failure (details are logged, not shown).
+    False on any delivery failure (a sanitised diagnostic is logged;
+    details are never shown).
     """
     message = render_to_string(
         "accounts/email/invitation_email.txt",
@@ -121,8 +244,8 @@ def send_invitation_email(request, user, base_url=None):
             recipient_list=[user.email],
             fail_silently=False,
         )
-    except Exception:
-        logger.exception("Invitation email could not be sent.")
+    except Exception as error:
+        log_email_failure("Invitation", error, user.pk)
         return False
 
     return True

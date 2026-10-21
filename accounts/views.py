@@ -1,16 +1,11 @@
-from django.core.mail import send_mail
-from django.conf import settings
 from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.views import LoginView, PasswordResetConfirmView
 from django.shortcuts import redirect, render
-from django.template.loader import render_to_string
 from django.urls import reverse_lazy
-from django.utils.encoding import force_bytes
-from django.utils.http import urlsafe_base64_encode
 from django.views.decorators.http import require_POST
 
+from . import services
 from .forms import EmailAuthenticationForm, ForgotPasswordForm
 from .models import User
 
@@ -55,9 +50,12 @@ def forgot_password_view(request):
                 invitation_pending=False,
             ).first()
 
-            # Use the same confirmation for registered and unknown emails.
+            # The same confirmation is shown for registered, unknown,
+            # disabled and pending addresses, and also when delivery fails,
+            # so the page never reveals whether an account exists. A failed
+            # send is logged in a sanitised form by the service.
             if user is not None:
-                _send_password_reset_email(request, user)
+                services.send_password_reset_email(request, user)
 
             submitted = True
             form = ForgotPasswordForm()
@@ -71,39 +69,6 @@ def forgot_password_view(request):
             "form": form,
             "submitted": submitted,
         },
-    )
-
-
-def _send_password_reset_email(request, user):
-    uid = urlsafe_base64_encode(force_bytes(user.pk))
-    token = default_token_generator.make_token(user)
-
-    reset_path = reverse_lazy(
-        "password_reset_confirm",
-        kwargs={
-            "uidb64": uid,
-            "token": token,
-        },
-    )
-
-    reset_url = request.build_absolute_uri(str(reset_path))
-
-    subject = "Reset your Safe Roads For Us password"
-
-    message = render_to_string(
-        "accounts/email/password_reset_email.txt",
-        {
-            "user": user,
-            "reset_url": reset_url,
-        },
-    )
-
-    send_mail(
-        subject=subject,
-        message=message,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[user.email],
-        fail_silently=False,
     )
 
 

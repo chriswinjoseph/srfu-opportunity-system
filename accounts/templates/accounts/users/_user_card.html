@@ -2,7 +2,7 @@
     <div class="card-head">
         <strong>{{ user_item.get_full_name|default:user_item.email }}</strong>
         {% if user_item.account_state == "disabled" %}<span class="badge badge-disabled">Account Status: Disabled</span>
-        {% elif user_item.account_state == "pending" %}<span class="badge badge-pending">Account Status: Pending Invitation</span>
+        {% elif user_item.account_state == "pending" %}<span class="badge badge-pending">Account Status: Pending Invitation</span>{% if user_item.pk in failed_invitations %}<span class="badge badge-disabled">Invitation delivery failed</span>{% endif %}
         {% else %}<span class="badge badge-active">Account Status: Enabled</span>{% endif %}
     </div>
     <div class="meta">Role: {{ user_item.get_role_display }}<br>Email: {{ user_item.email }}</div>

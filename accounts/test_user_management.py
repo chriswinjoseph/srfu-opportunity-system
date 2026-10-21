@@ -407,7 +407,7 @@ class CreateUserAndInvitationTests(UserManagementBase):
 
         page = self.client.get(reverse("user_options", args=[user.pk]))
         self.assertContains(page, "could not be sent")
-        self.assertContains(page, "Invitation has not been delivered yet.")
+        self.assertContains(page, "Invitation delivery failed")
         self.assertContains(page, "Resend Invitation")
         self.assertNotContains(page, "boom")
 

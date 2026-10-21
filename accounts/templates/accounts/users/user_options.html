@@ -13,7 +13,7 @@
             {% else %}<span class="badge badge-active">Enabled</span>{% endif %}
         </div>
         <div class="meta">Email: {{ target.email }}<br>Role: {{ target.get_role_display }}
-        {% if target.invitation_pending %}<br>{% if target.invitation_sent_at %}Invitation last sent: {{ target.invitation_sent_at|melbourne }}{% else %}Invitation has not been delivered yet.{% endif %}{% endif %}</div>
+        {% if target.invitation_pending %}<br>{% if delivery_state == "failed" %}<strong class="delivery-failed" role="status">Invitation delivery failed.</strong> Any earlier link no longer works. Use Resend Invitation to try again.{% elif target.invitation_sent_at %}Invitation last sent: {{ target.invitation_sent_at|melbourne }}{% else %}Invitation has not been delivered yet.{% endif %}{% endif %}</div>
     </div>
     {% if is_self %}<p class="meta">This is your own account. You cannot change your own role or disable it.</p>{% endif %}
     <div class="actions">
