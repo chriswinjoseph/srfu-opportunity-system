@@ -2500,6 +2500,11 @@ def _find_exact_duplicate(
     return None
 
 
+def _name_key(value):
+    """Name comparison key: case, spacing and punctuation ignored, "&" = "and"."""
+    return _normalise_duplicate_value(str(value or "").replace("&", " and "))
+
+
 def _find_likely_duplicate(
     organisation_type,
     cleaned_data,
@@ -2540,6 +2545,8 @@ def _find_likely_duplicate(
 
     else:
         return None
+
+    submitted_raw_name = submitted_name
 
     submitted_name = _normalise_duplicate_value(
         submitted_name
@@ -2586,6 +2593,10 @@ def _find_likely_duplicate(
             "",
         )
     )
+
+    submitted_state = str(
+        cleaned_data.get("state", "") or ""
+    ).strip().upper()
 
     for organisation in queryset:
         existing_name = _normalise_duplicate_value(
@@ -2692,6 +2703,25 @@ def _find_likely_duplicate(
             )
         )
 
+        # An identical name in the same state is the same organisation
+        # unless a known suburb or postcode on BOTH records tells them
+        # apart. The client workbook holds banks with a State only, so
+        # without this an identical bank could be added by hand with no
+        # warning (the import treats the same pair as a likely duplicate).
+        can_tell_apart_by_location = (
+            bool(submitted_suburb) and bool(existing_suburb)
+        ) or (
+            bool(submitted_postcode) and bool(existing_postcode)
+        )
+        identical_name_same_state = (
+            bool(submitted_name)
+            and _name_key(submitted_raw_name)
+            == _name_key(_organisation_name(organisation))
+            and bool(submitted_state)
+            and submitted_state == _organisation_state(organisation)
+            and not can_tell_apart_by_location
+        )
+
         if (
             same_email
             or same_phone
@@ -2700,6 +2730,7 @@ def _find_likely_duplicate(
                 similar_name
                 and same_location
             )
+            or identical_name_same_state
         ):
             return organisation
 

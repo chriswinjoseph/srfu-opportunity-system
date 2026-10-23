@@ -32,9 +32,19 @@ class EmailAuthenticationForm(AuthenticationForm):
         password = self.cleaned_data.get("password")
 
         if username is not None and password:
+            # Email addresses are not case-sensitive. Accounts are created
+            # in lower case, but a phone keyboard or a typed capital must
+            # not lock someone out, so look the account up regardless of
+            # case and authenticate with the address as stored.
+            stored = (
+                User.objects.filter(email__iexact=username)
+                .values_list("email", flat=True)
+                .first()
+            )
+
             self.user_cache = authenticate(
                 self.request,
-                username=username,
+                username=stored or username,
                 password=password,
             )
 
