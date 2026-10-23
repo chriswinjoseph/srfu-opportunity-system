@@ -64,6 +64,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 
 from .services import (
+    email_word_count_issue,
     find_unresolved_placeholders,
     generate_outreach_email,
     validate_generated_email,
@@ -3800,6 +3801,19 @@ def generate_email_draft(
         cache.delete(
             generation_lock_key
         )
+
+
+def _draft_length_issue(draft):
+    """
+    Re-check the length of the saved text, whatever the stored flag says,
+    so a draft created or changed outside the edit view cannot be submitted
+    or approved at the wrong length.
+    """
+    signature = draft.template.signature if draft.template else ""
+
+    return email_word_count_issue(draft.body, signature or "")
+
+
 @login_required
 @require_POST
 @honour_next
@@ -3937,6 +3951,13 @@ def create_manual_email_draft(
             status="not_yet_contacted",
         )
 
+    # A manual draft has no template, so no signature to exclude.
+    is_incomplete, validation_issues = validate_generated_email(
+        subject,
+        body,
+        "",
+    )
+
     EmailDraft.objects.create(
         opportunity=latest_opportunity,
         recipient_email=recipient_email,
@@ -3948,7 +3969,24 @@ def create_manual_email_draft(
         generation_status="success",
         requested_by=request.user,
         trigger_source="manual_draft",
+        is_incomplete=is_incomplete,
+        validation_issues="\n".join(validation_issues),
     )
+
+    if is_incomplete:
+        messages.warning(
+            request,
+            (
+                "Manual email draft created, but some validation checks "
+                "failed. Please review and edit it before submitting for "
+                "approval."
+            ),
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=content_type_id,
+            object_id=object_id,
+        )
 
     messages.success(
         request,
@@ -4532,6 +4570,22 @@ def submit_email_draft_for_review(request, draft_id):
             object_id=opportunity.object_id,
         )
 
+    length_issue = _draft_length_issue(draft)
+
+    if length_issue:
+        messages.error(
+            request,
+            (
+                "This draft cannot be submitted for approval. "
+                + length_issue
+            ),
+        )
+        return redirect(
+            "organisation_detail",
+            content_type_id=opportunity.content_type_id,
+            object_id=opportunity.object_id,
+        )
+
     recipient_email = (draft.recipient_email or "").strip()
     current_email = (getattr(organisation, "public_email", "") or "").strip()
 
@@ -4693,6 +4747,11 @@ def approve_email_draft(request, draft_id):
         content_problems.append(
             "it has unresolved validation issues"
         )
+
+    length_issue = _draft_length_issue(draft)
+
+    if length_issue:
+        content_problems.append(length_issue.rstrip("."))
 
     if content_problems:
         messages.error(

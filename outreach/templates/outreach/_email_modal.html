@@ -65,6 +65,7 @@
                     <input class="em-input" id="em-subject" name="subject" type="text" value="{{ editor_subject }}" required aria-required="true" data-em-field>
                     <label class="em-label" for="em-body">Message <span aria-hidden="true">*</span></label>
                     <textarea class="em-textarea" id="em-body" name="body" rows="10" required aria-required="true" data-em-field>{{ editor_body }}</textarea>
+                    <p class="em-note" data-field="length-note">Required length: 90&ndash;120 words. {% if current.template %}The template signature at the very end of the message is not counted.{% else %}This draft has no template signature, so every word is counted, including the closing and your name.{% endif %}</p>
                     <p class="em-field-error" data-em-error hidden role="alert"></p>
                     <div class="em-actions">
                         <button type="button" class="em-btn" data-em-clear>Clear</button>
@@ -141,6 +142,7 @@
                 <input class="em-input" id="em-subject" name="subject" type="text" value="{{ editor_subject }}" required aria-required="true" data-em-field>
                 <label class="em-label" for="em-body">Message <span aria-hidden="true">*</span></label>
                 <textarea class="em-textarea" id="em-body" name="body" rows="10" required aria-required="true" data-em-field>{{ editor_body }}</textarea>
+                <p class="em-note" data-field="length-note">Required length: 90&ndash;120 words. A manual draft has no template signature, so every word is counted, including the closing and your name.</p>
                 <p class="em-field-error" data-em-error hidden role="alert"></p>
                 <p class="em-note">Save the draft first. It can then be submitted for approval from this dialog.</p>
                 <div class="em-actions">

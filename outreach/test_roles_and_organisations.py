@@ -32,6 +32,16 @@ def make_user(email, role, **extra):
     )
 
 
+# 100 words: inside the required 90-120 range, so drafts built by these
+# helpers can be submitted and approved.
+VALID_BODY = (
+    "Dear team, we would like to talk with you about road safety in your "
+    "community. "
+    + " ".join(["Together"] * 74)
+    + " Please let us know if you are available. Kind regards, SRFU."
+)
+
+
 class WorkflowBase(TestCase):
     def setUp(self):
         self.admin = make_user(
@@ -66,7 +76,7 @@ class WorkflowBase(TestCase):
             opportunity=self.opportunity,
             recipient_email=self.bank.public_email,
             subject="Hello",
-            body="Dear team, please let us know. Kind regards, SRFU.",
+            body=VALID_BODY,
             outreach_purpose="Collaboration",
             workflow_status=status,
             generation_status="success",

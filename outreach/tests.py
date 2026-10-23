@@ -7,6 +7,7 @@ from django.core.management import call_command
 from django.test import override_settings
 
 from outreach.views import EmailNotSentError
+from outreach.test_roles_and_organisations import VALID_BODY as VALID_LENGTH_BODY
 
 
 
@@ -4501,7 +4502,7 @@ class EmailDraftWorkflowTests(TestCase):
 
 
 
-            body="Test email body.",
+            body=VALID_LENGTH_BODY,
 
 
 
@@ -6766,7 +6767,7 @@ class EmailDraftWorkflowTests(TestCase):
             {
                 "version": draft.version,
                 "subject": "Updated subject",
-                "body": "Updated body.",
+                "body": VALID_LENGTH_BODY + " Updated.",
             },
         )
         # Template-validation heuristics are covered elsewhere.
@@ -6923,7 +6924,7 @@ class EmailDraftWorkflowTests(TestCase):
         draft.refresh_from_db()
         self.assertEqual(draft.workflow_status, "draft")
 
-        draft.body = "Dear Sam, please reply."
+        draft.body = VALID_LENGTH_BODY
         draft.save(update_fields=["body"])
 
         self.client.post(url)
@@ -7619,7 +7620,7 @@ class EmailApprovalHardeningTests(TestCase):
         sync_role_with_permissions(user)
         return user
 
-    def edit(self, draft, subject="Edited subject", body="Edited body."):
+    def edit(self, draft, subject="Edited subject", body=VALID_LENGTH_BODY + " Edited."):
         draft.refresh_from_db()
         self.client.post(
             self.url("update_email_draft", draft),

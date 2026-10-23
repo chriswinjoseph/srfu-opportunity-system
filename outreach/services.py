@@ -43,6 +43,44 @@ _GREETING_REGEX = re.compile(
 )
 
 
+EMAIL_MIN_WORDS = 90
+EMAIL_MAX_WORDS = 120
+
+
+def count_email_words(body, signature=""):
+    """
+    Words in the email body, excluding the approved template signature.
+
+    The signature is removed only when its words close the body, so ordinary
+    text is never discounted. A draft with no template has no signature to
+    exclude and is counted in full.
+    """
+    words = (body or "").split()
+    signature_words = (signature or "").split()
+
+    if not signature_words or len(signature_words) > len(words):
+        return len(words)
+
+    if words[-len(signature_words):] == signature_words:
+        return len(words) - len(signature_words)
+
+    return len(words)
+
+
+def email_word_count_issue(body, signature=""):
+    """Return the validation message if the length is outside 90-120."""
+    word_count = count_email_words(body, signature)
+
+    if word_count < EMAIL_MIN_WORDS or word_count > EMAIL_MAX_WORDS:
+        return (
+            f"Email word count is {word_count}. "
+            f"The required range is {EMAIL_MIN_WORDS}–{EMAIL_MAX_WORDS} "
+            "words, excluding the signature."
+        )
+
+    return ""
+
+
 def validate_generated_email(
     subject,
     body,
@@ -145,18 +183,13 @@ def validate_generated_email(
 
     # ---------------------------------------------------------
     # Word count
-    # Requirement: approximately 120–150 words
+    # Requirement: 90-120 words inclusive, excluding the signature
     # ---------------------------------------------------------
 
-    word_count = len(body.split())
+    word_count_issue = email_word_count_issue(body, signature)
 
-    if word_count < 120 or word_count > 150:
-        issues.append(
-            (
-                f"Email word count is {word_count}. "
-                "The expected range is approximately 120–150 words."
-            )
-        )
+    if word_count_issue:
+        issues.append(word_count_issue)
 
     # ---------------------------------------------------------
     # Approved signature check
@@ -326,7 +359,7 @@ IMPORTANT RULES:
 - Do not make promises on behalf of Safe Roads For Us.
 - Use Australian English.
 - Be professional, friendly and concise.
-- Aim for approximately 120 to 150 words excluding the signature.
+- The email body must be between 90 and 120 words inclusive, excluding the signature.
 - If no contact name is supplied, greet the organisation team.
 - Do not include unresolved placeholders.
 - This is a draft only.

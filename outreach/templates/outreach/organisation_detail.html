@@ -203,6 +203,7 @@
                                 <input class="em-input" id="subject-{{ draft.draft_id }}" name="subject" type="text" value="{{ draft.subject }}" required>
                                 <label class="em-label" for="body-{{ draft.draft_id }}">Message</label>
                                 <textarea class="em-textarea" id="body-{{ draft.draft_id }}" name="body" rows="10" required>{{ draft.body }}</textarea>
+                                <p class="em-note" data-field="length-note">Required length: 90&ndash;120 words. {% if draft.template %}The template signature at the very end of the message is not counted.{% else %}This draft has no template signature, so every word is counted, including the closing and your name.{% endif %}</p>
                                 <div class="em-row-actions">
                                     <button type="submit" class="em-btn em-btn-blue" data-busy="Saving...">Save Draft</button>
                                     {% if actions.can_submit %}<button type="submit" class="em-btn em-btn-blue" formaction="{% url 'save_and_submit_email_draft' draft.draft_id %}" data-busy="Submitting..." data-confirm="Submit this email for approval? The subject and message shown here will be submitted.">Submit for Approval</button>{% endif %}

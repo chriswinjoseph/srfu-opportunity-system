@@ -21,13 +21,13 @@ from outreach.test_roles_and_organisations import WorkflowBase, make_user
 User = get_user_model()
 
 # A body that passes the existing validation (greeting, call to action,
-# closing, and 120-150 words).
+# closing, and 90-120 words).
 GOOD_BODY = (
     "Dear team, we would like to talk with you about road safety in your "
     "community. Our volunteers work with local clubs, schools and "
     "businesses to share practical advice that helps families travel "
     "more safely every day. "
-    + " ".join(["Together"] * 90)
+    + " ".join(["Together"] * 55)
     + " Please let us know if you are available to meet. Kind regards, SRFU."
 )
 

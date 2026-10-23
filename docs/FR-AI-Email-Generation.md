@@ -111,7 +111,9 @@ The email should sound natural and personalised without pretending that the AI h
 
 ### FR-AI-08: Follow the Required Length
 
-The generated email should normally contain approximately **120–150 words**, excluding the signature.
+**Superseded by a confirmed change (October 2026):** the email body must be **90–120 words inclusive**, excluding the template signature. This is a mandatory rule, not advisory: the application blocks submission and approval of a draft outside this range, for AI-generated and manual drafts alike. The template signature is excluded only when it is the final text of the body; the same words anywhere else are counted. A manual draft has no template, so it has no signature to exclude and every word is counted, including its closing and name. The email screens state this beside the message box. The original wording is kept below for the record.
+
+_Original wording (superseded):_ The generated email should normally contain approximately **120–150 words**, excluding the signature.
 
 It must include:
 
@@ -434,7 +436,7 @@ It must not use unrelated, unverified, sensitive or private information.
 
 The draft must be professional, friendly, respectful, concise and written in Australian English.
 
-The recommended initial length is 120–150 words, excluding the signature. It must contain a subject, greeting, introduction, outreach purpose, call to action, closing and approved sender details.
+_Original wording (superseded by 90–120 words inclusive, excluding the signature):_ The recommended initial length is 120–150 words, excluding the signature. It must contain a subject, greeting, introduction, outreach purpose, call to action, closing and approved sender details.
 
 ## Specify Fallback Behaviour for Missing Data
 
