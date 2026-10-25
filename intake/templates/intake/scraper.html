@@ -7,15 +7,24 @@
 {% if not worker_alive %}<div class="em-banner em-banner-warning" role="status">The background service that runs scrapes is not running{% if worker_last_seen %} (last active {{ worker_last_seen|melbourne }}){% endif %}. A scrape you queue will wait, without making progress, until the system operator starts it.</div>{% endif %}
 <section class="in-card">
     <h2>Approved sources</h2>
-    <ul>{% for a in adapters %}<li><strong>{{ a.label }}</strong> &mdash; {{ a.org_type|title }}, {{ a.states|join:", " }}. <span class="in-muted">{{ a.description }}</span></li>{% endfor %}</ul>
-    <p class="in-muted">No approved public source is configured for Branches, or for states other than {{ supported_states|join:", " }}. Selecting those is reported as unsupported; nothing is invented.</p>
+    <div class="in-table-wrap"><table class="in-table"><thead><tr><th>Type</th><th>Source</th><th>Coverage</th><th>Known restrictions</th></tr></thead>
+    <tbody>
+    {% for c in coverage %}<tr>
+        <td>{{ c.adapter.org_type|title }}</td>
+        <td><strong>{{ c.adapter.label }}</strong><br><span class="in-muted">{{ c.adapter.description }}</span></td>
+        <td>{{ c.adapter.states|join:", " }} only &middot; {{ c.page_count }} page{{ c.page_count|pluralize }}{% if c.adapter.suburbs %} &middot; suburb filter available{% endif %}</td>
+        <td>{% if c.adapter.known_limitation %}{{ c.adapter.known_limitation }}{% else %}None recorded.{% endif %}{% if c.last_failure %}<br><span class="in-muted">Last attempt: {{ c.last_failure }}</span>{% endif %}</td>
+    </tr>{% endfor %}
+    {% for label in unsourced_types %}<tr><td>{{ label }}</td><td colspan="3">No approved public source is configured, so none can be collected.</td></tr>{% endfor %}
+    </tbody></table></div>
+    <p class="in-muted">Only the sources above are used, and only for {{ supported_states|join:", " }}. This is not national coverage. Other types or states are refused when you queue a scrape; nothing is invented. A source that blocks automated access is reported as inaccessible, which is different from a source that has no organisations to collect.</p>
 </section>
 <section class="in-card">
     <h2>Start a scrape</h2>
     <form method="post" data-single-submit>
         {% csrf_token %}
         <fieldset style="border:0;padding:0"><legend class="em-label">Organisation types</legend>
-            <div class="in-choices">{% for value, label in type_choices %}<label><input type="checkbox" name="org_type" value="{{ value }}" {% if value in supported_types %}checked{% endif %}> {{ label }}{% if value not in supported_types %} <span class="in-muted">(no approved source)</span>{% endif %}</label>{% endfor %}</div>
+            <div class="in-choices">{% for value, label in type_choices %}<label><input type="checkbox" name="org_type" value="{{ value }}" {% if value in supported_types and value not in blocked_types %}checked{% endif %}> {{ label }}{% if value not in supported_types %} <span class="in-muted">(no approved source)</span>{% elif value in blocked_types %} <span class="in-muted">(source blocks automated access; expected to fail)</span>{% endif %}</label>{% endfor %}</div>
         </fieldset>
         <fieldset style="border:0;padding:0"><legend class="em-label">State / Territory</legend>
             <div class="in-choices">{% for s in states %}<label><input type="checkbox" name="state" value="{{ s }}" {% if s in supported_states %}checked{% endif %}> {{ s }}{% if s not in supported_states %} <span class="in-muted">(no source)</span>{% endif %}</label>{% endfor %}</div>
@@ -28,8 +37,8 @@
 </section>
 <section class="in-card">
     <h2>Recent scraper runs</h2>
-    {% if runs %}<div class="in-table-wrap"><table class="in-table"><thead><tr><th>Run</th><th>Status</th><th>Started</th><th>Progress</th></tr></thead>
-    <tbody>{% for r in runs %}<tr><td><a href="{% url 'intake_run' r.pk %}">#{{ r.pk }}</a></td><td>{{ r.get_status_display }}</td><td>{{ r.created_at|melbourne }}</td><td>{{ r.progress_done }} / {{ r.progress_total }}</td></tr>{% endfor %}</tbody></table></div>
+    {% if runs %}<div class="in-table-wrap"><table class="in-table"><thead><tr><th>Run</th><th>Status</th><th>Started</th><th>Pages</th></tr></thead>
+    <tbody>{% for r in runs %}<tr><td><a href="{% url 'intake_run' r.pk %}">#{{ r.pk }}</a></td><td>{% if r.status == "queued" %}Queued &ndash; {% if worker_alive %}waiting to start{% else %}not started (service stopped){% endif %}{% elif r.status == "running" %}Running{% if not worker_alive %} &ndash; service stopped{% endif %}{% else %}{{ r.get_status_display }}{% endif %}</td><td>{{ r.created_at|melbourne }}</td><td>{{ r.progress_done }} of {{ r.progress_total }}</td></tr>{% endfor %}</tbody></table></div>
     {% else %}<p class="in-muted">No scraper runs yet.</p>{% endif %}
 </section>
 <script>document.querySelectorAll("form[data-single-submit]").forEach(function(f){f.addEventListener("submit",function(){var b=f.querySelector("button[type=submit]");setTimeout(function(){b.disabled=true;b.textContent="Queuing...";},0);});});</script>

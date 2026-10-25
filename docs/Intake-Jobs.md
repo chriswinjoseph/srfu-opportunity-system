@@ -32,6 +32,36 @@ the same machine (SQLite is a single file). With a different database engine (se
    "Running", then shows the summary. Stop the worker with Ctrl+C: a job in progress is
    re-queued automatically once the lease expires (5 minutes by default).
 
+### Windows: double-click launchers (no commands)
+
+In the project folder:
+
+| File | What it does |
+|---|---|
+| `Start-SRFU.bat` | Starts the website and the background scraper service, waits until both report ready, opens the login page. Safe to double-click again: anything already running is detected and not started twice. If it fails it says why and points to `logs\`. |
+| `Status-SRFU.bat` | Shows whether the website and the service are running. Changes nothing. |
+| `Stop-SRFU.bat` | Stops the website and service started for this folder. |
+
+Each is a thin wrapper around `scripts\start-demo.ps1` (below). Operator notes:
+
+* **Starting the service runs any scrape that is already queued.** The launcher prints a
+  notice when jobs are waiting. Check the Scraper page first if a queued job should not run yet.
+* **Website-only use still needs the service.** The Admin queues and watches scrapes in the
+  browser, but a background process must be running somewhere. On this machine it is the
+  service these launchers start; the computer must stay on and the launcher must have been
+  run since the last restart. The pages show "service stopped" (not "running", never
+  "successful") if it is not.
+* **Stopping** ends the processes immediately. A scrape part-way through keeps the pages it
+  finished; after the next start it is picked up again (up to 5 minutes later, when its lease
+  expires) and does not repeat finished pages or duplicate records.
+* **Restarts.** The launcher does not restart a crashed process. Inside the service, an
+  unexpected error in its main loop is retried with a growing pause up to 5 times in a row
+  (`--max-errors`), after which it stops with a message in `logs\worker.err.log` and a non-zero
+  exit. Double-click `Start-SRFU.bat` again to bring it back. In hosting the platform's restart
+  policy does this (see "In hosting").
+* The website runs with Django's development server, which is fine for a single-machine demo
+  and is not a production web server.
+
 ### Windows local demo (one command)
 
 `scripts\start-demo.ps1` starts the website and the worker together, using the project's
@@ -43,7 +73,7 @@ powershell -ExecutionPolicy Bypass -File scripts\start-demo.ps1 -Status    # wha
 powershell -ExecutionPolicy Bypass -File scripts\start-demo.ps1 -Stop      # stop both
 ```
 
-Options: `-Port` (default 8000), `-VenvPath`, `-SettingsModule` and `-ExtraPythonPath`
+Options: `-OpenBrowser` (open the login page when ready), `-Port` (default 8000), `-VenvPath`, `-SettingsModule` and `-ExtraPythonPath`
 (to run against another settings file, for example a disposable database),
 `-StartupTimeoutSeconds` (default 45).
 
@@ -117,10 +147,26 @@ automatically if it exits. Examples (adapt paths):
 Only one worker is normally needed. Several are safe: a job is claimed by one conditional
 database update, so two workers can never run the same job (verified, see below).
 
+### Hosting checklist for the worker (not yet decided; nothing here is deployed)
+
+* a managed process running `python manage.py run_intake_worker` beside the web process;
+* restart policy: restart on exit, with a short delay (the command already stops itself after
+  5 consecutive loop errors so a platform restart policy, not an endless internal loop, handles
+  persistent faults);
+* health check: `python manage.py intake_status` (exit 1 when a job waits too long with no
+  worker, or a running job stops reporting);
+* the same database as the website (PostgreSQL if they run on separate machines), the same
+  environment values, and HTTPS egress to the approved hosts only.
+
+The hosting platform is undecided, so this is a requirement to be met, not a statement that
+production is ready (see the handover list below).
+
 ## Monitoring
 
-* **Admin pages.** A banner appears on the Scraper page and on a queued run when no worker has
-  checked in during the last 90 seconds. A running job reports progress after every page.
+* **Admin pages.** A banner appears on the Scraper page and on a queued **or running** run when
+  no worker has checked in during the last 90 seconds ("Queued - not started" / "Running -
+  service stopped"). A running job reports progress after every page, and the run page updates
+  itself every few seconds until the run finishes.
 * **Command line / health check.**
 
   ```
@@ -153,8 +199,20 @@ database update, so two workers can never run the same job (verified, see below)
   robots.txt respected, login pages and forbidden pages are not collected, an automated-access
   (bot-protection) check is reported and **not bypassed**, honest user-agent
   `SafeRoadsForUsCollector/1.0`.
-* **Errors.** Page failures are recorded with a business-language message and the run
-  continues.
+* **Errors.** Page failures are recorded with a business-language message, the source URL, the
+  reason and the action required, and the run continues. A source that blocks automated access
+  is reported differently from one that loaded but listed nothing.
+* **Run status.** Successful: every page worked and every result was processed. Partially
+  Successful: some work was saved and something failed, was incomplete or awaits review.
+  Failed: nothing was processed (every page failed, every record failed, or there was nothing
+  to visit). Queued and Running are progress states only. Open points are in
+  `Scraper-BA-Clarifications.md`.
+* **Counts.** The scraper summary shows page counts (processed, failed) separately from
+  organisation counts. Exact duplicates are matched existing organisations and therefore also
+  appear under Updated or Unchanged.
+* **Coverage.** Only Bank (11 Bendigo Community Bank pages, VIC) has a working source. Clubs
+  have a configured council source that blocked automated access when last checked; Branches
+  have none. Unsupported selections are refused when queued.
 
 ## Legacy command-line entry points
 

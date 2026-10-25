@@ -6,11 +6,12 @@ from functools import wraps
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_GET, require_POST
 
+from .import_template import EXAMPLE_FILENAME, TEMPLATE_FILENAME, build_example, build_template, guidance
 from .importer import ImportBusy, confirm_import, create_preview, previously_imported
 from .matching import ORG_MODELS, TYPE_LABELS
 from .models import DuplicateReview, IntakeResult, IntakeRun, ProposedChange
@@ -88,7 +89,32 @@ def import_upload(request):
 
             errors.extend(parsed.structure_errors)
 
-    return render(request, "intake/import.html", {"errors": errors})
+    return render(request, "intake/import.html", {"errors": errors, "guide": guidance()})
+
+
+def _xlsx_download(content, filename):
+    response = HttpResponse(
+        content,
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    response["Cache-Control"] = "no-store"
+
+    return response
+
+
+@admin_only
+@require_GET
+def import_template(request):
+    """Blank workbook with the supported sheets and headers (no records)."""
+    return _xlsx_download(build_template(), TEMPLATE_FILENAME)
+
+
+@admin_only
+@require_GET
+def import_example(request):
+    """Clearly labelled synthetic example of a populated workbook."""
+    return _xlsx_download(build_example(), EXAMPLE_FILENAME)
 
 
 @admin_only
@@ -125,6 +151,12 @@ def run_detail(request, run_id):
             "pending_reviews": run.reviews.filter(status=DuplicateReview.STATUS_PENDING).count(),
             "pending_changes": run.changes.filter(status=ProposedChange.STATUS_PENDING).count(),
             "coverage_notes": (run.options or {}).get("coverage_notes") or (run.options or {}).get("unsupported", []),
+            "no_results": (
+                run.kind == IntakeRun.KIND_SCRAPER and run.is_finished
+                and (run.totals or {}).get("processed", 0) == 0
+                and (run.totals or {}).get("pages_failed", 0) == 0
+                and run.status != IntakeRun.STATUS_FAILED
+            ),
             "outcomes": IntakeResult.OUTCOME_CHOICES,
         },
     )
@@ -316,11 +348,36 @@ def scraper_page(request):
 
         return redirect("intake_scraper")
 
+    coverage = []
+
+    for adapter in ADAPTERS.values():
+        pages = adapter.pages()
+        last = (
+            IntakeResult.objects.filter(
+                kind=IntakeResult.KIND_PAGE, row_ref__in=[p.url for p in pages]
+            ).order_by("-id").first()
+            if pages else None
+        )
+        coverage.append(
+            {
+                "adapter": adapter,
+                "page_count": len(pages),
+                "last_failure": last.message if last else "",
+                "blocked": bool(adapter.known_limitation),
+            }
+        )
+
     return render(
         request,
         "intake/scraper.html",
         {
             "adapters": list(ADAPTERS.values()),
+            "coverage": coverage,
+            "unsourced_types": [
+                label for key, label in ORG_TYPE_LABELS.items()
+                if key not in {a.org_type for a in ADAPTERS.values()}
+            ],
+            "blocked_types": sorted({a.org_type for a in ADAPTERS.values() if a.known_limitation}),
             "type_choices": list(ORG_TYPE_LABELS.items()),
             "supported_types": sorted({a.org_type for a in ADAPTERS.values()}),
             "states": STATE_CHOICES,

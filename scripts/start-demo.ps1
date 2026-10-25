@@ -32,6 +32,8 @@
     Django settings module for both processes (testing with another database).
 .PARAMETER ExtraPythonPath
     Extra folder added to PYTHONPATH (used with -SettingsModule).
+.PARAMETER OpenBrowser
+    Open the login page in the default browser once everything is running.
 .PARAMETER StartupTimeoutSeconds
     How long to wait for the website and worker to report healthy (default 45).
 #>
@@ -43,7 +45,8 @@ param(
     [string]$VenvPath = '',
     [string]$SettingsModule = '',
     [string]$ExtraPythonPath = '',
-    [int]$StartupTimeoutSeconds = 45
+    [int]$StartupTimeoutSeconds = 45,
+    [switch]$OpenBrowser
 )
 
 $ErrorActionPreference = 'Stop'
@@ -305,6 +308,14 @@ if (-not $workerRunning.Count) {
 if ($workerRunning.Count) {
     Ok ('Worker already running (PID ' + (($workerRunning | ForEach-Object ProcessId) -join ', ') + '); not starting another')
 } else {
+    # Starting the worker lets it process scrapes that are already waiting in the queue.
+    $queueInfo = Invoke-Manage @('intake_status')
+    if ($queueInfo.Output -match 'Queued jobs:\s*(\d+)') {
+        $waiting = [int]$Matches[1]
+        if ($waiting -gt 0) {
+            Write-Host "NOTE: $waiting scraper job(s) are already queued. Starting the worker will run them now (public web pages on the approved sources only)." -ForegroundColor Yellow
+        }
+    }
     $startedProcs += Start-Managed 'Worker' @('run_intake_worker') 'worker'
     $startedWorker = $true
 }
@@ -357,4 +368,5 @@ Info "  Website: http://127.0.0.1:$Port/accounts/login/"
 Info '  The worker only runs scrapes that an Admin queues on the Scraper page; it never starts one itself.'
 Info '  Check:   scripts\start-demo.ps1 -Status'
 Info '  Stop:    scripts\start-demo.ps1 -Stop'
+if ($OpenBrowser) { Start-Process $LoginUrl }
 exit 0

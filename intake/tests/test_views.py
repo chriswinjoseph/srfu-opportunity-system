@@ -308,5 +308,5 @@ class ScraperPageTests(IntakeTestCase):
 
         self.assertContains(page, "Coverage notes")
         self.assertContains(page, "Branch: no approved public source")
-        self.assertContains(page, "3 of 4 pages processed")
+        self.assertContains(page, "<strong>3 of 4</strong><span>Pages processed</span>")
         self.assertContains(page, "Partially Successful")

@@ -15,9 +15,9 @@ requirement is not delivered (see Gaps).
 |---|---|---|---|
 | FR-01 | Restrict data import to Admin | Met | Tests (AccessTests, preview/confirm Admin-only); Browser: Staff gets 403 and sees no controls |
 | FR-02 | Accept the agreed `.xlsx` format | Met | Tests; supplied workbook imports 168 organisations / 244 contacts |
-| FR-03 | Validate before import | Met | Tests (file type, corrupt file, missing sheet / column, no rows); Browser invalid uploads |
+| FR-03 | Validate before import | Met | Tests (file type, corrupt file, renamed CSV, missing sheet / column, headers-only file; no organisations or contacts created by any invalid upload); Browser invalid uploads. Messages name the missing sheet or column |
 | FR-04 | Organisations and contacts separately, grouped by `organisation_id` | Met | Tests (multiple contacts create one organisation) |
-| FR-05 | Organisation type (Bank default; Branch / Club; unsupported held for review) | Met, with a limit | Workbook without a type column imports as Banks. Unsupported types are now listed as Review required (not Failed). Branch / Club rows need the optional columns (e.g. `parent_bank_name`); a branch with no known parent is reported incomplete. No Admin template for such files exists yet |
+| FR-05 | Organisation type (Bank default; Branch / Club; unsupported held for review) | Met, with a limit | Workbook without a type column imports as Banks. Unsupported types are now listed as Review required (not Failed). Branch / Club rows need the optional columns (e.g. `parent_bank_name`); a branch with no known parent is reported incomplete. The Import Data page now lists these columns and offers a blank template that includes `organisation_type` and the optional columns |
 | FR-06 | Preserve source information | Met | Source IDs per source, source filename, import time, starting Admin, verification flags, outreach / reply evidence, observed dates (tests) |
 | FR-07 | Missing optional data stays empty; `(unspecified)` is a missing name | Met | Tests; 70 blank names in the supplied workbook |
 | FR-08 | Binary `contact_status`, no Partially Contacted | Met | Tests (BA mapping table); supplied workbook 166 Contacted / 2 Not Yet Contacted |
@@ -32,7 +32,7 @@ requirement is not delivered (see Gaps).
 | FR-17 | Scraped results use the standard duplicate rules | Met | Tests |
 | FR-18 | New scraped organisation: one record, source Scraper, type, Not Yet Contacted, source URL | Met (Bank: live and mocked; Club: mocked only) | Tests; Live: 3 Community Banks created Not Yet Contacted with source URLs |
 | FR-19 | Changed information: compare, keep current, show source, no blank replaces a value, no silent replacement of verified values | Met | Tests (changes proposed, removed website kept and flagged) |
-| FR-20 | Scraper summary | Met | Tests; Browser |
+| FR-20 | Scraper summary | Met (25 Oct: pages and organisations now shown separately) | Tests (`test_scraper_status`); Browser. Pages processed / failed are page counts; every other figure counts organisations. Exact duplicates are existing organisations that were matched, so they overlap Updated and Unchanged (stated on the page) |
 
 ## Acceptance criteria
 
@@ -92,8 +92,9 @@ Notes:
 2. **The earlier bounded live check fetched 3 of the 11 Bendigo pages.** The 14 October manual
    run (above) collected all 11. All 11 are configured.
 3. **FR-15 is partial** for the reasons above; there is no Branch source at all.
-4. **No second typed-import template** exists for Branch / Club files; the optional columns are
-   read if present and tested, but the Admin screen only describes the client workbook.
+4. **Branch / Club import** uses the optional columns documented on the Import Data page and in
+   the downloadable template. Only a Bank example is verified end to end with a populated
+   template (plus one synthetic Club); a Branch needs its parent bank to exist first.
 5. **Import confirmation runs inside the web request** (fine for 168 organisations, not for
    very large files).
 6. **PostgreSQL concurrency is untested**; SQLite concurrency is tested with real processes.
@@ -109,3 +110,27 @@ See `Intake-BA-Interpretations.md`. In short:
 5. Shared email level (organisation or contact) - held at contact level.
 6. Organisation type missing from the client workbook - imported as Banks; future files may add it.
 7. Approved scraper sources - only the two already used by the project; none for Branches or outside Victoria.
+
+## Update, 25 October 2026 (scraper audit, import guidance, launcher)
+
+Code base for this update: be5b49c (pushed to origin/main) plus the uncommitted changes of this
+task. Results below are from automated tests and a headless-browser run on disposable
+databases; nothing was run against the project database, and queued job #7 was not touched.
+
+Defects found and fixed (each reproduced by a failing test first):
+
+| Defect | Fix |
+|---|---|
+| A suburb filter chosen together with Banks silently excluded every Bank (the page said the filter "was not applied") | The filter now applies only to sources that declare suburbs |
+| An unknown organisation type, or none at all, was widened to "all types" by `start_scrape` | Rejected with a clear message; nothing is queued |
+| A run with no pages to visit finished as Successful | Failed, with the reason recorded |
+| A run in which every record failed (for example every import row had an invalid state) finished as Partially Successful | Failed; runs that only hold review or incomplete items stay Partially Successful (see `Scraper-BA-Clarifications.md`, item 2) |
+| Summary mixed pages and organisations; a page failure was labelled with the source name as if it were an organisation | Pages and organisations are shown separately; a failed page names its URL, reason, field ("source page") and required action |
+| "Source blocked" and "source loaded but listed nothing" looked alike | Separate codes and different required actions |
+| A running job whose service had stopped still looked healthy | The run and Scraper pages say the service is stopped |
+| The worker loop stopped on any unexpected error | Bounded retries with a growing pause (5 consecutive errors by default), then a clear stop message and non-zero exit |
+| The Import Data page did not describe the workbook; no template | Explanation, expandable instructions derived from the parser's rules, blank template and a synthetic example (Admin only) |
+
+Requirements still not fully met or needing a decision: see `Scraper-BA-Clarifications.md`
+(FR-15 minimum scope, blocked club source, absent branch source, Victoria-only banks, status
+rules for review-only runs, bank "ID or name" wording, hosting).

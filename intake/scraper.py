@@ -23,7 +23,7 @@ from .matching import Submission
 from .models import IntakeResult, IntakeRun
 from .normalise import norm_place
 from .reviews import require_admin
-from .sources import ADAPTERS, plan_coverage
+from .sources import ADAPTERS, ORG_TYPE_LABELS, plan_coverage
 
 logger = logging.getLogger("intake.scraper")
 
@@ -40,6 +40,16 @@ class ScrapeError(Exception):
 
 def start_scrape(user, org_types, states, suburbs=()):
     require_admin(user)
+    org_types = list(org_types)
+
+    if not org_types:
+        raise ScrapeError("Choose at least one organisation type to collect.")
+
+    unknown = [t for t in org_types if t not in ORG_TYPE_LABELS]
+
+    if unknown:
+        raise ScrapeError("Unsupported organisation type selected. Choose Bank, Branch or Club.")
+
     adapters, unsupported = plan_coverage(org_types, states, suburbs)
 
     if not adapters:
@@ -148,13 +158,40 @@ def _record_to_submission(adapter, record, run):
     )
 
 
-def _page_problem(run, adapter, page, code_or_message, message):
+NO_ACCESS_CODES = ("blocked_host", "robots", "login_required", "forbidden", "bot_challenge")
+RETRY_CODES = ("timeout", "unreachable", "http_error", "not_found", "too_large", "error")
+
+
+def _page_action(code):
+    if code in NO_ACCESS_CODES:
+        return (
+            "The source does not allow automated collection. This is not bypassed. "
+            "A permitted source, or permission from the site owner, is needed before this page can be collected."
+        )
+
+    if code in RETRY_CODES:
+        return "No data was collected from this page. It can be tried again on a later run."
+
+    if code == "no_records":
+        return (
+            "The source was reachable but no organisations were found on the page. "
+            "Check the page in a browser; if it does list organisations, ask the developer to review this source."
+        )
+
+    return (
+        "The page loaded but no organisation could be recognised on it, so the source's layout may have changed. "
+        "Ask the developer to review this source."
+    )
+
+
+def _page_problem(run, adapter, page, code, message):
     IntakeResult.objects.create(
         run=run, kind=IntakeResult.KIND_PAGE, outcome="failed",
-        row_ref=page.url[:300], name=adapter.label[:255], org_type=adapter.org_type,
-        message=message,
-        action_required="No data was collected from this page. It can be tried again on a later run.",
-        detail={"code": code_or_message},
+        row_ref=page.url[:300], name="", org_type=adapter.org_type,
+        field="source page",
+        message=f"{adapter.label}: {message}",
+        action_required=_page_action(code),
+        detail={"code": code, "source_label": adapter.label},
     )
 
 
@@ -195,6 +232,11 @@ def run_job(run, fetcher=None, *, max_runtime=MAX_RUNTIME_SECONDS, now_func=time
     plan = plan[:MAX_PAGES]
     run.progress_total = len(plan)
     run.save(update_fields=["progress_total"])
+
+    if not plan:
+        # Nothing could be visited, so the run cannot honestly be called successful.
+        return finish_run(run, fatal="No pages to process: no approved source page matched this run.")
+
     done = set(options.get("done_pages", []))
     stopped_early = ""
     fetchers = {}
@@ -228,14 +270,15 @@ def run_job(run, fetcher=None, *, max_runtime=MAX_RUNTIME_SECONDS, now_func=time
             outcome = adapter.parse(page, fetched.text)
 
             if outcome.problem:
-                _page_problem(run, adapter, page, "unrecognised", outcome.problem)
+                _page_problem(run, adapter, page, outcome.code, outcome.problem)
                 _mark_done(run, page.url)
                 continue
 
             excluded = 0
 
             for record in outcome.records:
-                if suburbs and norm_place(record.get("suburb", "")) not in suburbs:
+                # Only a source that declares suburbs can be filtered by suburb.
+                if suburbs and adapter.suburbs and norm_place(record.get("suburb", "")) not in suburbs:
                     excluded += 1
                     continue
 

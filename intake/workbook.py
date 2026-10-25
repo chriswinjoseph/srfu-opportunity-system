@@ -23,7 +23,12 @@ MAX_ROWS = 20000
 SOURCE_KEY = "client_workbook"
 SOURCE_LABEL = "Client workbook (Shane)"
 
-ORGANISATION_COLUMNS = {
+SHEET_ORGANISATIONS = "Organisations"
+SHEET_CONTACTS = "Contacts"
+
+# Ordered so the downloadable template and the on-page guidance list the
+# headers in the same order the sheets use. The sets below are what is checked.
+ORGANISATION_HEADERS = (
     "organisation_id",
     "bank_name",
     "state",
@@ -37,8 +42,8 @@ ORGANISATION_COLUMNS = {
     "first_observed_date",
     "last_observed_date",
     "needs_verification_flag",
-}
-CONTACT_COLUMNS = {
+)
+CONTACT_HEADERS = (
     "contact_id",
     "organisation_id",
     "bank_name",
@@ -53,7 +58,10 @@ CONTACT_COLUMNS = {
     "sent_to_by_srfu",
     "human_reply_received",
     "contact_status",
-}
+)
+ORGANISATION_COLUMNS = set(ORGANISATION_HEADERS)
+CONTACT_COLUMNS = set(CONTACT_HEADERS)
+TYPE_COLUMN = "organisation_type"
 
 SUPPORTED_TYPES = {"bank": "bank", "branch": "branch", "club": "club"}
 
@@ -140,7 +148,8 @@ def _read_sheet(worksheet, expected):
             [],
             f"The '{worksheet.title}' sheet is missing the column(s): "
             + ", ".join(missing)
-            + ".",
+            + ". Row 1 must contain these headers spelled exactly as shown "
+            "(capital letters do not matter; underscores do). The downloadable template has them all.",
         )
 
     data = []
@@ -163,7 +172,9 @@ def parse_workbook(file_bytes, filename=""):
 
     if not filename.lower().endswith(".xlsx"):
         result.structure_errors.append(
-            "Only Microsoft Excel .xlsx files can be imported."
+            "Only Microsoft Excel .xlsx files can be imported. A CSV or other spreadsheet "
+            "cannot simply be renamed to .xlsx: open it in Excel, arrange it like the template "
+            "and use Save As > Excel Workbook (.xlsx)."
         )
 
         return result
@@ -177,19 +188,24 @@ def parse_workbook(file_bytes, filename=""):
         workbook = load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
     except Exception:
         result.structure_errors.append(
-            "The file could not be opened as an Excel (.xlsx) workbook."
+            "The file could not be opened as an Excel (.xlsx) workbook. A CSV or other file that "
+            "has only been renamed to .xlsx cannot be read: open the original in Excel and save it "
+            "as an Excel Workbook (.xlsx) instead."
         )
 
         return result
 
     try:
         names = set(workbook.sheetnames)
-        missing_sheets = sorted({"Organisations", "Contacts"} - names)
+        missing_sheets = sorted({SHEET_ORGANISATIONS, SHEET_CONTACTS} - names)
 
         if missing_sheets:
             result.structure_errors.append(
                 "The workbook is missing the sheet(s): "
                 + ", ".join(missing_sheets)
+                + ". Sheet names must be exactly 'Organisations' and 'Contacts' (capital first letter). "
+                + "Sheets found: "
+                + (", ".join(f"'{n}'" for n in workbook.sheetnames) or "none")
                 + "."
             )
 
@@ -211,7 +227,11 @@ def parse_workbook(file_bytes, filename=""):
             return result
 
         if not org_rows:
-            result.structure_errors.append("The Organisations sheet has no readable rows.")
+            result.structure_errors.append(
+                "The Organisations sheet has no readable rows. If you started from the blank "
+                "template, add one row per organisation (and its contacts on the Contacts sheet) "
+                "before uploading; a headers-only file cannot be previewed."
+            )
 
             return result
     finally:

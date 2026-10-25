@@ -8,10 +8,73 @@
     <form method="post" enctype="multipart/form-data" data-single-submit>
         {% csrf_token %}
         <label class="em-label" for="workbook">Excel workbook (.xlsx)</label>
-        <input class="em-input" id="workbook" name="workbook" type="file" accept=".xlsx" required aria-required="true">
-        <p class="in-muted">The workbook needs the Organisations and Contacts sheets with the agreed columns.</p>
+        <input class="em-input" id="workbook" name="workbook" type="file" accept=".xlsx" required aria-required="true" aria-describedby="workbook-help">
+        <p class="in-muted" id="workbook-help">The workbook needs an <strong>{{ guide.sheet_organisations }}</strong> sheet and a <strong>{{ guide.sheet_contacts }}</strong> sheet with the exact column headers in row 1. A CSV or other spreadsheet cannot simply be renamed to .xlsx; start from the template below. A file that does not match is rejected with a message naming what is missing, and nothing is imported.</p>
         <div class="in-row-actions"><button class="em-btn em-btn-blue" type="submit">Validate and preview</button></div>
     </form>
+    <div class="in-row-actions">
+        <a class="em-btn" href="{% url 'intake_import_template' %}" download>Download blank template (.xlsx)</a>
+        <a class="em-btn" href="{% url 'intake_import_example' %}" download>Download synthetic example (.xlsx)</a>
+    </div>
+    <p class="in-muted">The blank template has headers only. It cannot be previewed until you add at least one organisation row. The example contains invented data for illustration only and must not be imported.</p>
+</section>
+
+<section class="in-card" aria-labelledby="format-heading">
+    <h2 id="format-heading">Required import format</h2>
+    <details class="in-details">
+        <summary>Show the detailed instructions</summary>
+
+        <h3>1. Worksheets</h3>
+        <ul>
+            <li><code>{{ guide.sheet_organisations }}</code>: one row per organisation.</li>
+            <li><code>{{ guide.sheet_contacts }}</code>: one row per contact (may be empty of rows, but the sheet and headers must exist).</li>
+            <li>Sheet names must match exactly, including the capital first letter. Other sheets are ignored.</li>
+            <li>Row 1 of each sheet holds the headers. Capital letters in a header do not matter; spelling and underscores do. Extra columns are ignored.</li>
+            <li>Maximum {{ guide.max_mb }} MB and {{ guide.max_rows }} rows per sheet. Formulas must already be calculated; type plain values.</li>
+        </ul>
+
+        <h3>2. How contacts link to organisations</h3>
+        <p>Each organisation has a unique <code>organisation_id</code> on the {{ guide.sheet_organisations }} sheet. Every contact row repeats that value in its own <code>organisation_id</code> column. Several contacts may share one <code>organisation_id</code>: the organisation is created (or matched) once and each valid contact is attached to it. A contact whose <code>organisation_id</code> is not on the {{ guide.sheet_organisations }} sheet is reported and skipped. Contacts are matched by <code>contact_id</code> and by email within the same organisation, so importing the same file again does not create duplicates.</p>
+
+        <h3>3. {{ guide.sheet_organisations }} columns (required headers)</h3>
+        <div class="in-table-wrap"><table class="in-table"><thead><tr><th>Header</th><th>Meaning</th></tr></thead>
+        <tbody>{% for name, note in guide.organisation_columns %}<tr><td><code>{{ name }}</code></td><td>{{ note }}</td></tr>{% endfor %}</tbody></table></div>
+
+        <h3>4. {{ guide.sheet_organisations }} columns (optional)</h3>
+        <p>These headers may be left out. If present, blank cells stay blank; nothing is invented.</p>
+        <div class="in-table-wrap"><table class="in-table"><thead><tr><th>Header</th><th>Meaning</th></tr></thead>
+        <tbody>{% for name, note in guide.optional_columns %}<tr><td><code>{{ name }}</code></td><td>{{ note }}</td></tr>{% endfor %}</tbody></table></div>
+
+        <h3>5. {{ guide.sheet_contacts }} columns (required headers)</h3>
+        <div class="in-table-wrap"><table class="in-table"><thead><tr><th>Header</th><th>Meaning</th></tr></thead>
+        <tbody>{% for name, note in guide.contact_columns %}<tr><td><code>{{ name }}</code></td><td>{{ note }}</td></tr>{% endfor %}</tbody></table></div>
+
+        <h3>6. Accepted values</h3>
+        <ul>
+            <li><strong>State:</strong> {{ guide.states|join:", " }} (or the full name, in any capitalisation).</li>
+            <li><strong>Organisation type:</strong> Bank, Branch or Club (any capitalisation). Any other value holds the row for review and it is not imported.</li>
+            <li><strong>TRUE / FALSE columns:</strong> TRUE, FALSE, Yes, No, Y, N, 1, 0. Anything else is read as blank.</li>
+            <li><strong>Dates:</strong> an Excel date, <code>2025-01-31</code> or <code>31/01/2025</code>. Anything else is read as blank.</li>
+            <li><strong>Missing optional values:</strong> leave the cell empty. A blank or <code>(unspecified)</code> contact name is stored as empty, never as a name.</li>
+            <li><strong>Email:</strong> must be a valid address. An invalid or missing contact email skips only that contact.</li>
+        </ul>
+
+        <h3>7. Previous outreach evidence (<code>contact_status</code>)</h3>
+        <p>Only the detailed evidence on each contact decides the organisation's status. The workbook's <code>overall_status</code> is not copied, and "Partially Contacted" is never imported. One confirmed successful outgoing email makes the organisation Contacted. Replies are kept as evidence and never set Interested.</p>
+        <div class="in-table-wrap"><table class="in-table"><thead><tr><th><code>contact_status</code></th><th>Imported as</th><th><code>sent_to_by_srfu</code> must be</th><th><code>human_reply_received</code> must be</th></tr></thead>
+        <tbody>{% for s in guide.statuses %}<tr><td><code>{{ s.value }}</code></td><td>{{ s.result }}</td><td>{{ s.sent }}</td><td>{{ s.reply }}</td></tr>{% endfor %}</tbody></table></div>
+        <p class="in-status-note">A blank <code>contact_status</code> means no history. An unrecognised value, or flags that contradict the status, hold the organisation for review instead of guessing.</p>
+
+        <h3>8. Branches and clubs</h3>
+        <p>Add the <code>organisation_type</code> column and fill it for every row. A Branch needs <code>parent_bank_name</code> (and <code>parent_bank_state</code> if different) naming a bank that already exists; otherwise it is reported as incomplete. A Club may optionally name a supporting bank the same way.</p>
+
+        <h3>9. What happens next</h3>
+        <ul>
+            <li>The file is checked first. Missing sheets or headers stop the import before anything is created, and the message names what to fix.</li>
+            <li>You then see a preview and must press <em>Confirm and import</em>. Rows with problems are listed with the row number, the field and what to do; valid rows are still imported.</li>
+            <li>Possible duplicates are held for your review and never merged automatically.</li>
+        </ul>
+    </details>
 </section>
 <script>document.querySelectorAll("form[data-single-submit]").forEach(function(f){f.addEventListener("submit",function(){var b=f.querySelector("button[type=submit]");setTimeout(function(){b.disabled=true;b.textContent="Working...";},0);});});</script>
 {% endblock %}

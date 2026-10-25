@@ -24,6 +24,12 @@
 .in-progress > span { display: block; height: 100%; background: #2563eb; }
 .in-match { border: 1px solid #fcd34d; background: #fffbeb; border-radius: 5px; padding: 8px 10px; margin: 8px 0; }
 .in-match-archived { border-color: #d1d5db; background: #f3f4f6; }
+.in-details { border: 1px solid #d5d9e0; border-radius: 5px; padding: 8px 12px; margin: 10px 0; background: #fafbfc; }
+.in-details > summary { cursor: pointer; font-weight: 800; }
+.in-details h3 { margin: 14px 0 6px; font-size: 15px; }
+.in-details ul { margin: 6px 0 6px 18px; padding: 0; }
+.in-details code { background: #eef1f5; padding: 0 4px; border-radius: 3px; overflow-wrap: anywhere; }
+.in-status-note { margin: 6px 0; font-size: 13px; color: #374151; }
 @media (max-width: 700px) {
     .in-page { padding: 12px 14px 32px; }
     .in-field-list { grid-template-columns: 1fr; }

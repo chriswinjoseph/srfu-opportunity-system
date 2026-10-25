@@ -660,6 +660,10 @@ def summarise_run(run):
         "processed": 0, "created": 0, "updated": 0, "exact_duplicates": 0,
         "unchanged": 0, "review": 0, "incomplete": 0, "failed": 0, "rejected": 0,
         "contacts_created": 0, "contacts_updated": 0, "changes_proposed": 0,
+        # Scraper pages are counted separately from organisations ("processed",
+        # "created" ... count organisations; "failed" counts pages and records).
+        "pages_processed": run.progress_done if run.kind == IntakeRun.KIND_SCRAPER else 0,
+        "pages_failed": 0, "records_failed": 0,
     }
 
     for result in run.results.all():
@@ -667,6 +671,11 @@ def summarise_run(run):
 
         if result.kind == IntakeResult.KIND_STRUCTURE:
             continue
+
+        if result.kind == IntakeResult.KIND_PAGE and result.outcome == "failed":
+            totals["pages_failed"] += 1
+        elif result.outcome == "failed":
+            totals["records_failed"] += 1
 
         if result.kind == IntakeResult.KIND_ORGANISATION or result.kind == IntakeResult.KIND_PAGE:
             if result.kind == IntakeResult.KIND_ORGANISATION:
@@ -704,9 +713,16 @@ def finish_run(run, *, fatal=""):
     good = totals["created"] + totals["updated"] + totals["unchanged"] + totals["exact_duplicates"]
     trouble = totals["review"] + totals["incomplete"] + totals["failed"] + totals["rejected"]
 
+    # Failed: nothing was processed. Records held for review or reported as
+    # incomplete still count as processed, so a run that only holds them is
+    # Partially Successful (see docs/Scraper-BA-Clarifications.md, item 2).
+    only_failures = totals["failed"] and not (totals["review"] + totals["incomplete"] + totals["rejected"])
+
     if fatal and not good:
         run.status = IntakeRun.STATUS_FAILED
     elif totals["processed"] == 0 and totals["failed"]:
+        run.status = IntakeRun.STATUS_FAILED
+    elif not good and only_failures:
         run.status = IntakeRun.STATUS_FAILED
     elif trouble or fatal:
         run.status = IntakeRun.STATUS_PARTIAL

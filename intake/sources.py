@@ -40,6 +40,7 @@ class Page:
 class ParseOutcome:
     records: list = field(default_factory=list)
     problem: str = ""
+    code: str = "unrecognised"
 
 
 class Adapter:
@@ -50,6 +51,8 @@ class Adapter:
     suburbs = ()  # supported suburb filter values (optional)
     description = ""
     allowed_hosts = ()
+    # A restriction found when the source was last checked (shown before queueing).
+    known_limitation = ""
 
     def pages(self, states=(), suburbs=()):
         raise NotImplementedError
@@ -131,6 +134,11 @@ class MooneeValleyClubs(Adapter):
         "the club name, sport, suburb, postcode, public email, phone and website."
     )
     allowed_hosts = ("mvcc.vic.gov.au", "www.mvcc.vic.gov.au")
+    known_limitation = (
+        "When last checked (23 October 2026) this website answered with an automated-access check "
+        "instead of the directory, so nothing could be collected. The check is not bypassed. "
+        "Clubs need a permitted source or the council's permission."
+    )
 
     def pages(self, states=(), suburbs=()):
         if states and "VIC" not in states:
@@ -142,7 +150,7 @@ class MooneeValleyClubs(Adapter):
         clubs = parse_clubs(html)
 
         if not clubs:
-            return ParseOutcome(problem="No clubs were found on the directory page.")
+            return ParseOutcome(problem="The directory page loaded but listed no clubs.", code="no_records")
 
         records = []
 
