@@ -59,6 +59,7 @@ replace. Quote paths that contain spaces.
 Choose a short folder you own (long paths make Git fail on Windows):
 
 ```powershell
+New-Item -ItemType Directory -Force "D:\srfu" | Out-Null     # creates the installation folder if it does not exist
 cd "D:\srfu"
 git clone https://github.com/chriswinjoseph/srfu-opportunity-system.git srfu-opportunity-system
 cd srfu-opportunity-system
@@ -93,8 +94,20 @@ notepad .env
 | `OPENAI_API_KEY` | Required to start the application; used for draft generation | The owner of the SRFU OpenAI account (owner not yet confirmed). A placeholder lets the site start but drafts will fail |
 | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_TLS`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL` | SMTP for invitations, resets and outreach email | The owner of the sending mailbox (owner not yet confirmed). For Gmail use an App Password, not the normal password |
 
-Email is always sent over SMTP; there is no console fallback. With missing or wrong SMTP
-settings, emails fail with a clear message but nothing else breaks.
+Email is always sent over SMTP; there is no console fallback. If the SMTP settings are missing or
+wrong, nothing else breaks, but each kind of email behaves differently:
+
+* **Invitations** (new users): the Admin sees a message that the invitation could not be sent,
+  and the previous link no longer works. After fixing SMTP, the Admin uses **Resend invitation**
+  on that user in User Management.
+* **Password resets:** the page deliberately shows the same confirmation whether or not the
+  address exists or the email was delivered (so it never reveals which accounts exist). A failed
+  send is recorded only as a short, sanitised line in the server log (`logs\web.err.log`). After
+  fixing SMTP the person simply requests a new reset from *Forgot password?*. **Resend
+  invitation does not apply to resets**, and a user whose invitation is still pending cannot use
+  *Forgot password?*; only an Admin can resend that invitation.
+* **Outreach drafts:** a failed or uncertain send is reported on the draft; an uncertain
+  delivery blocks sending that draft again until it has been checked, so nothing is sent twice.
 
 ## 4. Create the database and the first Admin
 
@@ -102,10 +115,13 @@ settings, emails fail with a clear message but nothing else breaks.
 python manage.py migrate
 ```
 
-The first Admin is created without ever choosing or storing a password. The command prints a
-**single-use password-setup link** (a secret; valid for 3 days). The link points at the website,
-so **the website must be running when you open it**. Start the application first (step 5), then in
-a second PowerShell window (project folder, environment activated):
+The first Admin is created without anyone typing a password into the command. The command does
+not choose, see or display a password: it prints a **single-use password-setup link** (a secret;
+valid for 3 days). The person who opens the link chooses their own password, and the application
+stores only a salted hash of it (Django's default PBKDF2-SHA256), never the password itself. The
+link points at the website, so **the website must be running when you open it**. Start the
+website first (step 5: website only is enough for this), then in a second PowerShell window
+(project folder, environment activated):
 
 ```powershell
 python manage.py create_first_admin --email "<admin email>" --name "<Admin full name>" --base-url http://127.0.0.1:8000 --print-link
@@ -123,7 +139,15 @@ Management) once supplied, and the temporary account then disabled in User Manag
 
 ## 5. Starting and stopping the application (Windows)
 
-In the project folder, **double-click**:
+**Website only** (enough for the first Admin setup, user management, organisations, drafts and
+imports; scrapes can be queued but will not run). In a PowerShell window in the project folder
+with the environment activated, leave it open while the website is in use:
+
+```powershell
+python manage.py runserver 127.0.0.1:8000
+```
+
+**Website and worker together** (needed for scraping). In the project folder, **double-click**:
 
 | File | What it does |
 |---|---|
@@ -131,11 +155,15 @@ In the project folder, **double-click**:
 | `Status-SRFU.bat` | Shows whether the website and worker are running. Changes nothing |
 | `Stop-SRFU.bat` | Stops both |
 
-Requirements: steps 2 to 4 done (`.venv`, `.env`, migrated database). The launcher never runs
+Requirements: steps 2 and 3 and the `migrate` command of step 4 done (`.venv`, `.env`, migrated
+database; the first Admin can be created afterwards while it runs). The launcher never runs
 migrations and never starts a scrape. **Starting the worker runs any scrape that is already
 queued**, so check the Scraper page first if a queued job should not run yet.
 
-The same actions from a terminal:
+To run the worker yourself instead of using the launcher, open a second PowerShell window
+(project folder, environment activated) and run `python manage.py run_intake_worker`; close the
+window or press Ctrl+C to stop it. Do not run the launcher and a hand-started copy of the same
+program at the same time. The launcher's actions from a terminal:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\start-demo.ps1            # start
@@ -198,8 +226,9 @@ The client workbook is not in Git (`*.xlsx` is ignored); the Admin supplies it a
   **Resend invitation**, change role, disable or enable, view activity. The last Admin and your own
   account are protected. Links are single-use secrets and are never shown on a page.
 * **Password recovery:** on the login page choose *Forgot password?*; an emailed single-use link
-  (valid 3 days) opens the new-password page. An expired or already-used link shows an error and
-  an Admin can resend an invitation.
+  (valid 3 days) opens the new-password page. An expired or already-used reset link shows an error;
+  request a new one the same way. A user who has not yet finished their first setup cannot use
+  *Forgot password?*: an Admin uses **Resend invitation** instead.
 * **Drafts and approval:** Staff generate or write a draft, edit it (90-120 words), submit it; an
   Admin approves or rejects with a reason; only approved drafts can be sent. A draft cannot be sent
   twice, and Do Not Contact organisations cannot be emailed. Details: `docs/Email-Approval-Workflow.md`.
@@ -232,11 +261,18 @@ Open questions for the business are in `docs/Scraper-BA-Clarifications.md`.
 
 ## 10. Backup, maintenance and recovery
 
+**Where the data lives.** The *operational* database is `db.sqlite3` in the project folder: it
+is the only live copy, it is ignored by Git, and it holds personal information. **Backups, CSV
+exports and any prepared candidate database are separate files** that must be kept *outside* the
+project folder and the Git repository, in access-controlled storage. None of them is the
+operational database; restoring a backup replaces it.
+
 Stop the application (`Stop-SRFU.bat`) before copying or restoring the database. Never copy
 `db.sqlite3` while the website or worker is running.
 
 ```powershell
-python scripts\support\check_db_matches_code.py                                   # MATCH or MISMATCH
+python scripts\support\check_db_matches_code.py     # prints "RESULT : MATCH" (exit 0) or "RESULT : MISMATCH" (exit 1), with the
+                                                    # "DB AHEAD OF CODE" / "DB BEHIND CODE" lines listing the migrations that differ
 python scripts\support\backup_sqlite.py db.sqlite3 "D:\srfu-backups"              # folder must be OUTSIDE the repository
 python manage.py migrate --check                                                  # exit 0 = database is up to date
 ```
@@ -268,14 +304,22 @@ Logs: `logs\web.*.log` and `logs\worker.*.log` (ignored by Git). Removing old lo
 | `Start-SRFU.bat` says port 8000 is in use | Another program uses it; close it or run the script with `-Port 8001` |
 | Scraper page says the background service is not running | Double-click `Start-SRFU.bat` |
 | A scrape ended *Failed* with "automated-access check" | The source blocks automated access; this is not bypassed (see step 9) |
-| Invitation or reset email not delivered | Check SMTP settings, restart, then **Resend invitation** |
-| Setup link says invalid or expired | Links last 3 days and work once; issue a new one |
+| Invitation email not delivered | Fix the SMTP settings, restart, then an Admin uses **Resend invitation** for that user |
+| Password-reset email not delivered | The page shows the same confirmation either way. Fix SMTP, check `logs\web.err.log` for the sanitised failure line, and the person requests a new reset from *Forgot password?* (Resend invitation is for pending invitations only) |
+| Setup or reset link says invalid or expired | Links last 3 days and work once. A reset: request a new one from *Forgot password?*. An invitation or first-Admin link: an Admin uses **Resend invitation** (for the first Admin before anyone has finished setup, run `create_first_admin` again) |
 | Upload rejected | The message names the missing sheet or column; use the template (step 7) |
 
 ## 12. Known limitations
 
 * Hosting, public address, database server and ownership of the OpenAI account and sending mailbox
   are not yet decided; the application is not deployed to a production environment.
+* The application has no spending cap on AI use (it limits how often each user may generate a
+  draft). An OpenAI account budget or usage limit may help, but it has not been set up and
+  whether it stops requests as a hard limit has not been verified.
+* The GitHub repository was public when last checked (25 October 2026), and an older commit that
+  contained a database backup was still reachable by its address. Do not treat the repository as
+  private or its history as clean; see the developer handover (section 9.4) for what the
+  repository owner must do.
 * No HTTPS/secure-cookie configuration (depends on hosting). SQLite suits one site with a small
   number of simultaneous Admins; PostgreSQL concurrency has not been tested.
 * Scraper coverage is limited as described in step 9. Import confirmation runs inside the web

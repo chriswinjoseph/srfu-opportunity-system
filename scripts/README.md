@@ -10,7 +10,7 @@ environment activated. None of these files contains a secret, a client record or
 | `support/check_db_matches_code.py` | Compares applied migrations with the code's migrations (names only) | No |
 | `support/backup_sqlite.py` | Verified SQLite backup with a manifest. Refuses a folder inside the repository | No |
 | `support/create_email_template.py` | Creates the approved email template; refuses while any `PLACEHOLDER` remains. Copy it, edit the copy, run it (README step 6) | Adds one template |
-| `support/verify_client_import.py` | Read-only comparison of a database with its workbook; prints counts only | No |
+| `support/verify_client_import.py` | Read-only comparison of a database with the Bank-only client workbook; prints counts only. It reports FAIL if the database holds Branch or Club records or a different number of banks, so it does not apply to databases built from other workbooks | No |
 | `support/export_organisations_contacts.py` | Read-only CSV export of organisations and contacts (not a backup). Output holds personal data: keep it outside the repository | No |
 | `support/report_email_activity.py` | Read-only list of drafts needing review after a restore | No |
 | `verification/verification_settings.py` | Settings for exercising the application without side effects: separate database, email written to files, stand-in AI, network limited to this computer | Only the database you name |
