@@ -50,9 +50,9 @@ class WorkbookValidationTests(IntakeTestCase):
         self.assertEqual(Bank.objects.count(), 0)
 
     def test_missing_sheet_and_missing_column_are_named(self):
-        data = make_workbook([], [], sheets=("Organisations",))
+        data = make_workbook([], [], sheets=("Contacts",))
         parsed = parse_workbook(data, "a.xlsx")
-        self.assertIn("Contacts", " ".join(parsed.structure_errors))
+        self.assertIn("no 'Organisations' sheet", " ".join(parsed.structure_errors))
 
         header = [h for h in __import__("intake.tests.helpers", fromlist=["ORG_HEADER"]).ORG_HEADER if h != "state"]
         data = make_workbook([org_row()], [con_row()], org_header=header)

@@ -127,7 +127,7 @@ class ImportPageTests(IntakeTestCase):
         for data, name, text in (
             (b"a,b", "x.csv", "Only Microsoft Excel"),
             (b"junk", "x.xlsx", "could not be opened"),
-            (make_workbook([], [], sheets=("Organisations",)), "x.xlsx", "missing the sheet"),
+            (make_workbook([], [], sheets=("Contacts",)), "x.xlsx", "Add the organisations"),
         ):
             with self.subTest(name=name, text=text):
                 response = self.client.post(reverse("intake_import"), {"workbook": upload(data, name)})

@@ -31,6 +31,10 @@ Code: the `intake` app (`/data/` pages, Admin only).
 | Delivery failure with `sent_to_by_srfu = TRUE` | In the supplied workbook both delivery-failure-only organisations have `sent_to_by_srfu = TRUE` and `human_reply_received = FALSE`: SRFU did send, delivery failed. The flag records the attempt, so the combination is consistent. Section 5 of the requirements maps `delivery_failure_recorded` only to Not Yet Contacted, so the result is deterministic. Only contradictions (e.g. a successful-send status with `sent_to_by_srfu = FALSE`, or an unknown status) are held. |
 | Bot-protection pages | A page that answers with an automated-access check instead of content is reported as a failed page. The check is never bypassed. |
 | First/last observed dates | Stored as Melbourne dates (timezone-aware) on the contact source record. |
+| Single-sheet import, status | A single-sheet file has no per-contact evidence, so `overall_status` never sets Contacted. Blank or "Not Yet Contacted" imports as Not Yet Contacted. "Contacted", "Partially Contacted" or an unrecognised value is an unsupported claim and is held as a review item (evidence kind) for an Admin to confirm or reject. Not yet confirmed by the BA. |
+| Single-sheet import, several contacts | A name is attached to an email only when a row has exactly one of each. Otherwise the emails become contacts without names, the row is flagged for review, and the names are kept in the result and on the source record. Names are never paired with emails by position. A comma is not a name separator. Not yet confirmed by the BA. |
+| Unsupported columns | Columns outside the supported set are ignored and named on the preview (both formats). |
+| Blank means unknown | A later import never erases source details or contact evidence a previous import recorded; blank cells and absent columns are not changes. |
 
 ## Unresolved BA points (work continues; not blocking)
 

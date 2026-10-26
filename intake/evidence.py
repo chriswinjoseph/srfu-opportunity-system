@@ -75,3 +75,33 @@ def map_organisation_status(contacts):
         return "contacted", []
 
     return "not_yet_contacted", []
+
+
+# A single-sheet file has no per-contact outreach evidence, so its
+# ``overall_status`` is only a claim. "Not Yet Contacted" (or blank) is the
+# default state and needs no proof; any claim of contact is held for an Admin.
+NOT_YET_CLAIMS = {"", "not yet contacted", "not contacted", "no outreach history"}
+
+
+def map_claimed_status(raw):
+    """
+    ``(status, reasons)`` for a single-sheet file's ``overall_status``.
+
+    Never returns ``contacted``: Contacted needs the detailed evidence the
+    two-sheet workbook carries (see ``map_organisation_status``) or an Admin's
+    decision on the held record.
+    """
+    claim = " ".join(str(raw or "").replace("_", " ").lower().split())
+
+    if claim in NOT_YET_CLAIMS:
+        return "not_yet_contacted", []
+
+    if claim in ("contacted", "partially contacted", "sent", "emailed"):
+        return "review", [
+            f"The file says '{str(raw).strip()}', but a single-sheet file has no outreach evidence "
+            "(no confirmed outgoing email), so the claim is not accepted on its own."
+        ]
+
+    return "review", [
+        f"The file's overall_status '{str(raw).strip()}' is not recognised, so no status was guessed."
+    ]

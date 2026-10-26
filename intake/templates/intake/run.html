@@ -7,6 +7,7 @@
 
 {% if run.error_message %}<div class="em-banner em-banner-error" role="alert">{{ run.error_message }}</div>{% endif %}
 {% if type_note %}<div class="em-banner em-banner-info">{{ type_note }}</div>{% endif %}
+{% if format_label %}<div class="em-banner em-banner-info">File format recognised: <strong>{{ format_label }}</strong>.</div>{% endif %}
 {% if previous %}<div class="em-banner em-banner-warning">This exact file was already imported on {{ previous.finished_at|melbourne }}. Importing it again will not create duplicates; existing records will be matched.</div>{% endif %}
 
 {% if run.status == "previewed" %}
@@ -22,8 +23,25 @@
         <div class="in-stat"><strong>{{ preview.incomplete }}</strong><span>Rows with problems</span></div>
         <div class="in-stat"><strong>{{ totals.evidence_contacted }}</strong><span>Contacted (confirmed outgoing email)</span></div>
         <div class="in-stat"><strong>{{ totals.evidence_not_yet }}</strong><span>Not Yet Contacted</span></div>
-        <div class="in-stat"><strong>{{ totals.evidence_review }}</strong><span>Conflicting outreach evidence</span></div>
+        <div class="in-stat"><strong>{{ totals.evidence_review }}</strong><span>Held: outreach evidence conflicts or is unsupported</span></div>
+        <div class="in-stat"><strong>{{ preview.contact_review|default:0 }}</strong><span>Name / email combinations to review</span></div>
+        <div class="in-stat"><strong>{{ preview.contact_problems|default:0 }}</strong><span>Contacts that cannot be created</span></div>
     </div>
+    {% if columns %}
+    <h3 style="margin-top:14px">Columns</h3>
+    {% for c in columns %}
+    <p class="in-muted" style="margin:4px 0"><strong>{{ c.sheet }}</strong>:
+        {% if c.imported %}will be imported: {% for h in c.imported %}<code>{{ h }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}.{% endif %}
+        {% if c.informational %} Recognised but not stored: {% for h in c.informational %}<code>{{ h }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}.{% endif %}
+    </p>
+    {% if c.unsupported %}<div class="em-banner em-banner-warning" role="status"><strong>Unsupported columns on {{ c.sheet }} (ignored, nothing from them is imported):</strong> {% for h in c.unsupported %}<code>{{ h }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}</div>{% endif %}
+    {% endfor %}
+    {% endif %}
+    {% if contact_notes %}
+    <h3 style="margin-top:14px">Contacts that need attention</h3>
+    <div class="in-table-wrap"><table class="in-table"><thead><tr><th>Row</th><th>Organisation</th><th>Issue</th><th>Action</th></tr></thead>
+    <tbody>{% for n in contact_notes %}<tr><td>{{ n.row_ref }}</td><td>{{ n.name }}</td><td>{{ n.message }}</td><td>{{ n.action|default:"Correct the contact row and import again." }}</td></tr>{% endfor %}</tbody></table></div>
+    {% endif %}
     {% if row_errors %}
     <h3 style="margin-top:14px">Rows that cannot be imported</h3>
     <div class="in-table-wrap"><table class="in-table"><thead><tr><th>Row</th><th>Organisation</th><th>Problem</th><th>Action</th></tr></thead>

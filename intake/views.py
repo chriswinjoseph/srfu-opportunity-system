@@ -11,7 +11,17 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_GET, require_POST
 
-from .import_template import EXAMPLE_FILENAME, TEMPLATE_FILENAME, build_example, build_template, guidance
+from .import_template import (
+    CLIENT_EXAMPLE_FILENAME,
+    CLIENT_TEMPLATE_FILENAME,
+    EXAMPLE_FILENAME,
+    TEMPLATE_FILENAME,
+    build_client_example,
+    build_client_template,
+    build_example,
+    build_template,
+    guidance,
+)
 from .importer import ImportBusy, confirm_import, create_preview, previously_imported
 from .matching import ORG_MODELS, TYPE_LABELS
 from .models import DuplicateReview, IntakeResult, IntakeRun, ProposedChange
@@ -106,7 +116,7 @@ def _xlsx_download(content, filename):
 @admin_only
 @require_GET
 def import_template(request):
-    """Blank workbook with the supported sheets and headers (no records)."""
+    """Blank single-sheet template: the minimum headers, no records."""
     return _xlsx_download(build_template(), TEMPLATE_FILENAME)
 
 
@@ -115,6 +125,20 @@ def import_template(request):
 def import_example(request):
     """Clearly labelled synthetic example of a populated workbook."""
     return _xlsx_download(build_example(), EXAMPLE_FILENAME)
+
+
+@admin_only
+@require_GET
+def import_client_template(request):
+    """Blank two-sheet client workbook (headers only)."""
+    return _xlsx_download(build_client_template(), CLIENT_TEMPLATE_FILENAME)
+
+
+@admin_only
+@require_GET
+def import_client_example(request):
+    """Synthetic example of the two-sheet client workbook."""
+    return _xlsx_download(build_client_example(), CLIENT_EXAMPLE_FILENAME)
 
 
 @admin_only
@@ -146,6 +170,12 @@ def run_detail(request, run_id):
             "total_results": total_results,
             "truncated": total_results > RESULT_PAGE_SIZE,
             "type_note": payload.get("type_note", ""),
+            "format_label": payload.get("format_label", ""),
+            "columns": payload.get("columns", []),
+            "contact_notes": [
+                {**p, "name": g["name"]}
+                for g in payload.get("groups", []) for p in g.get("contact_problems", [])
+            ][:50] if run.status == IntakeRun.STATUS_PREVIEWED else [],
             "row_errors": payload.get("row_errors", [])[:50] if run.status == IntakeRun.STATUS_PREVIEWED else [],
             "previous": previously_imported(run) if run.kind == IntakeRun.KIND_IMPORT and run.status == IntakeRun.STATUS_PREVIEWED else None,
             "pending_reviews": run.reviews.filter(status=DuplicateReview.STATUS_PENDING).count(),

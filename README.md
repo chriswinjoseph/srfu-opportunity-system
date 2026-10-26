@@ -197,22 +197,31 @@ not yet been supplied. Only active templates are offered; every draft still need
 ## 7. Importing the organisation workbook (Admin only)
 
 1. Sign in as an Admin and open **Data > Import Data** (`/data/import/`).
-2. Read the instructions beside the upload (expandable detail lists every sheet, column, accepted
-   value and the contact-status rules). **Download blank template** gives the exact sheets and
-   headers with no records; **Download synthetic example** shows a filled file with invented data
-   that must not be imported for real. Both are Admin-only. Full format: `docs/Import-Format.md`.
-3. The workbook must be a genuine Excel `.xlsx` with sheets `Organisations` and `Contacts`. A CSV or
-   other file cannot simply be renamed to `.xlsx`; save it from Excel as an Excel Workbook. A
-   headers-only template cannot be previewed: add at least one organisation row first.
-4. **Validate and preview.** Structure problems name the missing sheet or column and nothing is
-   created. The preview shows what would be created, matched, held for review and which rows have
-   problems. Nothing is saved yet.
-5. **Confirm and import.** Each organisation is processed on its own; a bad row is reported and does
+2. The page gives a short explanation beside the upload. **Download template** is a single-sheet
+   workbook with the six minimum columns (`organisation_id`, `bank_name`, `state`, `contact_names`,
+   `emails`, `overall_status`); **Download synthetic example** shows a filled file with invented data
+   that must not be imported for real. The original two-sheet client workbook (`Organisations` and
+   `Contacts`, with its outreach evidence) is still accepted, and its template is on the same page.
+   All downloads are Admin-only. Full format: `docs/Import-Format.md`.
+3. Single-sheet rules: organisation ID, name and state are required; contact names, emails and status
+   may be blank. Extra supported columns may be added. Several contacts in a row are separated by
+   semicolons; a name is attached to an email only when the row has one of each, otherwise the
+   emails are added without names and the row is flagged for review. `overall_status` never marks an
+   organisation Contacted: Contacted comes from the two-sheet workbook's outreach evidence, and any
+   other claim is held for an Admin's decision.
+4. The file must be a genuine Excel `.xlsx`. A CSV or other file cannot simply be renamed to `.xlsx`;
+   save it from Excel as an Excel Workbook. A headers-only template cannot be previewed: add a row.
+5. **Validate and preview.** Structure problems name the missing sheet or column and nothing is
+   created. The preview shows the recognised format, which columns will be imported and which are
+   unsupported (ignored), what would be created, matched or held for review, and every row or
+   contact with a problem. Nothing is saved yet.
+6. **Confirm and import.** Each organisation is processed on its own; a bad row is reported and does
    not stop good ones. Possible duplicates are held on **Duplicate Review** for an Admin decision
    and never merged automatically. Replies are kept as evidence and never set Interested.
-6. **Repeat imports are safe.** Importing the same file again creates no duplicate organisations or
-   contacts; existing values are never overwritten (differences become **Proposed Changes**) and
-   organisations that are archived are not restored.
+7. **Repeat imports are safe.** Importing the same file again creates no duplicate organisations or
+   contacts; existing values are never overwritten (differences become **Proposed Changes**), values
+   kept by an earlier import are not erased by a file that lacks them, and organisations that are
+   archived are not restored.
 
 The client workbook is not in Git (`*.xlsx` is ignored); the Admin supplies it at import time.
 

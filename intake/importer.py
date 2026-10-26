@@ -17,7 +17,7 @@ from .ingest import finish_run, process_submission
 from .matching import Submission, find_matches
 from .models import IntakeResult, IntakeRun
 from .reviews import require_admin
-from .workbook import SOURCE_KEY, SOURCE_LABEL, parse_workbook
+from .workbook import FORMAT_LABELS, FORMAT_SIMPLE, SOURCE_KEY, SOURCE_LABEL, parse_workbook
 
 
 STALE_IMPORT_SECONDS = 15 * 60
@@ -28,6 +28,17 @@ class ImportBusy(Exception):
 
 
 def _evidence_note(group):
+    if group.get("format") == FORMAT_SIMPLE:
+        return "\n".join(
+            [
+                "Imported from a single-sheet workbook.",
+                f"Source organisation ID: {group['source_org_id']}",
+                f"overall_status in the file: {group['overall_status_raw'] or '(blank)'}",
+                "The file carries no outreach evidence, so it was not used to set Contacted. "
+                "Contacted here is an Admin's decision on the held record.",
+            ]
+        )
+
     contacts = group["contacts"]
     sent = sum(1 for c in contacts if c["status"] in SUCCESSFUL)
     replies = sum(1 for c in contacts if c.get("human_reply"))
@@ -76,6 +87,9 @@ def submission_from_group(group, filename):
                 "all_contacts_replied": group.get("all_contacts_replied"),
                 "first_observed": group.get("first_observed"),
                 "last_observed": group.get("last_observed"),
+                "import_format": group.get("format", ""),
+                "contact_names_in_file": group.get("contact_names_in_file", ""),
+                "emails_in_file": group.get("emails_in_file", ""),
             },
         },
         contacts=contacts,
@@ -104,7 +118,7 @@ def create_preview(user, file_bytes, filename):
 
         return run, parsed
 
-    preview = {"create": 0, "match": 0, "review": 0, "incomplete": 0}
+    preview = {"create": 0, "match": 0, "review": 0, "incomplete": 0, "contact_review": 0, "contact_problems": 0}
 
     for group in parsed.groups:
         sub = submission_from_group(group, filename)
@@ -123,11 +137,17 @@ def create_preview(user, file_bytes, filename):
             preview["create"] += 1
 
     preview["incomplete"] = len(parsed.row_errors)
+    problems = [p for g in parsed.groups for p in g["contact_problems"]]
+    preview["contact_review"] = sum(1 for p in problems if p.get("outcome") == "review")
+    preview["contact_problems"] = len(problems) - preview["contact_review"]
 
     run.payload = {
         "groups": parsed.groups,
         "row_errors": parsed.row_errors,
         "type_note": parsed.type_note,
+        "format": parsed.format,
+        "format_label": FORMAT_LABELS[parsed.format],
+        "columns": parsed.columns,
     }
     run.totals = {
         "preview": preview,
@@ -223,11 +243,11 @@ def confirm_import(run_id, user):
 
             for problem in group.get("contact_problems", []):
                 IntakeResult.objects.create(
-                    run=run, kind=IntakeResult.KIND_CONTACT, outcome="failed",
+                    run=run, kind=IntakeResult.KIND_CONTACT, outcome=problem.get("outcome", "failed"),
                     row_ref=problem["row_ref"], source_id=group["source_org_id"],
                     name=group["name"][:255], field=problem["field"],
                     message=problem["message"],
-                    action_required="Correct the contact row and import again.",
+                    action_required=problem.get("action", "Correct the contact row and import again."),
                 )
 
             _tick(run)

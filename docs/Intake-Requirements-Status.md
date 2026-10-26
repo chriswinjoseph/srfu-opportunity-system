@@ -134,3 +134,20 @@ Defects found and fixed (each reproduced by a failing test first):
 Requirements still not fully met or needing a decision: see `Scraper-BA-Clarifications.md`
 (FR-15 minimum scope, blocked club source, absent branch source, Victoria-only banks, status
 rules for review-only runs, bank "ID or name" wording, hosting).
+
+## Update, 26 October 2026 (single-sheet import)
+
+Import Data now accepts a single-sheet workbook as well as the two-sheet client workbook, and the long
+"Required import format" panel is replaced by a short explanation and downloadable templates.
+
+| Area | Behaviour |
+|---|---|
+| Minimum columns | `organisation_id`, `bank_name`, `state`, `contact_names`, `emails`, `overall_status`; ID, name and state need values, the rest may be blank |
+| Additional columns | Supported optional columns are imported; informational ones are recognised; any other column is named as unsupported on the preview and ignored (both formats) |
+| Several contacts | Never paired by position. One name + one email pair; any other mix adds the emails without names and is flagged for review with the names preserved |
+| Status | `overall_status` alone never sets Contacted. Blank / "Not Yet Contacted" is Not Yet Contacted; "Contacted", "Partially Contacted" or an unrecognised value is held for review (evidence kind). Two-sheet evidence rules are unchanged |
+| Preservation | A later file no longer erases source-record extras or contact-source evidence kept by an earlier import (blank means unknown, not a change); a shared-email contact hold without a contact ID is not queued twice |
+| Kept | Admin-only, validation before saving, preview and confirmation, duplicate detection, repeat-import protection, per-organisation results |
+
+Decision for the BA: a single-sheet "Contacted" claim is held for review rather than accepted or
+silently ignored (see `Intake-BA-Interpretations.md`).

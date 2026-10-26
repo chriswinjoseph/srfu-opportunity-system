@@ -18,6 +18,7 @@ from .evidence import EXPECTED_FLAGS, KNOWN, SUCCESSFUL
 from .normalise import PLACEHOLDER_NAMES, STATE_NAMES
 from .workbook import (
     CONTACT_HEADERS,
+    SIMPLE_HEADERS,
     MAX_BYTES,
     MAX_ROWS,
     OPTIONAL_COLUMNS,
@@ -29,6 +30,8 @@ from .workbook import (
 
 TEMPLATE_FILENAME = "SRFU-import-template.xlsx"
 EXAMPLE_FILENAME = "SRFU-import-EXAMPLE-synthetic-do-not-import.xlsx"
+CLIENT_TEMPLATE_FILENAME = "SRFU-import-template-two-sheet-client.xlsx"
+CLIENT_EXAMPLE_FILENAME = "SRFU-import-EXAMPLE-two-sheet-synthetic-do-not-import.xlsx"
 SHEET_INSTRUCTIONS = "Instructions"
 
 # Optional organisation columns in the order they are offered in the template.
@@ -96,7 +99,22 @@ def _flag(value):
 
 
 def guidance():
-    """The template context for the Import Data page (all derived from the rules)."""
+    """The template context for the Import Data page."""
+    return {
+        "sheet_organisations": SHEET_ORGANISATIONS,
+        "sheet_contacts": SHEET_CONTACTS,
+        "simple_headers": SIMPLE_HEADERS,
+        "max_mb": MAX_BYTES // (1024 * 1024),
+        "max_rows": MAX_ROWS,
+        "template_filename": TEMPLATE_FILENAME,
+        "example_filename": EXAMPLE_FILENAME,
+        "client_template_filename": CLIENT_TEMPLATE_FILENAME,
+        "client_example_filename": CLIENT_EXAMPLE_FILENAME,
+    }
+
+
+def reference():
+    """The full column reference (used by the docs and the template's Instructions sheet)."""
     statuses = [
         {
             "value": status,
@@ -108,8 +126,6 @@ def guidance():
     ]
 
     return {
-        "sheet_organisations": SHEET_ORGANISATIONS,
-        "sheet_contacts": SHEET_CONTACTS,
         "organisation_columns": [(h, ORGANISATION_NOTES[h]) for h in ORGANISATION_HEADERS],
         "optional_columns": [(h, OPTIONAL_NOTES[h]) for h in OPTIONAL_ORGANISATION_HEADERS],
         "contact_columns": [(h, CONTACT_NOTES[h]) for h in CONTACT_HEADERS],
@@ -117,10 +133,6 @@ def guidance():
         "states": sorted({code for code in STATE_NAMES.values()}),
         "placeholder_names": sorted(PLACEHOLDER_NAMES),
         "successful": SUCCESSFUL,
-        "max_mb": MAX_BYTES // (1024 * 1024),
-        "max_rows": MAX_ROWS,
-        "template_filename": TEMPLATE_FILENAME,
-        "example_filename": EXAMPLE_FILENAME,
     }
 
 
@@ -198,13 +210,13 @@ def _workbook(organisations, contacts, example):
     return buffer.getvalue()
 
 
-def build_template():
-    """A blank workbook: headers only, no records."""
+def build_client_template():
+    """A blank two-sheet client workbook: headers only, no records."""
     return _workbook([], [], example=False)
 
 
-def build_example():
-    """A small, clearly synthetic workbook that previews and imports cleanly."""
+def build_client_example():
+    """A small, clearly synthetic two-sheet workbook that previews and imports cleanly."""
     d1, d2 = "2025-01-10", "2025-02-10"
     org_pad = len(OPTIONAL_ORGANISATION_HEADERS)
 
@@ -234,3 +246,102 @@ def build_example():
     ]
 
     return _workbook(organisations, contacts, example=True)
+
+
+# ------------------------------------------------------- single-sheet format
+SIMPLE_NOTES = {
+    "organisation_id": "Required value. Your own unique identifier for the organisation. Must not repeat.",
+    "bank_name": "Required value. The organisation's name.",
+    "state": "Required value. ACT, NSW, NT, QLD, SA, TAS, VIC or WA (full names also work).",
+    "contact_names": "May be blank. Separate several names with a semicolon or a new line.",
+    "emails": "May be blank. Separate several addresses with a semicolon or a new line.",
+    "overall_status": "May be blank. Kept for reference only. 'Not Yet Contacted' or blank is fine; a claim of Contacted is held for review because this file carries no outreach evidence.",
+}
+
+
+def _simple_instructions(sheet, example):
+    lines = [
+        ("SRFU data import " + ("EXAMPLE (synthetic data - do not import)" if example else "template (single sheet)"), True),
+        ("", False),
+    ]
+
+    if example:
+        lines += [
+            ("Every name, email and identifier here is invented (example.test addresses). It exists only to show the layout.", False),
+            ("Do not import this file into the real system. Download the blank template and enter real records there.", False),
+        ]
+    else:
+        lines += [
+            ("The Organisations sheet holds only headers. Add one row per organisation, save, then upload it on the Import Data page.", False),
+            ("A headers-only file cannot be previewed.", False),
+        ]
+
+    lines += [
+        ("", False),
+        (f"Keep the data on the '{SHEET_ORGANISATIONS}' sheet with these headers in row 1. This Instructions sheet is ignored.", False),
+        ("", False),
+        ("Minimum columns:", True),
+    ]
+    lines += [(f"  {h}: {SIMPLE_NOTES[h]}", False) for h in SIMPLE_HEADERS]
+    lines += [
+        ("", False),
+        ("Several contacts in one row:", True),
+        ("  A name is attached to an email only when the row has exactly one name and one email.", False),
+        ("  With several emails (or several names) the emails are added as contacts WITHOUT names and the row is flagged for review.", False),
+        ("  The system never pairs names and emails by their order.", False),
+        ("", False),
+        ("Optional columns you may add (any order):", True),
+    ]
+    lines += [(f"  {h}: {OPTIONAL_NOTES[h]}", False) for h in OPTIONAL_ORGANISATION_HEADERS]
+    lines += [
+        ("", False),
+        ("Any other column is shown as unsupported in the preview and ignored.", False),
+        ("Outreach history (Contacted) needs the two-sheet client workbook, which is still accepted.", False),
+        ("Leave unknown cells empty. Formulas must have been calculated and saved by Excel.", False),
+    ]
+
+    for text, bold in lines:
+        sheet.append([text])
+
+        if bold:
+            sheet.cell(row=sheet.max_row, column=1).font = Font(bold=True, size=13)
+
+    sheet.column_dimensions["A"].width = 130
+
+
+def _simple_workbook(rows, example, extra_headers=()):
+    wb = Workbook()
+    wb.remove(wb.active)
+    sheet = wb.create_sheet(SHEET_ORGANISATIONS)
+    _header(sheet, SIMPLE_HEADERS + tuple(extra_headers))
+
+    for row in rows:
+        sheet.append(row)
+
+    _simple_instructions(wb.create_sheet(SHEET_INSTRUCTIONS), example)
+    buffer = io.BytesIO()
+    wb.save(buffer)
+
+    return buffer.getvalue()
+
+
+def build_template():
+    """The blank single-sheet template: the six minimum headers, no records."""
+    return _simple_workbook([], example=False)
+
+
+def build_example():
+    """A small, clearly synthetic single-sheet workbook that previews and imports."""
+    extra = (TYPE_COLUMN, "suburb", "postcode", "internal_notes")
+    rows = [
+        ["EXAMPLE_1", "EXAMPLE ONLY Alpha Community Bank", "VIC", "Pat Example", "pat@example.test", "Not Yet Contacted",
+         "Bank", "", "", ""],
+        ["EXAMPLE_2", "EXAMPLE ONLY Bravo Community Bank", "NSW", "", "info@example.test; admin@example.test", "",
+         "Bank", "", "", "unsupported column: shown in the preview and ignored"],
+        ["EXAMPLE_3", "EXAMPLE ONLY Charlie Netball Club", "VIC", "", "", "",
+         "Club", "Exampleton", "3999", ""],
+        ["EXAMPLE_4", "EXAMPLE ONLY Delta Community Bank", "QLD", "Sam One; Sam Two", "one@example.test; two@example.test", "",
+         "Bank", "", "", "two names and two emails: flagged for review, not paired"],
+    ]
+
+    return _simple_workbook(rows, example=True, extra_headers=extra)

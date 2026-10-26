@@ -292,8 +292,12 @@ def _link_source(org, sub, run, now, requires_verification=None):
         source.source_filename = sub.source_filename or source.source_filename
         source.collected_fields = sorted(set(source.collected_fields) | set(collected))
 
-        if sub.extra.get("source_extra"):
-            source.extra = sub.extra["source_extra"]
+        # Keep what an earlier import recorded: a later file that lacks a value
+        # (for example the single-sheet format) must not erase it.
+        fresh = {k: v for k, v in (sub.extra.get("source_extra") or {}).items() if v not in (None, "")}
+
+        if fresh:
+            source.extra = {**(source.extra or {}), **fresh}
 
         if requires_verification:
             source.requires_verification = True
@@ -600,7 +604,8 @@ def _store_contact_source(contact, sub, run, c):
     changed = False
 
     for key, value in values.items():
-        if key != "last_run" and getattr(obj, key) != value:
+        # A file that does not carry a value (blank / unknown) never erases evidence already kept.
+        if key != "last_run" and value not in (None, "") and getattr(obj, key) != value:
             setattr(obj, key, value)
             changed = True
 
@@ -612,7 +617,7 @@ def _store_contact_source(contact, sub, run, c):
 
 def _hold_contact(run, sub, org, c, others):
     c_id = c.get("source_contact_id", "")
-    key = f"{sub.source_org_id}:{c_id}" if c_id else ""
+    key = f"{sub.source_org_id}:{c_id or (c.get('email') or '').strip().lower()}" if sub.source_org_id else ""
 
     if key and DuplicateReview.objects.filter(
         source_key=sub.source_key, source_id=key, kind=DuplicateReview.KIND_CONTACT,
