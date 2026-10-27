@@ -1,383 +1,183 @@
-# Safe Roads For Us - Opportunity System
+Safe Roads For Us Opportunity System
+A Django application for managing outreach to community banks, bank branches and sports clubs. It brings organisation records, contacts, email drafts and outreach history into one place.
+Features
+- Organisation search, filters, contact history and archiving.
+- Admin and Staff roles, invitation-only accounts and password recovery.
+- AI-assisted or manual email drafts, with Admin approval before sending.
+- Excel import with preview, duplicate review and proposed changes.
+- Background scraping from configured public sources.
+Organisation contact status is Not Yet Contacted or Contacted. Responses such as Interested, Not Interested and Do Not Contact are recorded separately. Creating or approving a draft does not mark an organisation Contacted.
+Before you begin
+The documented installation is for local use on Windows with PowerShell. It is not a production hosting configuration. The website and scraper worker share a SQLite database on the same computer.
 
-A web application for Safe Roads For Us (SRFU) to manage outreach to community banks,
-bank branches and sports clubs.
+You need Python 3.12 or newer, Git and a browser. Python 3.12.5 and Windows PowerShell 5.1 were used in developer verification. Dependencies are listed in requirements.txt.
 
-**What it does**
+A clone contains source code only. It does not include the client workbook, database, accounts, passwords, .env, API keys or approved email template. It does not connect to the developer's installation.
 
-* Keeps one record per organisation (Bank, Branch or Club) with its contacts and contact status
-  (*Not Yet Contacted* or *Contacted*).
-* Staff prepare outreach emails (optionally drafted by an AI service from an approved template),
-  submit them for approval, and send them only after an Admin approves. Follow-ups, Do Not Contact
-  and archiving are supported.
-* Admins import the client's Excel workbook of organisations and contacts, review possible
-  duplicates, and run a public-information **scraper** that adds new organisations from approved
-  public websites.
-* Role-based access: **Admin** (everything, including user management, import and scraper) and
-  **Staff** (organisations, drafts and sending approved email).
+Choose your route before creating the database:
+Route	Use
+Client installation	Complete setup with the person responsible for maintaining the system. Use client-controlled services, the confirmed workbook and approved template wording.
+Isolated verification	Use a separate database, synthetic data, file-based email and simulated AI. Configure verification mode after environment setup and before migrations.
 
-**Architecture**
 
-| Part | What it is |
-|---|---|
-| Website | Django 6.1 application (`srfu/`, `accounts/`, `outreach/`, `intake/`), served on port 8000 |
-| Database | SQLite file `db.sqlite3` in the project folder (not in Git) |
-| Background worker | A second process, `python manage.py run_intake_worker`, that runs queued scraper jobs. Scraping never runs inside a web request |
-| Email | SMTP (invitations, password resets, outreach email) |
-| AI drafting | OpenAI API (draft text only; every draft needs human approval) |
-| Public sources | HTTPS pages on explicitly approved hosts only |
-
-The website alone is not enough for scraping: a queued scrape waits until the worker is running
-(see [Starting and stopping](#5-starting-and-stopping-the-application-windows)).
-
-Further documents are in `docs/`: [Import-Format.md](docs/Import-Format.md),
-[Intake-Jobs.md](docs/Intake-Jobs.md) (worker, monitoring, hosting),
-[Scraper-BA-Clarifications.md](docs/Scraper-BA-Clarifications.md) (open decisions),
-[Email-Approval-Workflow.md](docs/Email-Approval-Workflow.md) and the requirement documents.
-
----
-
-## 1. Prerequisites
-
-Verified versions (Windows 11, Windows PowerShell 5.1):
-
-| Component | Version used | Notes |
-|---|---|---|
-| Python | 3.12.5 (3.12 or newer is required) | Use the `py -3.12` launcher; `python3` on Windows is a Microsoft Store stub |
-| Git | 2.55 | Any recent Git |
-| Django and libraries | Pinned in `requirements.txt` (Django 6.1) | Installed in step 2 |
-| Browser | Any current browser | Only a headless Chromium was used for checks |
-
-You also need, from the people named in step 3: an SMTP mailbox for sending email and an OpenAI
-API key for drafting.
-
-All commands below are for **Windows PowerShell**. Text in `<angle brackets>` is a placeholder you
-replace. Quote paths that contain spaces.
-
-## 2. Get the code and install
-
-Choose a short folder you own (long paths make Git fail on Windows):
-
-```powershell
-New-Item -ItemType Directory -Force "D:\srfu" | Out-Null     # creates the installation folder if it does not exist
-cd "D:\srfu"
-git clone https://github.com/chriswinjoseph/srfu-opportunity-system.git srfu-opportunity-system
-cd srfu-opportunity-system
+Never share .env, passwords, API keys or invitation/reset links in screenshots, messages or issue reports.
+1. Get the code
+These PowerShell examples use a folder under your Windows user profile. You may choose another writable location. Do not clone over an existing installation.
+New-Item -ItemType Directory -Force "$HOME\srfu" | Out-Null
+Set-Location "$HOME\srfu"
+git clone https://github.com/chriswinjoseph/srfu-opportunity-system.git
+Set-Location srfu-opportunity-system
+git rev-parse HEAD
+Record the commit hash when reporting a problem. If repository access is restricted, request access from its owner.
+2. Install dependencies and configure the environment
+Run commands from the folder containing manage.py.
 py -3.12 -m venv .venv
-.venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-```
-
-If PowerShell refuses to run `Activate.ps1`, run `Set-ExecutionPolicy -Scope Process Bypass`
-and activate again (this affects only the current window). If the repository is private the
-owner must first give your GitHub account read access. `git rev-parse HEAD` shows the version you
-have.
-
-A fresh clone contains **no** database, accounts, `.env` file, client workbook or email template.
-Steps 3 to 7 create each of them. Every later PowerShell window needs `cd` to the project folder
-and `.venv\Scripts\Activate.ps1` again.
-
-## 3. Configure the environment (`.env`)
-
-```powershell
+python -m pip check
 Copy-Item .env.example .env
 notepad .env
-```
+Copy .env.example only on a new installation; do not overwrite an existing .env. If activation is blocked, run Set-ExecutionPolicy -Scope Process Bypass, then activate again. That policy change applies only to the current PowerShell window.
+Setting	What to supply
+DJANGO_SECRET_KEY	A new secret. Generate one with python -c "import secrets; print(secrets.token_urlsafe(50))".
+DJANGO_DEBUG	True for this local development-server setup. A hosted deployment needs different security and static-file configuration.
+DJANGO_ALLOWED_HOSTS	For local use, 127.0.0.1,localhost.
+OPENAI_API_KEY	A valid client-controlled key for real drafting. The application currently requires a non-empty value even for startup commands. A placeholder cannot generate real drafts.
+EMAIL_HOST, EMAIL_PORT, EMAIL_USE_TLS	Settings supplied by the sending mailbox provider.
+EMAIL_HOST_USER, EMAIL_HOST_PASSWORD	Mailbox authentication details; use a provider-issued App Password where required.
+DEFAULT_FROM_EMAIL	The authorised sender address; replace the example placeholder.
 
-`.env` is never committed. Do not paste its contents into emails or tickets.
 
-| Variable | Purpose | Where the operator gets it |
-|---|---|---|
-| `DJANGO_SECRET_KEY` | Required. Signs sessions and links | Generate: `python -c "import secrets; print(secrets.token_urlsafe(50))"` |
-| `DJANGO_DEBUG` | `True` only on a development computer; leave `False` otherwise | Operator's choice |
-| `DJANGO_ALLOWED_HOSTS` | Comma-separated host names the site answers to | The address people use to reach the site |
-| `OPENAI_API_KEY` | Required to start the application; used for draft generation | The owner of the SRFU OpenAI account (owner not yet confirmed). A placeholder lets the site start but drafts will fail |
-| `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USE_TLS`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL` | SMTP for invitations, resets and outreach email | The owner of the sending mailbox (owner not yet confirmed). For Gmail use an App Password, not the normal password |
+The Admin login email and SMTP sender are separate settings. Creating an Admin does not configure email delivery. Real invitations, resets and outreach require working SMTP settings; normal operation has no console email fallback.
 
-Email is always sent over SMTP; there is no console fallback. If the SMTP settings are missing or
-wrong, nothing else breaks, but each kind of email behaves differently:
+For isolated testing, synthetic non-secret configuration values are sufficient only after verification settings are enabled. Continue with the following section before any database-writing command. For a client installation, skip it and continue to section 3.
+Isolated verification
+In every PowerShell window used for testing, activate the environment, enter the project folder and run:
+$env:PYTHONPATH = "$PWD\scripts\verification"
+$env:SRFU_VERIFY_DB = "$HOME\srfu-verification\verify.sqlite3"
+$env:SRFU_VERIFY_MAIL_DIR = "$HOME\srfu-verification\mail"
+$env:DJANGO_SETTINGS_MODULE = "verification_settings"
+python scripts\support\assert_database_path.py $env:SRFU_VERIFY_DB
+The path check must report OK and identify the separate verification database. Stop if it resolves to the operational database. Use a new location for a separate exercise.
 
-* **Invitations** (new users): the Admin sees a message that the invitation could not be sent,
-  and the previous link no longer works. After fixing SMTP, the Admin uses **Resend invitation**
-  on that user in User Management.
-* **Password resets:** the page deliberately shows the same confirmation whether or not the
-  address exists or the email was delivered (so it never reveals which accounts exist). A failed
-  send is recorded only as a short, sanitised line in the server log (`logs\web.err.log`). After
-  fixing SMTP the person simply requests a new reset from *Forgot password?*. **Resend
-  invitation does not apply to resets**, and a user whose invitation is still pending cannot use
-  *Forgot password?*; only an Admin can resend that invitation.
-* **Outreach drafts:** a failed or uncertain send is reported on the draft; an uncertain
-  delivery blocks sending that draft again until it has been checked, so nothing is sent twice.
+This mode writes email to files, substitutes simulated AI and blocks non-local network connections. It does not verify real email delivery, real OpenAI output or live scraping. Use synthetic workbooks and template wording. See [README.md](scripts/README.md) for supported verification procedures.
 
-## 4. Create the database and the first Admin
-
-```powershell
+Closing a terminal does not stop processes already running. Stop the test website and worker, then close every configured window before returning to normal operation. A new terminal does not inherit these settings.
+3. Create the database and first Admin
+For a new installation:
 python manage.py migrate
-```
-
-The first Admin is created without anyone typing a password into the command. The command does
-not choose, see or display a password: it prints a **single-use password-setup link** (a secret;
-valid for 3 days). The person who opens the link chooses their own password, and the application
-stores only a salted hash of it (Django's default PBKDF2-SHA256), never the password itself. The
-link points at the website, so **the website must be running when you open it**. Start the
-website first (step 5: website only is enough for this), then in a second PowerShell window
-(project folder, environment activated):
-
-```powershell
-python manage.py create_first_admin --email "<admin email>" --name "<Admin full name>" --base-url http://127.0.0.1:8000 --print-link
-```
-
-Open the printed link in a browser and set a password (8+ characters with upper case, lower case,
-a number and a special character). There are no default accounts or passwords. The command
-refuses to run again once an active Admin has finished setup (if setup was never finished,
-running it again issues a new link and the old one stops working). With working SMTP you can omit `--print-link` and the
-link is emailed instead. Use the public address as `--base-url` once the site has one.
-
-*Temporary arrangement:* a temporary development Admin is in use (recorded in the developer
-handover); the client's own main Admin is to be created with this command (or invited from User
-Management) once supplied, and the temporary account then disabled in User Management.
-
-## 5. Starting and stopping the application (Windows)
-
-**Website only** (enough for the first Admin setup, user management, organisations, drafts and
-imports; scrapes can be queued but will not run). In a PowerShell window in the project folder
-with the environment activated, leave it open while the website is in use:
-
-```powershell
+python manage.py migrate --check
+python manage.py check
 python manage.py runserver 127.0.0.1:8000
-```
+Leave the website running. Open another PowerShell window, enter the project folder and activate .venv. If testing, configure verification mode there too.
 
-**Website and worker together** (needed for scraping). In the project folder, **double-click**:
+For normal local setup, replace the email and name placeholders:
+python manage.py create_first_admin --email "<admin email>" --name "<Admin name>" --base-url http://127.0.0.1:8000 --print-link
+Open the printed single-use link while the website is running and set your own password. The link is secret and expires after three days. The command does not choose a password; Django stores a salted password hash after setup.
 
-| File | What it does |
-|---|---|
-| `Start-SRFU.bat` | Starts the website and the background worker, waits until both are ready, opens the login page. Safe to run again; processes already running are detected and not duplicated. Reports why if it cannot start (details in `logs\`) |
-| `Status-SRFU.bat` | Shows whether the website and worker are running. Changes nothing |
-| `Stop-SRFU.bat` | Stops both |
+With configured SMTP, omit --print-link to email the link. In verification mode, omit it to write the email to the verification mail folder instead. Follow the local file's setup link without sharing it.
 
-Requirements: steps 2 and 3 and the `migrate` command of step 4 done (`.venv`, `.env`, migrated
-database; the first Admin can be created afterwards while it runs). The launcher never runs
-migrations and never starts a scrape. **Starting the worker runs any scrape that is already
-queued**, so check the Scraper page first if a queued job should not run yet.
+There are no default credentials. The first-Admin command refuses once an active Admin has completed setup. If setup is unfinished, running it again issues a replacement link and invalidates the previous one. Invite subsequent users through User Management.
 
-To run the worker yourself instead of using the launcher, open a second PowerShell window
-(project folder, environment activated) and run `python manage.py run_intake_worker`; close the
-window or press Ctrl+C to stop it. Do not run the launcher and a hand-started copy of the same
-program at the same time. The launcher's actions from a terminal:
+When transferring an existing installation, create and verify the client's Admin access before disabling the temporary Admin. Do not copy development password hashes or create a Django superuser just to obtain an application Admin account.
+4. Add the email template and organisation data
+Approved email template
+Draft generation needs an active template. None is seeded automatically and there is no template editor. Copy the support script, replace every PLACEHOLDER with approved wording, and run it:
+$templateScript = "$HOME\srfu-create-template.py"
+Copy-Item scripts\support\create_email_template.py $templateScript
+notepad $templateScript
+python manage.py shell -c "exec(open(r'$templateScript', encoding='utf-8-sig').read())"
+The script refuses unresolved placeholders. Follow its signature instructions. For isolated verification, use synthetic wording; for client use, obtain SRFU approval first.
+Excel import
+Sign in as an Admin and open Data > Import Data. Download a template or synthetic example, upload a genuine .xlsx, inspect the preview and confirm the import.
+- Single sheet: headers organisation_id, bank_name, state, contact_names, emails, overall_status. ID, name and State require values; the remaining fields may be blank.
+- Two sheets: the original client format with Organisations and Contacts, including outreach evidence.
+- Extra supported columns are accepted; unsupported columns are identified and ignored.
+- overall_status alone never establishes Contacted. Unsupported Contacted claims are held for review.
+- Names and emails are paired only where one of each is supplied. Multiple-contact rows are not paired by position.
+Review possible duplicates and proposed changes before deciding. Repeat imports use the duplicate safeguards; inspect the results rather than assuming every row was accepted. Use the confirmed workbook for client setup and synthetic examples for testing.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\start-demo.ps1            # start
-powershell -ExecutionPolicy Bypass -File scripts\start-demo.ps1 -Status
-powershell -ExecutionPolicy Bypass -File scripts\start-demo.ps1 -Stop
-```
+Full rules: [Import-Format.md](docs/Import-Format.md).
+5. Daily use
+After initial setup, open the project folder in Windows File Explorer:
+Action	File
+Start website and scraper worker; open the browser	Double-click Start-SRFU.bat
+Check whether both are running	Double-click Status-SRFU.bat
+Stop both	Double-click Stop-SRFU.bat
 
-Notes: the launcher serves one Windows computer using Django's development web server and does
-not restart a process that later crashes (the worker itself retries 5 times, then stops with a
-message in `logs\worker.err.log`; double-click Start again). Stopping mid-scrape is safe: finished
-pages are kept and the job resumes (within 5 minutes of the next start) without duplicating
-records. The computer must stay on and the launcher must have been run since the last restart for
-scrapes to run. Hosting a production service needs a managed process and health check
-(`docs/Intake-Jobs.md`); the hosting platform has not been decided.
 
-## 6. Approved email template
+Opening a .bat file in a code editor only displays its contents. Run it from File Explorer, or use the documented PowerShell launcher commands in [Intake-Jobs.md](docs/Intake-Jobs.md).
 
-Draft generation needs at least one active, SRFU-approved email template; none is built in and
-there is no editor yet. Use the supplied script:
+Sign in at http://127.0.0.1:8000/accounts/login/. VS Code is not required for daily operation. The computer must stay on while this local installation is in use. Other computers do not automatically share its database or website.
 
-```powershell
-Copy-Item scripts\support\create_email_template.py "$HOME\srfu-create-template.py"
-notepad "$HOME\srfu-create-template.py"      # replace every PLACEHOLDER with SRFU-approved wording
-python manage.py shell -c "exec(open(r'$HOME\srfu-create-template.py', encoding='utf-8-sig').read())"
-```
+The launcher does not install dependencies or apply migrations. Starting the worker can process an already queued scrape. Check the queue before starting it if a job must remain paused. For website-only operation, use python manage.py runserver 127.0.0.1:8000 in an activated environment and leave that terminal open.
+Accounts and email workflow
+Admins manage users, organisations, approvals, imports and scraping. Staff prepare drafts and send approved emails within their permissions.
 
-The script refuses to run while any `PLACEHOLDER` remains. The first line of `signature` must be
-the sender's name (the draft check looks for it). Wording comes from SRFU; approved wording has
-not yet been supplied. Only active templates are offered; every draft still needs human approval.
+Drafts require 90–120 words inclusive. A matching template signature at the end is excluded; manual drafts count every word. An Admin approves the exact version, and editing removes approval. Do Not Contact and archive safeguards block outreach. Confirmed SMTP acceptance updates contact status; it is not proof of inbox delivery. Uncertain sends are blocked from retry pending reconciliation.
 
-## 7. Importing the organisation workbook (Admin only)
+For a pending invitation, an Admin uses Resend invitation. For password recovery after account setup, use Forgot password? The reset page intentionally does not reveal whether an account exists or delivery succeeded. If SMTP fails, fix the configuration and request a new reset; invitation resend is not a password-reset action.
 
-1. Sign in as an Admin and open **Data > Import Data** (`/data/import/`).
-2. The page gives a short explanation beside the upload. **Download template** is a single-sheet
-   workbook with the six minimum columns (`organisation_id`, `bank_name`, `state`, `contact_names`,
-   `emails`, `overall_status`); **Download synthetic example** shows a filled file with invented data
-   that must not be imported for real. The original two-sheet client workbook (`Organisations` and
-   `Contacts`, with its outreach evidence) is still accepted, and its template is on the same page.
-   All downloads are Admin-only. Full format: `docs/Import-Format.md`.
-3. Single-sheet rules: organisation ID, name and state are required; contact names, emails and status
-   may be blank. Extra supported columns may be added. Several contacts in a row are separated by
-   semicolons; a name is attached to an email only when the row has one of each, otherwise the
-   emails are added without names and the row is flagged for review. `overall_status` never marks an
-   organisation Contacted: Contacted comes from the two-sheet workbook's outreach evidence, and any
-   other claim is held for an Admin's decision.
-4. The file must be a genuine Excel `.xlsx`. A CSV or other file cannot simply be renamed to `.xlsx`;
-   save it from Excel as an Excel Workbook. A headers-only template cannot be previewed: add a row.
-5. **Validate and preview.** Structure problems name the missing sheet or column and nothing is
-   created. The preview shows the recognised format, which columns will be imported and which are
-   unsupported (ignored), what would be created, matched or held for review, and every row or
-   contact with a problem. Nothing is saved yet.
-6. **Confirm and import.** Each organisation is processed on its own; a bad row is reported and does
-   not stop good ones. Possible duplicates are held on **Duplicate Review** for an Admin decision
-   and never merged automatically. Replies are kept as evidence and never set Interested.
-7. **Repeat imports are safe.** Importing the same file again creates no duplicate organisations or
-   contacts; existing values are never overwritten (differences become **Proposed Changes**), values
-   kept by an earlier import are not erased by a file that lacks them, and organisations that are
-   archived are not restored.
+Workflow details: [Email-Approval-Workflow.md](docs/Email-Approval-Workflow.md).
+Scraping
+An Admin queues a run from Data > Scraper. The worker processes supported sources, and the results identify completed work, failures and items requiring review. A queued run waits when the worker is stopped.
 
-The client workbook is not in Git (`*.xlsx` is ignored); the Admin supplies it at import time.
+Current coverage is 11 configured Victorian Bendigo Community Bank pages. The council Club directory blocks automated access; the system does not bypass it. No Branch source is configured. This is not a general-purpose scraper for arbitrary websites.
 
-## 8. Using the system
+New organisations start as Not Yet Contacted. Existing records are matched, blank fields may be filled, and changes to populated values go to review. Scraping does not mark organisations Contacted.
 
-* **Sign in:** `http://127.0.0.1:8000/accounts/login/` (or the site's public address). Sessions end
-  after 1 hour idle or when the browser closes.
-* **Dashboard:** `/outreach/dashboard/` - search, filters, add an organisation (duplicate warnings
-  appear for similar names), open an organisation to see contacts, status and history.
-* **Users (Admin):** `/accounts/users/` - add a user (Admin or Staff) which sends an invitation,
-  **Resend invitation**, change role, disable or enable, view activity. The last Admin and your own
-  account are protected. Links are single-use secrets and are never shown on a page.
-* **Password recovery:** on the login page choose *Forgot password?*; an emailed single-use link
-  (valid 3 days) opens the new-password page. An expired or already-used reset link shows an error;
-  request a new one the same way. A user who has not yet finished their first setup cannot use
-  *Forgot password?*: an Admin uses **Resend invitation** instead.
-* **Drafts and approval:** Staff generate or write a draft, edit it (90-120 words), submit it; an
-  Admin approves or rejects with a reason; only approved drafts can be sent. A draft cannot be sent
-  twice, and Do Not Contact organisations cannot be emailed. Details: `docs/Email-Approval-Workflow.md`.
-* **Django admin** (`/admin/`) is limited to Admin-role users and is read-only for accounts.
+Worker operation and source decisions: [Intake-Jobs.md](docs/Intake-Jobs.md) and [Scraper-BA-Clarifications.md](docs/Scraper-BA-Clarifications.md).
+6. Backups and maintenance
+The operational database is db.sqlite3 in the project folder. Keep backups, exports and candidate databases outside the repository, in access-controlled storage. They contain personal information and are not supplied by a Git clone.
 
-## 9. The scraper (Admin only)
+Before upgrading or replacing data, stop the website and worker and take a verified backup:
+python scripts\support\backup_sqlite.py db.sqlite3 "$HOME\srfu-backups"
+After a restore or code change, check compatibility before restarting:
+python scripts\support\check_db_matches_code.py
+python manage.py migrate --check
+python manage.py check
+The match utility reports RESULT : MATCH or RESULT : MISMATCH and lists migrations ahead of or behind the code. Do not resume operation on a mismatch. migrate --check alone does not detect a database ahead of the code.
 
-1. **Data > Scraper** (`/data/scraper/`) lists the approved sources, what each covers and any known
-   restriction **before** you queue. Choose organisation types and states, then **Queue scrape**.
-2. The scrape runs in the background worker. The run page updates by itself and distinguishes
-   *Queued - not started* (no worker), *Waiting*, *Running*, and finished states. A stopped worker
-   is shown on queued **and** running jobs; a waiting job is never shown as successful.
-3. Result statuses: **Successful** (everything processed), **Partially Successful** (some work
-   saved and something failed, is incomplete or awaits review), **Failed** (nothing could be
-   processed). The summary shows pages and organisations separately. Every failed page or incomplete
-   result lists the source URL, the reason, the affected field and the action required.
-4. New organisations are created as *Not Yet Contacted* with their source URL. Existing records are
-   matched, not duplicated; blank fields may be filled, different values become **Proposed Changes**
-   for an Admin, a removed website value is kept and flagged for checking, and archived
-   organisations are neither recreated, restored nor contacted.
-5. Fetching is limited to HTTPS pages on approved hosts, respects `robots.txt`, uses timeouts, a
-   pause between requests, at most 60 pages and 20 minutes per run, and never bypasses a login or
-   bot-protection check.
+Recovery limitation: restoring an older database can make an already-sent draft appear sendable. There is no supported procedure to reconcile all post-backup email activity. Keep services stopped and involve the maintainer; a restore is not complete until duplicate-send risks are resolved. Do not overwrite newer activity or use Git to recover client data.
 
-**Source coverage today (not national):** Banks - 11 Bendigo Community Bank pages in Victoria
-(collected successfully on 23 October 2026). Clubs - one council directory that answered with an
-automated-access check, so nothing could be collected and the check is not bypassed. Branches - no
-source. Adding coverage needs a permitted source and a code change (`intake/sources.py`).
-Open questions for the business are in `docs/Scraper-BA-Clarifications.md`.
+Detailed tools and procedures: [README.md](scripts/README.md) and the developer handover supplied with the installation.
+7. Troubleshooting
+Problem	Action
+manage.py cannot be found	Enter the cloned project folder containing manage.py.
+Missing Python module	Activate the project environment and complete dependency installation.
+Missing secret key or OpenAI key	Check .env; never paste its contents into a support request.
+Launcher reports pending migrations	Back up an existing database, then apply migrations as directed.
+Port 8000 is busy	Check application status and identify the existing process before starting another.
+No approved templates available	Complete the template setup above.
+Invitation or reset does not arrive	Check SMTP configuration and sanitised server logs; retry using the appropriate account action.
+Scrape remains queued	Check worker status and the run page.
+Scrape reports an automated-access check	The source blocks collection; do not attempt to bypass it.
+Upload rejected	Use the page's template and correct the sheet, header or row identified in the message.
 
-## 10. Backup, maintenance and recovery
 
-**Where the data lives.** The *operational* database is `db.sqlite3` in the project folder: it
-is the only live copy, it is ignored by Git, and it holds personal information. **Backups, CSV
-exports and any prepared candidate database are separate files** that must be kept *outside* the
-project folder and the Git repository, in access-controlled storage. None of them is the
-operational database; restoring a backup replaces it.
-
-Stop the application (`Stop-SRFU.bat`) before copying or restoring the database. Never copy
-`db.sqlite3` while the website or worker is running.
-
-```powershell
-python scripts\support\check_db_matches_code.py     # prints "RESULT : MATCH" (exit 0) or "RESULT : MISMATCH" (exit 1), with the
-                                                    # "DB AHEAD OF CODE" / "DB BEHIND CODE" lines listing the migrations that differ
-python scripts\support\backup_sqlite.py db.sqlite3 "D:\srfu-backups"              # folder must be OUTSIDE the repository
-python manage.py migrate --check                                                  # exit 0 = database is up to date
-```
-
-`backup_sqlite.py` writes a verified copy with a manifest (SHA-256, integrity check, latest
-migration, Git commit). Take one before every upgrade or import, and keep backups outside Git and
-access-controlled: they contain personal information. Other tools in `scripts\support\`:
-`assert_database_path.py` (confirms which database settings resolve to), `verify_client_import.py`
-(read-only comparison of a database with its workbook), `export_organisations_contacts.py`
-(CSV export; not a backup), `report_email_activity.py` (lists drafts to reconcile after a restore).
-
-Upgrading: stop the application, back up, `git pull`, `python -m pip install -r requirements.txt`,
-`python manage.py migrate`, start again. **Recovery from a restored backup** must include checking
-whether any email was sent after the backup was taken, so nothing is sent twice
-(`report_email_activity.py` lists the drafts to check). There is **no supported command that
-reconciles a restored database** with emails sent after the backup; this is an open item recorded
-in the developer handover (section 9.4), so restores must be supervised by a developer.
-
-Logs: `logs\web.*.log` and `logs\worker.*.log` (ignored by Git). Removing old logs is safe.
-
-## 11. Troubleshooting
-
-| Symptom | Cause and fix |
-|---|---|
-| `KeyError: 'DJANGO_SECRET_KEY'` | `.env` is missing or lacks the key (step 3) |
-| `RuntimeError: OPENAI_API_KEY is not configured.` | Key missing or empty in `.env` |
-| `ModuleNotFoundError` | Environment not activated, or step 2's install did not finish |
-| `Start-SRFU.bat` says setup is incomplete / database needs migrating | Complete step 3, or run `python manage.py migrate` (after a backup); the launcher never migrates |
-| `Start-SRFU.bat` says port 8000 is in use | Another program uses it; close it or run the script with `-Port 8001` |
-| Scraper page says the background service is not running | Double-click `Start-SRFU.bat` |
-| A scrape ended *Failed* with "automated-access check" | The source blocks automated access; this is not bypassed (see step 9) |
-| Invitation email not delivered | Fix the SMTP settings, restart, then an Admin uses **Resend invitation** for that user |
-| Password-reset email not delivered | The page shows the same confirmation either way. Fix SMTP, check `logs\web.err.log` for the sanitised failure line, and the person requests a new reset from *Forgot password?* (Resend invitation is for pending invitations only) |
-| Setup or reset link says invalid or expired | Links last 3 days and work once. A reset: request a new one from *Forgot password?*. An invitation or first-Admin link: an Admin uses **Resend invitation** (for the first Admin before anyone has finished setup, run `create_first_admin` again) |
-| Upload rejected | The message names the missing sheet or column; use the template (step 7) |
-
-## 12. Known limitations
-
-* Hosting, public address, database server and ownership of the OpenAI account and sending mailbox
-  are not yet decided; the application is not deployed to a production environment.
-* The application has no spending cap on AI use (it limits how often each user may generate a
-  draft). An OpenAI account budget or usage limit may help, but it has not been set up and
-  whether it stops requests as a hard limit has not been verified.
-* The GitHub repository was public when last checked (25 October 2026), and an older commit that
-  contained a database backup was still reachable by its address. Do not treat the repository as
-  private or its history as clean; see the developer handover (section 9.4) for what the
-  repository owner must do.
-* No HTTPS/secure-cookie configuration (depends on hosting). SQLite suits one site with a small
-  number of simultaneous Admins; PostgreSQL concurrency has not been tested.
-* Scraper coverage is limited as described in step 9. Import confirmation runs inside the web
-  request (fine for hundreds of organisations, not for very large files).
-* Real email delivery and real AI output have been checked only with stand-ins in automated and
-  isolated tests; supervised checks with a test inbox are still required before real outreach.
-* Several rules are interpretations awaiting business confirmation:
-  `docs/Scraper-BA-Clarifications.md`.
-
-## 13. Automated verification (for developers)
-
-```powershell
+Logs written by the launcher are under logs/. Keep logs and setup links private. Include the commit hash, command and sanitised error when reporting a problem.
+8. Verification and current limitations
+Automated checks:
 python manage.py check
 python manage.py makemigrations --check --dry-run
 python manage.py test
-```
+Automated tests use isolated test databases and substitutes for external services. A passing test suite does not establish real SMTP delivery, live AI behaviour or client acceptance. Running-app verification uses the separate mode described earlier.
 
-The test suite uses its own temporary database, Django's in-memory email outbox, mocked OpenAI
-calls and stored web pages; it sends no email, makes no AI call and does not touch the project
-database. The full suite takes about 20-25 minutes.
+Before live outreach, complete supervised checks of an invitation, password reset and outreach email to a controlled test inbox, plus a real AI draft using the approved template. Record the results and outstanding client decisions.
 
-To exercise the running application without side effects (separate database, email written to
-files, stand-in AI, network restricted to this computer), use the verification settings in each
-PowerShell window **before** any other command:
-
-```powershell
-$env:PYTHONPATH             = "$PWD\scripts\verification"
-$env:SRFU_VERIFY_DB         = "D:\srfu-verify\verify.sqlite3"     # a database for this exercise only
-$env:SRFU_VERIFY_MAIL_DIR   = "D:\srfu-verify\mail"
-$env:DJANGO_SETTINGS_MODULE = "verification_settings"
-python scripts\support\assert_database_path.py $env:SRFU_VERIFY_DB   # must print OK before anything is written
-```
-
-Closing the window ends this mode. It is not a way to run the real system.
-`scripts\verification\live_scrape_check_settings.py` additionally allows network access to named
-approved scraper hosts for a bounded live check against a disposable database only.
-
-## Project structure
-
-```
-srfu/        Django project settings and URLs
-accounts/    email-login users, roles, invitations, user management
-outreach/    organisations, dashboard, AI draft emails and approval workflow
-intake/      workbook import, duplicate review, proposed changes, scraper and worker
-scripts/     launcher, support utilities (support/), verification settings (verification/)
-static/      CSS and JavaScript
-docs/        requirements, acceptance criteria, operating and status documents
-```
-
-Roles: `User.role` (`admin` or `staff`) is the source of truth for permissions
-(`accounts/roles.py`); Django groups and the superuser flag are ignored for `outreach.*`
-permissions. Role changes are made in User Management.
+Remaining limitations include:
+- Production hosting, ownership and deployment security need agreement; the local launcher uses Django's development server. Setting debug off alone does not configure static-file serving or HTTPS.
+- Client mailbox, API ownership, approved template and account transfer must be completed for the installation. There is no application-enforced AI spending cap.
+- Scraper coverage is restricted as described above; larger imports and a move away from SQLite need further assessment.
+- State/Region filtering and several matching/import interpretations await business confirmation in the project documentation.
+- Session expiry settings are configured, but real elapsed-time and browser-close behaviour have not been independently verified.
+- A historical database backup was removed from reachable repository history. GitHub's purge of old objects remains unconfirmed; the repository owner must resolve that exposure.
+- Backup rollback reconciliation remains a blocker, as described above.
+Project layout
+accounts/   Login, roles, invitations and user management
+outreach/   Organisations, dashboard, drafts and approval workflow
+intake/     Excel import, reviews, provenance, scraper and queue
+srfu/       Django settings and URLs
+scripts/    Launcher, support tools and verification settings
+static/     CSS and JavaScript
+docs/       Requirements and detailed operating documentation
