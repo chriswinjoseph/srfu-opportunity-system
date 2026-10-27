@@ -204,6 +204,14 @@
                 <h1>Dashboard</h1>
             </header>
 
+            {% if pending_review_count %}
+            <div class="em-banner em-banner-warning" role="status" id="pending-review-notice">
+                <strong>{{ pending_review_count }} imported or scraped record{{ pending_review_count|pluralize }} awaiting review.</strong>
+                Held records are not on the dashboard until you decide.
+                <a href="{% url 'intake_reviews' %}">Review now</a>
+            </div>
+            {% endif %}
+
             <form
                 id="dashboardFilters"
                 class="filter-bar"

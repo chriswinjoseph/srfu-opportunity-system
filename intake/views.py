@@ -58,6 +58,10 @@ def org_url(content_type_id, object_id):
     return reverse("organisation_detail", args=[content_type_id, object_id])
 
 
+def _pending_review_count():
+    return DuplicateReview.objects.filter(status=DuplicateReview.STATUS_PENDING).count()
+
+
 def _result_rows(results):
     return [
         {"result": r, "url": org_url(r.target_content_type_id, r.target_id)}
@@ -99,7 +103,11 @@ def import_upload(request):
 
             errors.extend(parsed.structure_errors)
 
-    return render(request, "intake/import.html", {"errors": errors, "guide": guidance()})
+    return render(
+        request,
+        "intake/import.html",
+        {"errors": errors, "guide": guidance(), "pending_reviews": _pending_review_count()},
+    )
 
 
 def _xlsx_download(content, filename):
@@ -416,5 +424,6 @@ def scraper_page(request):
             "runs": IntakeRun.objects.filter(kind=IntakeRun.KIND_SCRAPER)[:8],
             "worker_alive": worker_state()["alive"],
             "worker_last_seen": worker_state()["last_seen"],
+            "pending_reviews": _pending_review_count(),
         },
     )

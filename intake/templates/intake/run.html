@@ -148,7 +148,7 @@
             <tr>
                 <td>{{ item.result.row_ref|truncatechars:60 }}</td>
                 <td>{% if item.url %}<a href="{{ item.url }}">{{ item.result.name|default:"(open)" }}</a>{% else %}{{ item.result.name|default:"-" }}{% endif %}</td>
-                <td><span class="em-badge em-badge-grey">{{ item.result.get_outcome_display }}</span></td>
+                <td><span class="em-badge {% if item.result.outcome == 'review' %}em-badge-orange{% elif item.result.outcome == 'failed' or item.result.outcome == 'incomplete' %}em-badge-red{% else %}em-badge-grey{% endif %}">{% if item.result.outcome == "review" %}Awaiting review{% else %}{{ item.result.get_outcome_display }}{% endif %}</span></td>
                 <td>{{ item.result.message }}{% if item.result.field %} <span class="in-muted">({{ item.result.field }})</span>{% endif %}</td>
                 <td>{{ item.result.action_required }}{% if item.result.review %} <a href="{% url 'intake_review' item.result.review.pk %}">Open review</a>{% endif %}</td>
             </tr>

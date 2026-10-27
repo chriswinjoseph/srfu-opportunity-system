@@ -3,6 +3,7 @@
 {% block content %}
 <h1 class="in-title">Import Data</h1>
 <p class="in-sub">Upload the agreed Excel (.xlsx) workbook. Nothing is saved until you review the preview and confirm.</p>
+{% include "intake/_pending_banner.html" %}
 {% for error in errors %}<div class="em-banner em-banner-error" role="alert">{{ error }}</div>{% endfor %}
 <section class="in-card">
     <form method="post" enctype="multipart/form-data" data-single-submit>

@@ -1695,6 +1695,13 @@ def organisation_list_api(request):
     )
 
 
+def _pending_review_count():
+    """Imported or scraped records held for an Admin decision."""
+    from intake.models import DuplicateReview
+
+    return DuplicateReview.objects.filter(status=DuplicateReview.STATUS_PENDING).count()
+
+
 @login_required
 
 
@@ -1963,6 +1970,11 @@ def dashboard_view(request):
 
         "can_review_approvals": request.user.has_perm(
             "outreach.approve_emaildraft"
+        ),
+        "pending_review_count": (
+            _pending_review_count()
+            if request.user.has_perm("outreach.add_bank")
+            else 0
         ),
         "pending_approval_count": (
             EmailDraft.objects.filter(

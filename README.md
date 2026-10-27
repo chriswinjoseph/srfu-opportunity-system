@@ -142,7 +142,7 @@ Sign in as an Admin and open **Data > Import Data**. Download a template or synt
 - `overall_status` alone never establishes Contacted. Unsupported Contacted claims are held for review.
 - Names and emails are paired only where one of each is supplied. Multiple-contact rows are not paired by position.
 
-Review possible duplicates and proposed changes before deciding. Repeat imports use the duplicate safeguards; inspect the results rather than assuming every row was accepted. Use the confirmed workbook for client setup and synthetic examples for testing.
+Organisations that import or scrape successfully are saved at once and appear on the dashboard and organisation pages for Admin and Staff. Records held as possible duplicates or unsupported claims are **not** saved until an Admin decides; they are marked "Awaiting review" in the run results, and Admins see a notice with a link on the dashboard and on the Import and Scraper pages (there is no separate Duplicates tab). Only Admins can upload, preview or confirm imports or start scraper runs; this is enforced on the server. Repeat imports use the duplicate safeguards; inspect the results rather than assuming every row was accepted. Use the confirmed workbook for client setup and synthetic examples for testing.
 
 Full rules: [Import-Format.md](docs/Import-Format.md).
 

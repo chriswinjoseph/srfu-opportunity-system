@@ -4,6 +4,7 @@
 {% block content %}
 <h1 class="in-title">Live Scraper</h1>
 <p class="in-sub">Collects publicly available organisation information from approved sources only. New organisations start as Not Yet Contacted; possible duplicates are held for review.</p>
+{% include "intake/_pending_banner.html" %}
 {% if not worker_alive %}<div class="em-banner em-banner-warning" role="status">The background service that runs scrapes is not running{% if worker_last_seen %} (last active {{ worker_last_seen|melbourne }}){% endif %}. A scrape you queue will wait, without making progress, until the system operator starts it.</div>{% endif %}
 <section class="in-card">
     <h2>Approved sources</h2>
